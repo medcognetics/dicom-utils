@@ -2,5 +2,5 @@
 # -*- coding: utf-8 -*-
 
 
-def test_noop():
+def test_cat():
     pass

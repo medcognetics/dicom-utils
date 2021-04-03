@@ -20,7 +20,7 @@ To create the package for pypi.
    You may have to specify the repository url, use the following command then:
    twine upload dist/* -r pypitest --repository-url=https://test.pypi.org/legacy/
    Check that you can install it in a virtualenv by running:
-   pip install -i https://testpypi.python.org/pypi tcia_downloader
+   pip install -i https://testpypi.python.org/pypi dicom_utils
 6. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
 7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
@@ -36,7 +36,7 @@ from setuptools import find_packages, setup
 
 
 # name of python project
-PROJECT = "project"
+PROJECT = "dicom_utils"
 
 extras = {}
 extras["testing"] = ["pytest", "pytest-mock", "pytest-cov", "pytest-xdist"]
@@ -69,12 +69,12 @@ def write_version_info():
 
 def install(version):
     setup(
-        name="tcia_downloader",
+        name=PROJECT,
         version=version,
         author="Scott Chase Waggener",
         author_email="tidalpaladin@gmail.com",
         packages=find_packages(""),
-        install_requires=[],
+        install_requires=["pydicom", "Pillow", "numpy", "pylibjpeg", "pylibjpeg-libjpeg"],
         extras_require=extras,
         python_requires=">=3.7.0",
     )

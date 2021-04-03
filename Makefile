@@ -1,6 +1,6 @@
 .PHONY: clean clean-venv check quality style tag-version test venv upload upload-test
 
-PROJECT=project
+PROJECT=dicom_utils
 PY_VER=python3.8
 PY_VER_SHORT=py$(shell echo $(PY_VER) | sed 's/[^0-9]*//g')
 QUALITY_DIRS=$(PROJECT) tests setup.py
@@ -43,7 +43,7 @@ package: venv
 	$(PYTHON) -m pip install --upgrade setuptools wheel
 	export $(PROJECT)_BUILD_VERSION=$(VERSION) && $(PYTHON) setup.py sdist bdist_wheel
 
-node-modules: 
+node_modules: 
 ifeq (, $(shell which npm))
 	$(error "No npm in $(PATH), please install it to run pyright type checking")
 else
