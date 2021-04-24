@@ -3,12 +3,13 @@
 import argparse
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import pydicom
 
 from .dicom import has_dicm_prefix
 from .metadata import get_simple_image_type, process_image_type
+from concurrent.futures import ThreadPoolExecutor, Future
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -18,6 +19,7 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument(
         "--types", "-t", choices=["2d", "tomo", "s-view"], default=None, nargs="+", help="filter by image type"
     )
+    parser.add_argument("--jobs", "-j", default=4, help="parallelism")
     # TODO add a field to only return DICOMs with readable image data
     return parser
 
@@ -28,6 +30,17 @@ def is_desired_type(path: Path, types: List[str]) -> bool:
     simple_image_type = get_simple_image_type(image_type)
     return str(simple_image_type) in types
 
+def check_file(path: Path, args: argparse.Namespace) -> Optional[Path]:
+    if not path.is_file() or not has_dicm_prefix(path):
+        return
+    try:
+        if args.types is not None and not is_desired_type(path, args.types):
+            return
+    except Exception:
+        return
+    
+    return path
+
 
 def main(args: argparse.Namespace) -> None:
     path = Path(args.path)
@@ -35,17 +48,20 @@ def main(args: argparse.Namespace) -> None:
         raise NotADirectoryError(path)
 
     seen_parents = set()
-    for match in path.rglob(args.name):
-        if not match.is_file() or not has_dicm_prefix(match):
-            continue
-        try:
-            if args.types is not None and not is_desired_type(match, args.types):
-                continue
-        except Exception:
-            continue
+    def callback(x: Future):
+        result = x.result()
+        if result is None:
+            return
 
-        if args.parents and match.parent not in seen_parents:
-            print(match.parent)
-            seen_parents.add(match.parent)
+        seen_parents.add(result.parent)
+        if args.parents and result.parent not in seen_parents:
+            print(result.parent)
         elif not args.parents:
-            print(match)
+            print(result)
+
+    futures: List[Future] = []
+    with ThreadPoolExecutor(args.jobs) as tp:
+        for match in path.rglob(args.name):
+            f = tp.submit(check_file, match, args)
+            f.add_done_callback(callback)
+            futures.append(f)

@@ -199,7 +199,7 @@ def get_simple_image_type(image_type: Dict[str, Any]) -> ImageType:
             elif "2d" in flavor.lower():
                 return ImageType.NORMAL
             return ImageType.TOMO
-        elif flavor is not None:
+        elif "post_process" not in flavor.lower():
             return ImageType.SVIEW
 
     return ImageType.NORMAL

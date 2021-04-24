@@ -7,8 +7,10 @@ from pathlib import Path
 
 import numpy as np
 import pydicom
+import matplotlib.pyplot as plt
 from PIL import Image
 from tqdm import tqdm
+from typing import Optional
 
 from .dicom import read_image
 from .types import Dicom
@@ -16,7 +18,7 @@ from .types import Dicom
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument("file", help="DICOM file to convert")
-    parser.add_argument("dest", help="destination directory")
+    parser.add_argument("-o", "--output", help="output filepath. if directory, use filename from `file`")
     parser.add_argument(
         "-s", "--split", default=False, action="store_true", help="split multi-frame inputs into separate files"
     )
@@ -25,42 +27,64 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     return parser
 
 
-def dicom_to_image(dcm: Dicom, dest: Path, split: bool = False, fps: int = 5, quality: int = 95) -> None:
+def dicom_to_image(dcm: Dicom, dest: Optional[Path] = None, split: bool = False, fps: int = 5, quality: int = 95) -> None:
     data = read_image(dcm)
 
     # min max norm
     min, max = data.min(), data.max()
     data = (data - min) / (max - min) * 255
     data = data.astype(np.uint8)
+    H, W = data.shape[-2:]
 
     # single image
     if dcm.pixel_array.ndim == 2:
-        img = Image.fromarray(data)
-        img.save(str(dest), quality=quality)
+        if dest is None:
+            plt.imshow(data.reshape(H, W), cmap="gray")
+            print("Showing image")
+            plt.show()
+        else:
+            img = Image.fromarray(data)
+            img.save(str(dest), quality=quality)
 
     elif split:
-        subdir = Path(dest.with_suffix(""))
-        subdir.mkdir(exist_ok=True)
+        if dest is not None:
+            subdir = Path(dest.with_suffix(""))
+            subdir.mkdir(exist_ok=True)
         for i, frame in enumerate(data):
-            path = Path(subdir, Path(f"{i}.png"))
-            img = Image.fromarray(frame)
-            img.save(str(path), quality=quality)
+            if dest is not None:
+                path = Path(subdir, Path(f"{i}.png"))
+                img = Image.fromarray(frame)
+                img.save(str(path), quality=quality)
+            else:
+                plt.imshow(frame, cmap="gray")
+                print(f"Showing frame {i}/{len(data)}")
+                plt.show()
+                break
 
     else:
         frames = []
         for frame in data:
-            path = Path()
             img = Image.fromarray(frame)
             frames.append(img)
 
-        path = dest.with_suffix(".gif")
         duration_ms = len(frames) / (fps * 1000)
-        frames[0].save(path, save_all=True, append_images=frames[1:], duration=duration_ms, quality=quality)
+        if dest is None:
+            raise NotImplementedError("3D inputs with no `dest` is not yet supported")
+        else:
+            path = dest.with_suffix(".gif")
+            frames[0].save(path, save_all=True, append_images=frames[1:], duration=duration_ms, quality=quality)
 
 
 def main(args: argparse.Namespace) -> None:
-    logging.basicConfig(level=logging.DEBUG)
-    pydicom.config.logger.setLevel(logging.DEBUG)
-    for i in tqdm(range(10)):
-        with pydicom.dcmread(args.file) as dcm:
-            dicom_to_image(dcm, Path(args.dest), args.split, args.fps, args.quality)
+    source = Path(args.file)
+    dest = Path(args.output) if args.output is not None else None
+
+    if not source.is_file():
+        raise FileNotFoundError(source)
+
+    # handle case where output path is a dir
+    if dest is not None and dest.is_dir():
+        dest = Path(dest, source.stem).with_suffix(".png")
+
+    with pydicom.dcmread(source) as dcm:
+        dicom_to_image(dcm, dest, args.split, args.fps, args.quality)
