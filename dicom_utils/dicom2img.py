@@ -1,16 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import argparse
-import logging
 from argparse import ArgumentParser
 from pathlib import Path
+from typing import Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pydicom
-import matplotlib.pyplot as plt
 from PIL import Image
-from tqdm import tqdm
-from typing import Optional
 
 from .dicom import read_image
 from .types import Dicom
@@ -27,7 +25,9 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     return parser
 
 
-def dicom_to_image(dcm: Dicom, dest: Optional[Path] = None, split: bool = False, fps: int = 5, quality: int = 95) -> None:
+def dicom_to_image(
+    dcm: Dicom, dest: Optional[Path] = None, split: bool = False, fps: int = 5, quality: int = 95
+) -> None:
     data = read_image(dcm)
 
     # min max norm

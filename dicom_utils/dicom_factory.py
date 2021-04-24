@@ -1,15 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import pydicom
 from pathlib import Path
+
+import pydicom
+
 
 class DicomFactory:
     ...
 
     def __init__(self):
-        series_uid = pydicom.uid.generate_uid()
-        study_uid = pydicom.uid.generate_uid()
+        pydicom.uid.generate_uid()
+        pydicom.uid.generate_uid()
 
     @property
     def image(self):
@@ -22,5 +24,3 @@ class DicomFactory:
     @property
     def save(self, path: Path) -> None:
         ...
-
-

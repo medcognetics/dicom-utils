@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 from argparse import ArgumentParser
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional
 
@@ -9,7 +10,6 @@ import pydicom
 
 from .dicom import has_dicm_prefix
 from .metadata import get_simple_image_type, process_image_type
-from concurrent.futures import ThreadPoolExecutor, Future
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -30,6 +30,7 @@ def is_desired_type(path: Path, types: List[str]) -> bool:
     simple_image_type = get_simple_image_type(image_type)
     return str(simple_image_type) in types
 
+
 def check_file(path: Path, args: argparse.Namespace) -> Optional[Path]:
     if not path.is_file() or not has_dicm_prefix(path):
         return
@@ -38,7 +39,7 @@ def check_file(path: Path, args: argparse.Namespace) -> Optional[Path]:
             return
     except Exception:
         return
-    
+
     return path
 
 
@@ -48,6 +49,7 @@ def main(args: argparse.Namespace) -> None:
         raise NotADirectoryError(path)
 
     seen_parents = set()
+
     def callback(x: Future):
         result = x.result()
         if result is None:
