@@ -88,3 +88,12 @@ def main(args: argparse.Namespace) -> None:
 
     with pydicom.dcmread(source) as dcm:
         dicom_to_image(dcm, dest, args.split, args.fps, args.quality)
+
+
+def entrypoint():
+    parser = get_parser()
+    main(parser.parse_args())
+
+
+if __name__ == "__main__":
+    entrypoint()

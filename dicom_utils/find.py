@@ -56,10 +56,13 @@ def main(args: argparse.Namespace) -> None:
             return
 
         seen_parents.add(result.parent)
-        if args.parents and result.parent not in seen_parents:
-            print(result.parent)
-        elif not args.parents:
-            print(result)
+        try:
+            if args.parents and result.parent not in seen_parents:
+                print(result.parent, flush=True)
+            elif not args.parents:
+                print(result, flush=True)
+        except IOError:
+            tp.shutdown(wait=False)
 
     futures: List[Future] = []
     with ThreadPoolExecutor(args.jobs) as tp:
@@ -67,3 +70,12 @@ def main(args: argparse.Namespace) -> None:
             f = tp.submit(check_file, match, args)
             f.add_done_callback(callback)
             futures.append(f)
+
+
+def entrypoint():
+    parser = get_parser()
+    main(parser.parse_args())
+
+
+if __name__ == "__main__":
+    entrypoint()

@@ -15,16 +15,31 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument(
         "--max_length", "-l", help="drop fields with values longer than MAX_LENGTH", default=100, type=int
     )
+    parser.add_argument("--tags", "-t", nargs="+", help="specific tags", default=None)
     return parser
 
 
 def main(args: argparse.Namespace) -> None:
-    with pydicom.dcmread(args.file) as dcm:
+    with pydicom.dcmread(args.file, specific_tags=args.tags, stop_before_pixels=True) as dcm:
         dcm = drop_empty_tags(dcm)
         add_patient_age(dcm)
         drop_fields_by_length(dcm, args.max_length, inplace=True)
 
         if args.output == "txt":
-            print(dcm)
+            print(f"Metadata for {args.file}")
+            if args.tags:
+                for v in dcm.values():
+                    print(v)
+            else:
+                print(dcm)
         elif args.output == "json":
             print(json.dumps(dicom_to_json(dcm), indent=2))
+
+
+def entrypoint():
+    parser = get_parser()
+    main(parser.parse_args())
+
+
+if __name__ == "__main__":
+    entrypoint()

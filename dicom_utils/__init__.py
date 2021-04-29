@@ -1,6 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# avoid BrokenPipeError, KeyboardInterrupt
+from .metadata import add_patient_age, dicom_to_json, drop_fields_by_length, get_date
+from .dicom import NoImageError, read_image
+from signal import SIG_DFL, SIGINT, SIGPIPE, signal
+
+
+signal(SIGPIPE, SIG_DFL)
+signal(SIGINT, SIG_DFL)
+
 try:
     pass
 except ImportError:
@@ -11,9 +20,6 @@ try:
     from .version import __version__
 except ImportError:
     __version__ = "Unknown"
-
-from .dicom import NoImageError, read_image
-from .metadata import add_patient_age, dicom_to_json, drop_fields_by_length, get_date
 
 
 __all__ = [

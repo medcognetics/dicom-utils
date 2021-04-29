@@ -77,6 +77,14 @@ def install(version):
         install_requires=["matplotlib", "pydicom", "Pillow", "numpy", "pylibjpeg", "pylibjpeg-libjpeg"],
         extras_require=extras,
         python_requires=">=3.7.0",
+        entry_points={
+            "console_scripts": [
+                "dicomutils = dicom_utils.__main__:main",
+                "dicomcat = dicom_utils.cat:entrypoint",
+                "dicomfind = dicom_utils.find:entrypoint",
+                "dicom2img = dicom_utils.dicom2img:entrypoint",
+            ],
+        },
     )
 
 

@@ -193,13 +193,13 @@ def get_simple_image_type(image_type: Dict[str, Any]) -> ImageType:
         return ImageType.TOMO
 
     if "derived" in pixels:
-        if "tomo" in flavor.lower():
+        if flavor is not None and "tomo" in flavor.lower():
             if extras is not None and any("generated" in x.lower() for x in extras):
                 return ImageType.SVIEW
             elif "2d" in flavor.lower():
                 return ImageType.NORMAL
             return ImageType.TOMO
-        elif "post_process" not in flavor.lower():
+        elif flavor is not None and "post_process" not in flavor.lower():
             return ImageType.SVIEW
 
     return ImageType.NORMAL
