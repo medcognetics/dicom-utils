@@ -9,7 +9,7 @@ from typing import Any, Dict, Final, Optional
 
 from pydicom import DataElement
 
-from .types import Dicom, ImageType
+from .types import Dicom
 
 
 LINE_PATTERN = re.compile(r"^\((\d{4}), (\d{4})\)\s*(.*\S).*([A-Z]{2}):\s*(.*)$")
@@ -25,7 +25,6 @@ STUDY_DATE = 0x00080020
 CONTENT_DATE = 0x00080023
 ACQUISITION_DATE = 0x00080022
 DENSITY = 0x40101018
-IMAGE_TYPE = 0x00080008
 
 
 def is_inverted(photo_interp: str) -> bool:
@@ -169,77 +168,3 @@ def add_density(dcm: Dicom, density: float) -> str:
 def dicom_to_json(dcm: Dicom) -> Dict[str, Any]:
     r"""Converts DICOM metadata into a JSON dictionary."""
     return json.loads(dcm.to_json())
-
-
-def get_simple_image_type(image_type: Dict[str, Any]) -> ImageType:
-    r"""Produces an ImageType value from a dictionary of processed image type
-    fields (from :func:`process_image_type`).
-
-    ImageType is determined as follows:
-        1. ImageType.TOMO if ``NumberOfFrames > 1``
-        2. ImageType.SVIEW if ``pixels == "derived`` and (``"generated" in extras or flavor is not None``)
-        3. ImageType.2D otherwise
-    """
-    # if fields 1 and 2 were missing, we know nothing
-    if not image_type:
-        return ImageType.UNKNOWN
-
-    pixels = image_type.get("pixels", "").lower()
-    flavor = image_type.get("flavor", None)
-    extras = image_type.get("extras", None)
-    num_frames = int(image_type.get("NumberOfFrames", 1))
-
-    if num_frames > 1:
-        return ImageType.TOMO
-
-    if "derived" in pixels:
-        if "tomo" in flavor.lower():
-            if extras is not None and any("generated" in x.lower() for x in extras):
-                return ImageType.SVIEW
-            elif "2d" in flavor.lower():
-                return ImageType.NORMAL
-            return ImageType.TOMO
-        elif flavor is not None:
-            return ImageType.SVIEW
-
-    return ImageType.NORMAL
-
-
-def process_image_type(dcm: Dicom) -> Dict[str, Any]:
-    r"""Extracts and processes fields that identify the DICOM image type.
-    The returned dectionary will be populated with the following items (as available):
-        * ``"pixels"`` - First element of the IMAGE_TYPE field.
-        * ``"exam"`` - Second element of the IMAGE_TYPE field.
-        * ``"flavor"`` - Third element of the IMAGE_TYPE field.
-        * ``"extras"`` - Additional IMAGE_TYPE fields if available
-        * ``"NumberOfFrames"`` - Frame count (for TOMO images only)
-    """
-    # http://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.8.24.3.2.html
-
-    result = {}
-
-    if (num_frames := getattr(dcm, "NumberOfFrames", None)) is not None:
-        result["NumberOfFrames"] = num_frames
-
-    if IMAGE_TYPE not in dcm.keys():
-        return result
-
-    try:
-        # fields 1 and 2 should always be present
-        image_type = dcm[IMAGE_TYPE].value
-        pixels, exam = image_type[:2]
-        result["pixels"] = pixels
-        result["exam"] = exam
-
-        # there might be a field 3
-        if len(image_type) >= 3:
-            flavor = image_type[2]
-            result["flavor"] = flavor
-
-        if len(image_type) >= 4:
-            result["extras"] = image_type[3:]
-
-    except RuntimeError:
-        pass
-
-    return result

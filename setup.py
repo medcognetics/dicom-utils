@@ -74,9 +74,19 @@ def install(version):
         author="Scott Chase Waggener",
         author_email="tidalpaladin@gmail.com",
         packages=find_packages(""),
-        install_requires=["pydicom", "Pillow", "numpy", "pylibjpeg", "pylibjpeg-libjpeg"],
+        install_requires=["matplotlib", "pydicom", "Pillow", "numpy", "pylibjpeg", "pylibjpeg-libjpeg"],
         extras_require=extras,
         python_requires=">=3.7.0",
+        entry_points={
+            "console_scripts": [
+                "dicomutils = dicom_utils.cli.__main__:main",
+                "dicomcat = dicom_utils.cli.cat:entrypoint",
+                "dicomfind = dicom_utils.cli.find:entrypoint",
+                "dicom2img = dicom_utils.cli.dicom2img:entrypoint",
+                "dicom_types = dicom_utils.cli.dicom_types:entrypoint",
+                "dicom_overlap = dicom_utils.cli.overlap:entrypoint",
+            ],
+        },
     )
 
 

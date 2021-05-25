@@ -3,12 +3,16 @@
 
 from argparse import ArgumentParser
 
-from .cat import get_parser as cat_parser
-from .cat import main as cat_main
-from .dicom2img import get_parser as dicom2img_parser
-from .dicom2img import main as dicom2img_main
-from .find import get_parser as find_parser
-from .find import main as find_main
+from .cli.cat import get_parser as cat_parser
+from .cli.cat import main as cat_main
+from .cli.dicom2img import get_parser as dicom2img_parser
+from .cli.dicom2img import main as dicom2img_main
+from .cli.dicom_types import get_parser as dicom_types_parser
+from .cli.dicom_types import main as dicom_types_main
+from .cli.find import get_parser as find_parser
+from .cli.find import main as find_main
+from .cli.overlap import get_parser as overlap_parser
+from .cli.overlap import main as overlap_main
 
 
 def main() -> None:
@@ -26,6 +30,14 @@ def main() -> None:
     subparser = subparsers.add_parser("find", help="Find DICOM files")
     subparser.set_defaults(func=find_main)
     find_parser(subparser)
+
+    subparser = subparsers.add_parser("dicom_types", help="Summarize image types")
+    subparser.set_defaults(func=dicom_types_main)
+    dicom_types_parser(subparser)
+
+    subparser = subparsers.add_parser("overlap", help="Check overlap of study UIDs between dirs")
+    subparser.set_defaults(func=overlap_main)
+    overlap_parser(subparser)
 
     args = parser.parse_args()
     if hasattr(args, "func"):
