@@ -55,12 +55,12 @@ def main(args: argparse.Namespace) -> None:
         if result is None:
             return
 
-        seen_parents.add(result.parent)
         try:
             if args.parents and result.parent not in seen_parents:
                 print(result.parent, flush=True)
             elif not args.parents:
                 print(result, flush=True)
+            seen_parents.add(result.parent)
         except IOError:
             tp.shutdown(wait=False)
 

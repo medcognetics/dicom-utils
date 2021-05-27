@@ -39,8 +39,17 @@ def test_find(dicom_folder, capsys, tmp_path):
         assert str(p) in captured.out
 
 
-def test_find_pattern(dicom_folder, capsys, tmp_path):
+@pytest.mark.usefixtures("dicom_folder")
+def test_find_pattern(capsys, tmp_path):
     sys.argv = [sys.argv[0], str(tmp_path), "--name", "*.DCM"]
     runpy.run_module("dicom_utils.cli.find", run_name="__main__", alter_sys=True)
     captured = capsys.readouterr()
     assert captured.out == ""
+
+
+def test_find_parents(dicom_folder, capsys, tmp_path):
+    sys.argv = [sys.argv[0], str(tmp_path), "--parents"]
+    runpy.run_module("dicom_utils.cli.find", run_name="__main__", alter_sys=True)
+    captured = capsys.readouterr()
+    for p in dicom_folder:
+        assert str(p.parent) in captured.out
