@@ -69,12 +69,10 @@ def read_dicom_image(
             raise NoImageError()
 
     if shape is None:
-        D, H, W = dcm.get("NumberOfFrames", None), int(dcm.Rows), int(dcm.Columns)
-        if D is not None:
-            D = int(D)
-            dims = (1, D, H, W)  # type: ignore
-        else:
-            dims = (1, H, W)  # type: ignore
+        # If NumberOfFrames is 1 or not defined, we treat the DICOM image as a single channel 2D image (i.e. 1xHxW).
+        # If NumberOfFrames is greater than 1, we treat the DICOM image as a single channel 3D image (i.e. 1xDxHxW).
+        D, H, W = [int(v) for v in [dcm.get("NumberOfFrames", 1), dcm.Rows, dcm.Columns]]
+        dims = (1, D, H, W) if D > 1 else (1, H, W)
     else:
         dims = (1,) + shape
 
