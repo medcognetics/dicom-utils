@@ -2,12 +2,32 @@
 # -*- coding: utf-8 -*-
 import sys
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Dict, Final, Optional, Tuple, Union
 
 import numpy as np
 from numpy import ndarray
 
 from .types import Dicom
+
+
+# Taken from https://pydicom.github.io/pydicom/dev/old/image_data_handlers.html
+TransferSyntaxUIDs: Final[Dict[str, str]] = {
+    "1.2.840.10008.1.2.1": "Explicit VR Little Endian",
+    "1.2.840.10008.1.2": "Implicit VR Little Endian",
+    "1.2.840.10008.1.2.2": "Explicit VR Big Endian",
+    "1.2.840.10008.1.2.1.99": "Deflated Explicit VR Little Endian",
+    "1.2.840.10008.1.2.5": "RLE Lossless",
+    "1.2.840.10008.1.2.4.50": "JPEG Baseline (Process 1)",
+    "1.2.840.10008.1.2.4.51": "JPEG Extended (Process 2 and 4)",
+    "1.2.840.10008.1.2.4.57": "JPEG Lossless (Process 14)",
+    "1.2.840.10008.1.2.4.70": "JPEG Lossless (Process 14, SV1)",
+    "1.2.840.10008.1.2.4.80": "JPEG LS Lossless",
+    "1.2.840.10008.1.2.4.81": "JPEG LS Lossy",
+    "1.2.840.10008.1.2.4.90": "JPEG2000 Lossless",
+    "1.2.840.10008.1.2.4.91": "JPEG2000",
+    "1.2.840.10008.1.2.4.92": "JPEG2000 Multi-component Lossless",
+    "1.2.840.10008.1.2.4.93": "JPEG2000 Multi-component",
+}
 
 
 class NoImageError(Exception):
@@ -45,13 +65,9 @@ def has_dicm_prefix(filename: Union[str, Path]) -> bool:
         return f.read(4) == b"DICM"
 
 
-def uncompressed_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
+def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     """
-    Ignore field (0002, 0010) Transfer Syntax UID which should describe pixel encoding/compression
-    and instead interpret the pixel data as uncompressed.
-
-    Some mammograms contain an invalid Transfer Syntax UID (e.g. JPEG 2000 Lossless) but are actually
-    uncompressed.
+    Interpret pixel data according to the TransferSyntaxUID stored in the DICOM dataset object.
 
     Args:
         dcm:
@@ -62,14 +78,38 @@ def uncompressed_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     Returns:
         Numpy ndarray of pixel data
     """
-    dtype = np.uint16 if dcm.BitsAllocated == 16 else np.uint8
-    return np.frombuffer(dcm.PixelData, dtype=dtype).reshape(dims)
+    return np.ndarray(dims, dcm.pixel_array.dtype, dcm.pixel_array)
+
+
+def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
+    """
+    Try all supported TransferSyntaxUIDs until one succeeds.
+    Some mammograms have a mismatch between the TransferSyntaxUID and how the pixel data is actually encoded.
+
+    Args:
+        dcm:
+            DICOM object with pixel data
+        dims:
+            Tuple containing expected image shape
+
+    Returns:
+        Numpy ndarray of pixel data
+    """
+    for transfer_syntax_uid in TransferSyntaxUIDs.keys():
+        try:
+            dcm.file_meta.TransferSyntaxUID = transfer_syntax_uid
+            pixels = strict_dcm_to_pixels(dcm, dims)
+            print(f"Able to parse pixels according to '{dcm.file_meta.TransferSyntaxUID}'")
+            return pixels
+        except Exception:
+            """Don't do anything, just see if the next TransferSyntaxUID works."""
+    raise ValueError("Unable to parse the pixel array after trying all possible TransferSyntaxUIDs.")
 
 
 def dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], strict_interp: bool) -> ndarray:
     """
-    Try to parse pixel data according to PyDicom's default handling,
-    and if that fails then try to parse according an alternative method.
+    Try to parse pixel data according to a conformant interpretation,
+    and if that fails then try to parse according to an alternative method if strict_interp==False.
 
     Args:
         dcm:
@@ -83,16 +123,16 @@ def dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], strict_interp: bool) -> nda
         Numpy ndarray of pixel data
     """
     try:
-        return np.ndarray(dims, dcm.pixel_array.dtype, dcm.pixel_array)
-    except ValueError as e:
+        return strict_dcm_to_pixels(dcm, dims)
+    except Exception as e:
         msg = (
-            f"WARNING: (0002, 0010) Transfer Syntax UID does not appear to be correct. PyDicom raised this error: '{e}'"
+            f"(0002, 0010) TransferSyntaxUID '{dcm.file_meta.TransferSyntaxUID}' "
+            f"does not appear to be correct. PyDicom raised this error: '{e}'"
         )
         if strict_interp:
             raise ValueError(msg)
-        else:
-            print(msg)
-        return uncompressed_dcm_to_pixels(dcm, dims)
+        print(f"WARNING: {msg}")
+        return loose_dcm_to_pixels(dcm, dims)
 
 
 def read_dicom_image(

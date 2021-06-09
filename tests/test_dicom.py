@@ -41,6 +41,26 @@ class TestReadDicomImage:
         assert array.min() == 128, "min pixel value 128"
         assert array.max() == 2191, "max pixel value 2191"
 
+    def test_invalid_TransferSyntaxUID_loose_interpretation(self, dicom_object):
+        dicom_object.file_meta.TransferSyntaxUID = "1.2.840.10008.1.2.4.90"  # Assign random invalid TransferSyntaxUID
+        array = read_dicom_image(dicom_object)
+        assert isinstance(array, np.ndarray)
+        assert array.min() == 128, "min pixel value 128"
+        assert array.max() == 2191, "max pixel value 2191"
+
+    def test_invalid_TransferSyntaxUID_exception(self, dicom_object):
+        dicom_object.file_meta.TransferSyntaxUID = "1.2.840.10008.1.2.4.90"  # Assign random invalid TransferSyntaxUID
+        with pytest.raises(ValueError) as e:
+            read_dicom_image(dicom_object, strict_interp=True)
+        assert "does not appear to be correct" in str(e), "The expected exception message was not returned."
+
+    def test_invalid_PixelData(self, dicom_object):
+        dicom_object.PixelData = b""
+        with pytest.raises(ValueError) as e:
+            read_dicom_image(dicom_object)
+        expected_msg = "Unable to parse the pixel array after trying all possible TransferSyntaxUIDs."
+        assert expected_msg in str(e), "The expected exception message was not returned."
+
     @pytest.mark.parametrize("shape_override", [None, (32, 32), (32, 32, 32)])
     def test_stop_before_pixels(self, dicom_object, shape_override):
         np.random.seed(42)
