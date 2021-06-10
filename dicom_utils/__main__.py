@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from argparse import ArgumentParser
+import argparse
+from argparse import ArgumentParser, _SubParsersAction
+from typing import Callable
 
 from .cli.cat import get_parser as cat_parser
 from .cli.cat import main as cat_main
@@ -13,35 +15,45 @@ from .cli.find import get_parser as find_parser
 from .cli.find import main as find_main
 from .cli.overlap import get_parser as overlap_parser
 from .cli.overlap import main as overlap_main
+from .logging import LoggingLevel, set_logging_level
+
+
+Main = Callable[[argparse.Namespace], None]
+Modifier = Callable[[ArgumentParser], None]
+
+
+def add_subparser(subparsers: _SubParsersAction, name: str, help: str, main: Main, modifier: Modifier) -> None:
+    subparser = subparsers.add_parser(name, help=help)
+    subparser.set_defaults(main=main)
+    modifier(subparser)
 
 
 def main() -> None:
     parser = ArgumentParser(description="DICOM CLI utilities")
+    parser.add_argument("--logging_level", "-l", help="Set logging level", choices=LoggingLevel.list(), default=None)
+    parser.add_argument(
+        "--pydicom_logging_level",
+        "-p",
+        help="Set pydicom logging level",
+        choices=LoggingLevel.list(),
+        default=None,
+    )
+
     subparsers = parser.add_subparsers(help="Operation modes")
-
-    subparser = subparsers.add_parser("cat", help="Print DICOM metadata")
-    subparser.set_defaults(func=cat_main)
-    cat_parser(subparser)
-
-    subparser = subparsers.add_parser("dicom2img", help="Convert DICOM to image file")
-    subparser.set_defaults(func=dicom2img_main)
-    dicom2img_parser(subparser)
-
-    subparser = subparsers.add_parser("find", help="Find DICOM files")
-    subparser.set_defaults(func=find_main)
-    find_parser(subparser)
-
-    subparser = subparsers.add_parser("dicom_types", help="Summarize image types")
-    subparser.set_defaults(func=dicom_types_main)
-    dicom_types_parser(subparser)
-
-    subparser = subparsers.add_parser("overlap", help="Check overlap of study UIDs between dirs")
-    subparser.set_defaults(func=overlap_main)
-    overlap_parser(subparser)
+    for name, help, main, modifier in [
+        ("cat", "Print DICOM metadata", cat_main, cat_parser),
+        ("dicom2img", "Convert DICOM to image file", dicom2img_main, dicom2img_parser),
+        ("find", "Find DICOM files", find_main, find_parser),
+        ("dicom_types", "Summarize image types", dicom_types_main, dicom_types_parser),
+        ("overlap", "Check overlap of study UIDs between dirs", overlap_main, overlap_parser),
+    ]:
+        add_subparser(subparsers, name=name, help=help, main=main, modifier=modifier)
 
     args = parser.parse_args()
-    if hasattr(args, "func"):
-        args.func(args)
+    set_logging_level(args.logging_level, args.pydicom_logging_level)
+
+    if hasattr(args, "main"):
+        args.main(args)
     else:
         parser.print_usage()
 

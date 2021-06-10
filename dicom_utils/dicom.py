@@ -7,6 +7,7 @@ from typing import Dict, Final, Optional, Tuple, Union
 import numpy as np
 from numpy import ndarray
 
+from .logging import logger
 from .types import Dicom
 
 
@@ -99,7 +100,10 @@ def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
         try:
             dcm.file_meta.TransferSyntaxUID = transfer_syntax_uid
             pixels = strict_dcm_to_pixels(dcm, dims)
-            print(f"Able to parse pixels according to '{dcm.file_meta.TransferSyntaxUID}'")
+            logger.warning(
+                f"Able to parse pixels according to '{dcm.file_meta.TransferSyntaxUID}' "
+                f"({TransferSyntaxUIDs[dcm.file_meta.TransferSyntaxUID]})"
+            )
             return pixels
         except Exception:
             """Don't do anything, just see if the next TransferSyntaxUID works."""
@@ -126,12 +130,13 @@ def dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], strict_interp: bool) -> nda
         return strict_dcm_to_pixels(dcm, dims)
     except Exception as e:
         msg = (
-            f"(0002, 0010) TransferSyntaxUID '{dcm.file_meta.TransferSyntaxUID}' "
-            f"does not appear to be correct. PyDicom raised this error: '{e}'"
+            f"TransferSyntaxUID (0002, 0010) '{dcm.file_meta.TransferSyntaxUID}' "
+            f"({TransferSyntaxUIDs[dcm.file_meta.TransferSyntaxUID]}) "
+            f"does not appear to be correct. pydicom raised this error: '{e}'"
         )
         if strict_interp:
             raise ValueError(msg)
-        print(f"WARNING: {msg}")
+        logger.warning(msg)
         return loose_dcm_to_pixels(dcm, dims)
 
 
