@@ -27,7 +27,7 @@ def add_subparser(subparsers: _SubParsersAction, name: str, help: str, main: Mai
     subparser.set_defaults(main=main)
     modifier(subparser)
     ll = LoggingLevel.list()
-    subparser.add_argument("--logging_level", "-ll", help="set logging level", choices=ll, default=None)
+    subparser.add_argument("--logging_level", "-ll", help="set logging level", choices=ll, default=LoggingLevel.WARNING)
     subparser.add_argument("--pydicom_logging_level", "-pl", help="set pydicom logging level", choices=ll, default=None)
 
 

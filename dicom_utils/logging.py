@@ -23,7 +23,7 @@ class LoggingLevel(ExtendedEnum):
     CRITICAL = "CRITICAL"
 
 
-def set_logging_level(logging_level: Optional[LoggingLevel], pydicom_logging_level: Optional[LoggingLevel]) -> None:
+def set_logging_level(logging_level: LoggingLevel, pydicom_logging_level: Optional[LoggingLevel]) -> None:
     """
     Set logging levels for this package.
     If pydicom_logging_level is None, logging_level will override pydicom_logging_level.
@@ -37,7 +37,6 @@ def set_logging_level(logging_level: Optional[LoggingLevel], pydicom_logging_lev
     Returns:
         None
     """
-    logging_level = LoggingLevel(logging_level or LoggingLevel.WARNING)
     pydicom_logging_level = LoggingLevel(pydicom_logging_level or logging_level)
 
     logger.setLevel(logging_level.value)
