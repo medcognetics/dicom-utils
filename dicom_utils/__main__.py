@@ -26,18 +26,13 @@ def add_subparser(subparsers: _SubParsersAction, name: str, help: str, main: Mai
     subparser = subparsers.add_parser(name, help=help)
     subparser.set_defaults(main=main)
     modifier(subparser)
+    ll = LoggingLevel.list()
+    subparser.add_argument("--logging_level", "-ll", help="set logging level", choices=ll, default=None)
+    subparser.add_argument("--pydicom_logging_level", "-pl", help="set pydicom logging level", choices=ll, default=None)
 
 
 def main() -> None:
     parser = ArgumentParser(description="DICOM CLI utilities")
-    parser.add_argument("--logging_level", "-l", help="Set logging level", choices=LoggingLevel.list(), default=None)
-    parser.add_argument(
-        "--pydicom_logging_level",
-        "-p",
-        help="Set pydicom logging level",
-        choices=LoggingLevel.list(),
-        default=None,
-    )
 
     subparsers = parser.add_subparsers(help="Operation modes")
     for name, help, main, modifier in [
