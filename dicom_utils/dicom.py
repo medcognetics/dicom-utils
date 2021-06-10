@@ -2,18 +2,40 @@
 # -*- coding: utf-8 -*-
 import sys
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Dict, Final, Optional, Tuple, Union
 
 import numpy as np
+from numpy import ndarray
 
+from .logging import logger
 from .types import Dicom
+
+
+# Taken from https://pydicom.github.io/pydicom/dev/old/image_data_handlers.html
+TransferSyntaxUIDs: Final[Dict[str, str]] = {
+    "1.2.840.10008.1.2.1": "Explicit VR Little Endian",
+    "1.2.840.10008.1.2": "Implicit VR Little Endian",
+    "1.2.840.10008.1.2.2": "Explicit VR Big Endian",
+    "1.2.840.10008.1.2.1.99": "Deflated Explicit VR Little Endian",
+    "1.2.840.10008.1.2.5": "RLE Lossless",
+    "1.2.840.10008.1.2.4.50": "JPEG Baseline (Process 1)",
+    "1.2.840.10008.1.2.4.51": "JPEG Extended (Process 2 and 4)",
+    "1.2.840.10008.1.2.4.57": "JPEG Lossless (Process 14)",
+    "1.2.840.10008.1.2.4.70": "JPEG Lossless (Process 14, SV1)",
+    "1.2.840.10008.1.2.4.80": "JPEG LS Lossless",
+    "1.2.840.10008.1.2.4.81": "JPEG LS Lossy",
+    "1.2.840.10008.1.2.4.90": "JPEG2000 Lossless",
+    "1.2.840.10008.1.2.4.91": "JPEG2000",
+    "1.2.840.10008.1.2.4.92": "JPEG2000 Multi-component Lossless",
+    "1.2.840.10008.1.2.4.93": "JPEG2000 Multi-component",
+}
 
 
 class NoImageError(Exception):
     pass
 
 
-def is_native_byteorder(arr: np.ndarray) -> bool:
+def is_native_byteorder(arr: ndarray) -> bool:
     r"""Checks if a numpy array has native byte order (Endianness)"""
     array_order = arr.dtype.byteorder
     if array_order in ["=", "|"]:
@@ -32,7 +54,7 @@ def is_inverted(photo_interp: str) -> bool:
     return False
 
 
-def invert_color(img: np.ndarray) -> np.ndarray:
+def invert_color(img: ndarray) -> ndarray:
     """The maximum value will become the minimum and vice versa"""
     return np.max(img) - img
 
@@ -44,19 +66,96 @@ def has_dicm_prefix(filename: Union[str, Path]) -> bool:
         return f.read(4) == b"DICM"
 
 
+def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
+    """
+    Interpret pixel data according to the TransferSyntaxUID stored in the DICOM dataset object.
+
+    Args:
+        dcm:
+            DICOM object with pixel data
+        dims:
+            Tuple containing expected image shape
+
+    Returns:
+        Numpy ndarray of pixel data
+    """
+    return np.ndarray(dims, dcm.pixel_array.dtype, dcm.pixel_array)
+
+
+def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
+    """
+    Try all supported TransferSyntaxUIDs until one succeeds.
+    Some mammograms have a mismatch between the TransferSyntaxUID and how the pixel data is actually encoded.
+
+    Args:
+        dcm:
+            DICOM object with pixel data
+        dims:
+            Tuple containing expected image shape
+
+    Returns:
+        Numpy ndarray of pixel data
+    """
+    for transfer_syntax_uid in TransferSyntaxUIDs.keys():
+        try:
+            dcm.file_meta.TransferSyntaxUID = transfer_syntax_uid
+            pixels = strict_dcm_to_pixels(dcm, dims)
+            logger.warning(
+                f"Able to parse pixels according to '{dcm.file_meta.TransferSyntaxUID}' "
+                f"({TransferSyntaxUIDs[dcm.file_meta.TransferSyntaxUID]})"
+            )
+            return pixels
+        except Exception:
+            """Don't do anything, just see if the next TransferSyntaxUID works."""
+    raise ValueError("Unable to parse the pixel array after trying all possible TransferSyntaxUIDs.")
+
+
+def dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], strict_interp: bool) -> ndarray:
+    """
+    Try to parse pixel data according to a conformant interpretation,
+    and if that fails then try to parse according to an alternative method if strict_interp==False.
+
+    Args:
+        dcm:
+            DICOM object with pixel data
+        dims:
+            Tuple containing expected image shape
+        strict_interp:
+            If true, don't make any assumptions for trying to work around parsing errors
+
+    Returns:
+        Numpy ndarray of pixel data
+    """
+    try:
+        return strict_dcm_to_pixels(dcm, dims)
+    except Exception as e:
+        msg = (
+            f"TransferSyntaxUID (0002, 0010) '{dcm.file_meta.TransferSyntaxUID}' "
+            f"({TransferSyntaxUIDs[dcm.file_meta.TransferSyntaxUID]}) "
+            f"does not appear to be correct. pydicom raised this error: '{e}'"
+        )
+        if strict_interp:
+            raise ValueError(msg)
+        logger.warning(msg)
+        return loose_dcm_to_pixels(dcm, dims)
+
+
 def read_dicom_image(
-    dcm: Dicom, stop_before_pixels: bool = False, shape: Optional[Tuple[int, ...]] = None
-) -> np.ndarray:
+    dcm: Dicom,
+    stop_before_pixels: bool = False,
+    shape: Optional[Tuple[int, ...]] = None,
+    strict_interp: bool = False,
+) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
 
     Args:
         dcm:
             DICOM object to load images from
-
         stop_before_pixels:
             If true, return randomly generated data
-
+        strict_interp:
+            If true, don't make any assumptions for trying to work around parsing errors
         shape:
             Manual shape override when ``stop_before_pixels`` is true. Should not include a channel dimension
 
@@ -83,19 +182,19 @@ def read_dicom_image(
     if stop_before_pixels:
         return np.random.randint(0, 2 ** 10, dims)
 
-    data = np.ndarray(dims, dcm.pixel_array.dtype, dcm.pixel_array)
+    pixels = dcm_to_pixels(dcm, dims, strict_interp)
 
     # in some dicoms, pixel value of 0 indicates white
     if is_inverted(dcm.PhotometricInterpretation):  # type: ignore
-        data = invert_color(data)
+        pixels = invert_color(pixels)
 
     # some dicoms have different endianness - convert to native byte order
-    if not is_native_byteorder(data):
-        data = data.byteswap().newbyteorder()
-    assert is_native_byteorder(data)
+    if not is_native_byteorder(pixels):
+        pixels = pixels.byteswap().newbyteorder()
+    assert is_native_byteorder(pixels)
 
     # numpy byte order needs to explicitly be native "=" for torch conversion
-    if data.dtype.byteorder != "=":
-        data = data.newbyteorder("=")
+    if pixels.dtype.byteorder != "=":
+        pixels = pixels.newbyteorder("=")
 
-    return data
+    return pixels
