@@ -9,7 +9,7 @@ from typing import List, Optional, Tuple
 import pydicom
 
 from ..dicom import has_dicm_prefix
-from ..types import get_simple_image_type, process_image_type
+from ..types import ImageType
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -37,25 +37,25 @@ def check_file(path: Path, args: argparse.Namespace) -> Optional[Tuple[Path, int
             image_type = image_type.value
             if isinstance(image_type, str):
                 image_type = [image_type]
-            image_type_dict = process_image_type(dcm)
-            simple_image_type = get_simple_image_type(image_type_dict)
-            num_frames = dcm.get("NumberOfFrames", 1)
+            img_type = ImageType.from_dicom(dcm)
+            simple_image_type = img_type.to_simple_image_type()
+            num_frames = img_type.NumberOfFrames or 1
     except AttributeError:
         return
 
     final_image_type: List[Optional[str]] = [None]
-    for x in image_type:
-        if not x:
-            if final_image_type[-1] == "...":
-                continue
-            else:
-                final_image_type.append("...")
-        else:
-            if x.isdigit() and not args.include_numeric:
-                continue
-            final_image_type.append(x)
+    # for x in image_type:
+    #    if not x:
+    #        if final_image_type[-1] == "...":
+    #            continue
+    #        else:
+    #            final_image_type.append("...")
+    #    else:
+    #        if x.isdigit() and not args.include_numeric:
+    #            continue
+    #        final_image_type.append(x)
 
-    return path, num_frames, str(simple_image_type), str(final_image_type[1:])
+    return path, num_frames, str(simple_image_type), img_type.simple_repr()
 
 
 def main(args: argparse.Namespace) -> None:

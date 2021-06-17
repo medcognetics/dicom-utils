@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 import pytest
 
-from dicom_utils.types import ImageType, get_simple_image_type
+from dicom_utils.types import ImageType, SimpleImageType
 
 
 def get_simple_image_type_test_cases():
@@ -39,55 +39,55 @@ def get_simple_image_type_test_cases():
 
     # ['ORIGINAL', 'PRIMARY']
     d = deepcopy(default)
-    _ = pytest.param(d, ImageType.NORMAL, id="2d-1")
+    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-1")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED"))
-    _ = pytest.param(d, ImageType.NORMAL, id="2d-2")
+    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-2")
     cases.append(_)
 
     # ['ORIGINAL', 'PRIMARY', '', '', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="ORIGINAL", extras=["", "", "", "", "", "150000"]))
-    _ = pytest.param(d, ImageType.NORMAL, id="2d-3")
+    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-3")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'POST_CONTRAST', 'SUBTRACTION', '', '', '', '', '50000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="POST_CONTRAST", extras=["SUBTRACTION", "", "", "50000"]))
-    _ = pytest.param(d, ImageType.NORMAL, id="2d-4")
+    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-4")
     cases.append(_)
 
     # ['ORIGINAL', 'PRIMARY', 'POST_PROCESSED', '', '', '', '', '', '50000']
     d = deepcopy(default)
     d.update(dict(pixels="ORIGINAL", flavor="POST_PROCESSED", extras=["", "", "50000"]))
-    _ = pytest.param(d, ImageType.NORMAL, id="2d-5")
+    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-5")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'TOMO_PROJ', 'RIGHT', '', '', '', '', '150000'] (may be s-view, but no marker on image)
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMO_PROJ", extras=["RIGHT", "", "50000"]))
-    _ = pytest.param(d, ImageType.NORMAL, id="2d-6")
+    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-6")
     cases.append(_)
 
     # ['DERIVED', 'SECONDARY']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", exam="SECONDARY"))
-    _ = pytest.param(d, ImageType.NORMAL, id="2d-7")
+    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-7")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'TOMO_2D', 'LEFT', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMO_2D", extras=["LEFT", "", "", "", "150000"]))
-    _ = pytest.param(d, ImageType.NORMAL, id="2d-8")
+    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-8")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'TOMO_2D', 'RIGHT', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMO_2D", extras=["RIGHT", "", "", "", "150000"]))
-    _ = pytest.param(d, ImageType.NORMAL, id="2d-9")
+    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-9")
     cases.append(_)
 
     # S-VIEW
@@ -95,13 +95,13 @@ def get_simple_image_type_test_cases():
     # ['DERIVED', 'PRIMARY', 'TOMO', 'GENERATED_2D', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMO", extras=["GENERATED_2D", "", "", "", "150000"]))
-    _ = pytest.param(d, ImageType.SVIEW, id="sview-1")
+    _ = pytest.param(d, SimpleImageType.SVIEW, id="sview-1")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'TOMOSYNTHESIS', 'GENERATED_2D', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMOSYNTHESIS", extras=["GENERATED_2D", "", "", "", "150000"]))
-    _ = pytest.param(d, ImageType.SVIEW, id="sview-2")
+    _ = pytest.param(d, SimpleImageType.SVIEW, id="sview-2")
     cases.append(_)
 
     # TOMO
@@ -109,13 +109,23 @@ def get_simple_image_type_test_cases():
     # ['DERIVED', 'PRIMARY', 'TOMOSYNTHESIS', 'NONE', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", NumberOfFrames=10, flavor="TOMOSYNTHESIS", extras=["NONE", "", "", "150000"]))
-    _ = pytest.param(d, ImageType.TOMO, id="tomo-1")
+    _ = pytest.param(d, SimpleImageType.TOMO, id="tomo-1")
     cases.append(_)
 
     return cases
 
 
-@pytest.mark.parametrize("image_type,expected", get_simple_image_type_test_cases())
-def test_get_simple_image_type_from_dict(image_type, expected):
-    actual = get_simple_image_type(image_type)
-    assert actual == expected
+class TestImageType:
+    def test_from_dicom(self, dicom_object):
+        img_type = ImageType.from_dicom(dicom_object)
+        assert img_type.pixels == "ORIGINAL"
+        assert img_type.exam == "PRIMARY"
+        assert img_type.flavor == "AXIAL"
+        assert img_type.NumberOfFrames == 1
+        assert img_type.model == "RHAPSODE"
+
+    @pytest.mark.parametrize("kwargs,expected", get_simple_image_type_test_cases())
+    def test_to_simple_image_type(self, kwargs, expected):
+        img_type = ImageType(**kwargs)
+        simple_img_type = img_type.to_simple_image_type()
+        assert simple_img_type == expected
