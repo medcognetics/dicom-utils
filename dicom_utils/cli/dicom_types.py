@@ -44,17 +44,6 @@ def check_file(path: Path, args: argparse.Namespace) -> Optional[Tuple[Path, int
         return
 
     final_image_type: List[Optional[str]] = [None]
-    # for x in image_type:
-    #    if not x:
-    #        if final_image_type[-1] == "...":
-    #            continue
-    #        else:
-    #            final_image_type.append("...")
-    #    else:
-    #        if x.isdigit() and not args.include_numeric:
-    #            continue
-    #        final_image_type.append(x)
-
     return path, num_frames, str(simple_image_type), img_type.simple_repr()
 
 
