@@ -97,17 +97,13 @@ class ImageType:
         result["pixels"] = pixels
         result["exam"] = exam
 
-        try:
-            # there might be a field 3
-            if len(image_type) >= 3:
-                flavor = image_type[2]
-                result["flavor"] = flavor
+        # there might be a field 3
+        if len(image_type) >= 3:
+            flavor = image_type[2]
+            result["flavor"] = flavor
 
-            if len(image_type) >= 4:
-                result["extras"] = image_type[3:]
-
-        except RuntimeError:
-            pass
+        if len(image_type) >= 4:
+            result["extras"] = image_type[3:]
 
         assert "pixels" in result.keys()
         assert "exam" in result.keys()

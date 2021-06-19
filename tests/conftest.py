@@ -6,7 +6,6 @@ import pytest
 
 @pytest.fixture
 def dicom_file():
-    pydicom = pytest.importorskip("pydicom")
     return pydicom.data.get_testdata_file("CT_small.dcm")
 
 
