@@ -82,11 +82,8 @@ class ImageType:
     @classmethod
     def from_dicom(cls, dcm: Dicom) -> "ImageType":
         result: Dict[str, Any] = {}
-        result["NumberOfFrames"] = dcm.get("NumberOfFrames", 1)
-        if (model := dcm.get(0x00081090, None)) is not None:
-            result["model"] = model.value
-        else:
-            result["model"] = ""
+        result["NumberOfFrames"] = dcm.get("NumberOfFrames", None)
+        result["model"] = dcm.get("ManufacturerModelName", None)
 
         if IMAGE_TYPE not in dcm.keys():
             return cls("", "", **result)

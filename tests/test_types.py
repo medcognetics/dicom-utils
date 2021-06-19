@@ -121,7 +121,7 @@ class TestImageType:
         assert img_type.pixels == "ORIGINAL"
         assert img_type.exam == "PRIMARY"
         assert img_type.flavor == "AXIAL"
-        assert img_type.NumberOfFrames == 1
+        assert img_type.NumberOfFrames is None
         assert img_type.model == "RHAPSODE"
 
     @pytest.mark.parametrize("kwargs,expected", get_simple_image_type_test_cases())
