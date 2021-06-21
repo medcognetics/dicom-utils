@@ -9,7 +9,7 @@ from typing import List, Optional
 import pydicom
 
 from ..dicom import has_dicm_prefix
-from ..types import get_simple_image_type, process_image_type
+from ..types import SimpleImageType
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -26,8 +26,7 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
 
 def is_desired_type(path: Path, types: List[str]) -> bool:
     with pydicom.dcmread(path, stop_before_pixels=True) as dcm:
-        image_type = process_image_type(dcm)
-    simple_image_type = get_simple_image_type(image_type)
+        simple_image_type = SimpleImageType.from_dicom(dcm)
     return str(simple_image_type) in types
 
 
