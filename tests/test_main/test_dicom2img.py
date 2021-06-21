@@ -64,5 +64,5 @@ def test_to_collage_num_image_assertion() -> None:
     ],
 )
 def test_to_collage_image_shape_assertion(ndarrays) -> None:
-    with pytest.raises(AssertionError, match="The images must have 3 channels."):
+    with pytest.raises(AssertionError, match="The images must have 3 dimensions."):
         to_collage(ndarrays)

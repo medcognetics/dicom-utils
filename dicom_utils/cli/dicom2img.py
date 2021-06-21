@@ -3,7 +3,7 @@
 import argparse
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterator, List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,7 +32,7 @@ def to_collage(images: List[ndarray]) -> ndarray:
     num_images = len(images)
 
     assert num_images != 0, "There must be at least one image."
-    assert all(len(i.shape) == 3 for i in images), "The images must have 3 channels."
+    assert all(len(i.shape) == 3 for i in images), "The images must have 3 dimensions."
 
     image_chns, max_image_rows, max_image_cols = np.array([i.shape for i in images]).max(axis=0)
 
@@ -52,18 +52,19 @@ def to_collage(images: List[ndarray]) -> ndarray:
     return collage
 
 
-def dcms_to_image(dcms: List[Dicom]) -> ndarray:
-    valid_image_dcms = []
+def dcms_to_arrays(dcms: List[Dicom]) -> Iterator[ndarray]:
     for dcm in dcms:
         try:
-            valid_image_dcms.append(read_dicom_image(dcm))
+            yield read_dicom_image(dcm)
         except Exception as e:
             logger.info(e)
 
-    return to_collage(valid_image_dcms)
+
+def dcms_to_array(dcms: List[Dicom]) -> ndarray:
+    return to_collage(list(dcms_to_arrays(dcms)))
 
 
-def dicom_to_image(
+def dicoms_to_graphic(
     dcms: List[Dicom],
     dest: Optional[Path] = None,
     split: bool = False,
@@ -71,7 +72,7 @@ def dicom_to_image(
     quality: int = 95,
     block: bool = True,
 ) -> None:
-    data = dcms_to_image(dcms)
+    data = dcms_to_array(dcms)
 
     # min max norm
     min, max = data.min(), data.max()
@@ -127,6 +128,14 @@ def path_to_sources(path: Path) -> List[Path]:
         raise FileNotFoundError(path)
 
 
+def path_to_dicoms(path: Path) -> Iterator[Dicom]:
+    for source in path_to_sources(path):
+        try:
+            yield pydicom.dcmread(source)
+        except Exception as e:
+            logger.info(e)
+
+
 def main(args: argparse.Namespace) -> None:
     path = Path(args.path)
     dest = Path(args.output) if args.output is not None else None
@@ -135,8 +144,8 @@ def main(args: argparse.Namespace) -> None:
     if dest is not None and dest.is_dir():
         dest = Path(dest, path.stem).with_suffix(".png")
 
-    dcms = [pydicom.dcmread(source) for source in path_to_sources(path)]
-    dicom_to_image(dcms, dest, args.split, args.fps, args.quality, not args.noblock)
+    dcms = list(path_to_dicoms(path))
+    dicoms_to_graphic(dcms, dest, args.split, args.fps, args.quality, not args.noblock)
 
 
 def entrypoint():
