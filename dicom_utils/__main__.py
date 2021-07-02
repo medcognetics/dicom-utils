@@ -15,6 +15,8 @@ from .cli.find import get_parser as find_parser
 from .cli.find import main as find_main
 from .cli.overlap import get_parser as overlap_parser
 from .cli.overlap import main as overlap_main
+from .cli.strip import get_parser as strip_parser
+from .cli.strip import main as strip_main
 from .logging import LoggingLevel, set_logging_level
 
 
@@ -39,6 +41,7 @@ def main() -> None:
         ("cat", "Print DICOM metadata", cat_main, cat_parser),
         ("dicom2img", "Convert DICOM to image file", dicom2img_main, dicom2img_parser),
         ("find", "Find DICOM files", find_main, find_parser),
+        ("strip", "Strip pixel data out of DICOMs", strip_main, strip_parser),
         ("dicom_types", "Summarize image types", dicom_types_main, dicom_types_parser),
         ("overlap", "Check overlap of study UIDs between dirs", overlap_main, overlap_parser),
     ]:
