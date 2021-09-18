@@ -11,6 +11,8 @@ from .cli.dicom2img import get_parser as dicom2img_parser
 from .cli.dicom2img import main as dicom2img_main
 from .cli.dicom_types import get_parser as dicom_types_parser
 from .cli.dicom_types import main as dicom_types_main
+from .cli.duplicate import get_parser as duplicate_parser
+from .cli.duplicate import main as duplicate_main
 from .cli.find import get_parser as find_parser
 from .cli.find import main as find_main
 from .cli.overlap import get_parser as overlap_parser
@@ -41,6 +43,7 @@ def main() -> None:
         ("find", "Find DICOM files", find_main, find_parser),
         ("dicom_types", "Summarize image types", dicom_types_main, dicom_types_parser),
         ("overlap", "Check overlap of study UIDs between dirs", overlap_main, overlap_parser),
+        ("duplicates", "Check for duplicate images / cases", duplicate_main, duplicate_parser),
     ]:
         add_subparser(subparsers, name=name, help=help, main=main, modifier=modifier)
 
