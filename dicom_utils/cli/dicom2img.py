@@ -95,8 +95,7 @@ class DicomImage:
 
     @classmethod
     def from_dicom(cls, dicom: Dicom) -> "DicomImage":
-        pixels = read_dicom_image(dicom)
-        pixels = to_rgb(pixels)
+        pixels = to_rgb(read_dicom_image(dicom))
         return cls(pixels, dicom.SOPInstanceUID)
 
     @property
