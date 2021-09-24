@@ -6,7 +6,7 @@ import pytest
 
 @pytest.fixture
 def dicom_file():
-    return pydicom.data.get_testdata_file("CT_small.dcm")
+    return pydicom.data.get_testdata_file("CT_small.dcm")  # type: ignore
 
 
 @pytest.fixture

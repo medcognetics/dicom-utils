@@ -40,6 +40,6 @@ def set_logging_level(logging_level: LoggingLevel, pydicom_logging_level: Option
     pydicom_logging_level = LoggingLevel(pydicom_logging_level or logging_level)
 
     logger.setLevel(logging_level.value)
-    pydicom.config.logger.setLevel(pydicom_logging_level.value)
+    pydicom.config.logger.setLevel(pydicom_logging_level.value)  # type: ignore
 
     logger.debug(f"Package logging set to {logging_level} and pydicom logging set to {pydicom_logging_level}.")

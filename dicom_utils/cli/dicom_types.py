@@ -37,7 +37,7 @@ def check_file(path: Path, args: argparse.Namespace) -> Optional[Tuple[Path, int
             image_type = image_type.value
             if isinstance(image_type, str):
                 image_type = [image_type]
-            img_type = ImageType.from_dicom(dcm)
+            img_type = ImageType.from_dicom(dcm)  # type: ignore
             simple_image_type = img_type.to_simple_image_type()
             num_frames = img_type.NumberOfFrames or 1
     except AttributeError:

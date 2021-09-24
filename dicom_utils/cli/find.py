@@ -26,7 +26,7 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
 
 def is_desired_type(path: Path, types: List[str]) -> bool:
     with pydicom.dcmread(path, stop_before_pixels=True) as dcm:
-        simple_image_type = SimpleImageType.from_dicom(dcm)
+        simple_image_type = SimpleImageType.from_dicom(dcm)  # type: ignore
     return str(simple_image_type) in types
 
 

@@ -21,7 +21,7 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
 
 def main(args: argparse.Namespace) -> None:
     with pydicom.dcmread(args.file, specific_tags=args.tags, stop_before_pixels=True) as dcm:
-        dcm = drop_empty_tags(dcm)
+        dcm = drop_empty_tags(dcm)  # type: ignore
         add_patient_age(dcm)
         drop_fields_by_length(dcm, args.max_length, inplace=True)
 

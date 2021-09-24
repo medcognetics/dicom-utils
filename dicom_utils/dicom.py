@@ -98,7 +98,7 @@ def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     """
     for transfer_syntax_uid in TransferSyntaxUIDs.keys():
         try:
-            dcm.file_meta.TransferSyntaxUID = transfer_syntax_uid
+            dcm.file_meta.TransferSyntaxUID = transfer_syntax_uid  # type: ignore
             pixels = strict_dcm_to_pixels(dcm, dims)
             logger.warning(
                 f"Able to parse pixels according to '{dcm.file_meta.TransferSyntaxUID}' "

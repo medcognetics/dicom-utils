@@ -74,7 +74,15 @@ def install(version):
         author="Scott Chase Waggener",
         author_email="tidalpaladin@gmail.com",
         packages=find_packages(""),
-        install_requires=["matplotlib", "pydicom", "Pillow", "numpy", "pylibjpeg", "pylibjpeg-libjpeg"],
+        install_requires=[
+            "matplotlib",
+            "pydicom",
+            "Pillow",
+            "numpy",
+            "pylibjpeg",
+            "pylibjpeg-libjpeg",
+            "opencv-python",
+        ],
         extras_require=extras,
         python_requires=">=3.7.0",
         entry_points={
