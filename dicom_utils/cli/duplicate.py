@@ -55,14 +55,15 @@ def read_file(path: Path, args: argparse.Namespace) -> Optional[FileCheckResult]
         return
 
     try:
-        tags = ["StudyInstanceUID", "SeriesInstanceUID"]
+        tags = ["StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID"]
         with pydicom.dcmread(path, specific_tags=tags, stop_before_pixels=True) as dcm:
             study = getattr(dcm, "StudyInstanceUID", "")
             series = getattr(dcm, "SeriesInstanceUID", "")
+            sop = getattr(dcm, "SOPInstanceUID", "")
     except AttributeError:
         return
 
-    return FileCheckResult(series, study, path)
+    return FileCheckResult(sop if sop else series, study, path)
 
 
 def should_print(printed: Set[Tuple[Path, Path]], p1: Path, p2: Path) -> bool:
