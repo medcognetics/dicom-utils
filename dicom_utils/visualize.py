@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Final, Iterator, List, Tuple
+from typing import Final, Iterator, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -131,14 +131,22 @@ def dcms_to_images(dcms: List[Dicom]) -> Iterator[DicomImage]:
             logger.info(e)
 
 
-def dcm_to_annotations(dcm: Dicom) -> Iterator[Annotation]:
+def dcm_to_annotations(dcm: Dicom, target_sop_uid: Optional[str] = None) -> Iterator[Annotation]:
     if "GraphicAnnotationSequence" in dcm.dir():
         for graphic in dcm.GraphicAnnotationSequence:
             if "GraphicObjectSequence" in graphic.dir():
+                assert len(graphic.ReferencedImageSequence) == 1, "Unexpected ReferencedImageSequence length"
                 sop_uid = graphic.ReferencedImageSequence[0].ReferencedSOPInstanceUID
-                data = graphic.GraphicObjectSequence[0].GraphicData
-                shape = graphic.GraphicObjectSequence[0].GraphicType
-                yield Annotation(sop_uid, data, shape)
+                if target_sop_uid is None or sop_uid == target_sop_uid:
+                    assert len(graphic.GraphicObjectSequence) == 1, "Unexpected GraphicObjectSequence length"
+                    data = graphic.GraphicObjectSequence[0].GraphicData
+                    shape = graphic.GraphicObjectSequence[0].GraphicType
+                    yield Annotation(sop_uid, data, shape)
+
+
+def get_pr_reference_targets(dcm: Dicom) -> Optional[List[str]]:
+    targets = [annotation.uid for annotation in dcm_to_annotations(dcm)]
+    return targets if targets else None
 
 
 def dcms_to_annotations(dcms: List[Dicom]) -> Iterator[Annotation]:
