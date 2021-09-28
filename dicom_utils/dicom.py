@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 import sys
 from pathlib import Path
-from typing import Dict, Final, Optional, Tuple, Union
+from typing import Dict, Final, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
+import pydicom
 from numpy import ndarray
 
 from .logging import logger
@@ -198,3 +199,20 @@ def read_dicom_image(
         pixels = pixels.newbyteorder("=")
 
     return pixels
+
+
+def path_to_dicom_path_list(path: Path) -> List[Path]:
+    if path.is_dir():
+        return [f for f in path.iterdir() if has_dicm_prefix(f)]
+    if path.is_file() and has_dicm_prefix(path):
+        return [path]
+    else:
+        raise FileNotFoundError(path)
+
+
+def path_to_dicoms(path: Path) -> Iterator[Dicom]:
+    for source in path_to_dicom_path_list(path):
+        try:
+            yield pydicom.dcmread(source)
+        except Exception as e:
+            logger.info(e)
