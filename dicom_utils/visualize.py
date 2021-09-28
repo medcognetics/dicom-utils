@@ -101,7 +101,7 @@ def dicom_trace_to_bbox(data: List[float], form: str) -> Bbox:
     elif form == "ELLIPSE":
         return dicom_ellipse_to_bbox(data)
     else:
-        raise Exception(f"Drawing is not supported for {form}")
+        raise Exception(f"Parsing is not supported for {form}")
 
 
 def chw_to_hwc(image: ndarray) -> ndarray:
