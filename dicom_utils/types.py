@@ -3,7 +3,7 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, NewType, Optional, cast
 
 from pydicom.dataset import FileDataset
 from pydicom.sequence import Sequence
@@ -13,6 +13,9 @@ IMAGE_TYPE = 0x00080008
 
 Dicom = FileDataset
 DicomAttributeSequence = Sequence
+
+
+SOPUID = NewType("SOPUID", str)
 
 
 class SimpleImageType(Enum):

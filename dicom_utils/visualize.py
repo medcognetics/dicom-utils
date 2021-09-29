@@ -8,7 +8,7 @@ from numpy import ndarray
 
 from .dicom import read_dicom_image
 from .logging import logger
-from .types import Dicom, DicomAttributeSequence
+from .types import SOPUID, Dicom, DicomAttributeSequence
 
 
 Bbox = Tuple[int, int, int, int]
@@ -19,17 +19,19 @@ class Form(Enum):
     CIRCLE = "CIRCLE"
     ELLIPSE = "ELLIPSE"
     POLYLINE = "POLYLINE"
+    # POINT - defined by DICOM standard but not currently supported
+    # INTERPOLATED - defined by DICOM standard but not currently supported
 
 
 @dataclass
 class Annotation:
     """Store an annotation with corresponding DICOM filename"""
 
-    def __init__(self, sop_uids: List[str], data: List[float], form: Form):
-        self.uids = sop_uids
-        self.form = Form(form)
+    def __init__(self, sop_uids: List[SOPUID], data: List[float], form: Form):
+        self.uids: List[SOPUID] = sop_uids
+        self.form: Form = Form(form)
         self.trace = dicom_trace_to_bbox(data, self.form)
-        self.is_rectangle = True  # TODO Add non-rectangular trace support
+        self.is_rectangle: bool = True  # TODO Add non-rectangular trace support
 
     def __repr__(self):
         return (
@@ -42,7 +44,7 @@ class DicomImage:
     """Store DICOM image pixels with associated metadata"""
 
     pixels: ndarray
-    uid: str
+    uid: SOPUID
 
     @classmethod
     def from_dicom(cls, dicom: Dicom) -> "DicomImage":
@@ -58,6 +60,10 @@ class DicomImage:
 
 
 class GraphicItem(NamedTuple):
+    """Store info from DICOM graphic objects. More information about DICOM graphic objects can be found here:
+    http://dicom.nema.org/medical/Dicom/2017c/output/chtml/part03/sect_C.10.5.html
+    """
+
     data: List[float]
     form: Form
 
@@ -153,6 +159,8 @@ def draw_bbox(image: ndarray, bbox: Bbox, color: Tuple[float, float, float] = (0
 
 
 def dcms_to_images(dcms: List[Dicom]) -> Iterator[DicomImage]:
+    """Some DICOMs may only contain annotations or other non-image information, so we want to
+    pull out image data where applicable."""
     for dcm in dcms:
         try:
             yield DicomImage.from_dicom(dcm)
@@ -190,14 +198,18 @@ def group_polylines(graphic_items: List[GraphicItem]) -> Iterator[GraphicItem]:
 
 
 def gen_graphic_items(graphic_objects: DicomAttributeSequence) -> Iterator[GraphicItem]:
+    """DICOM graphic objects contain info we don't really care about right now,
+    so we distill the info interest into a generator of GraphicItems."""
     for graphic_object in graphic_objects:
         assert graphic_object.GraphicAnnotationUnits == "PIXEL"
         yield GraphicItem(data=graphic_object.GraphicData, form=Form(graphic_object.GraphicType))
 
 
-def dcm_to_annotations(dcm: Dicom, target_sop_uid: Optional[str] = None) -> Iterator[Annotation]:
+def dcm_to_annotations(dcm: Dicom, target_sop_uid: Optional[SOPUID] = None) -> Iterator[Annotation]:
+    """Search through a DICOM for graphic annotations, and only return annotations corresponding to
+    a specific SOPInstanceUID if desired."""
     for graphic_annotation in dcm.get("GraphicAnnotationSequence", []):
-        referenced_uids = [a.ReferencedSOPInstanceUID for a in graphic_annotation.ReferencedImageSequence]
+        referenced_uids = [SOPUID(a.ReferencedSOPInstanceUID) for a in graphic_annotation.ReferencedImageSequence]
         if target_sop_uid is None or target_sop_uid in referenced_uids:
             # A TextObjectSequence may be present but no GraphicObjectSequence so ".get" is used
             graphic_items = list(gen_graphic_items(graphic_annotation.get("GraphicObjectSequence", [])))
@@ -205,7 +217,7 @@ def dcm_to_annotations(dcm: Dicom, target_sop_uid: Optional[str] = None) -> Iter
                 yield Annotation(sop_uids=referenced_uids, data=graphic_item.data, form=graphic_item.form)
 
 
-def get_pr_reference_targets(dcm: Dicom) -> Optional[List[str]]:
+def get_pr_reference_targets(dcm: Dicom) -> Optional[List[SOPUID]]:
     targets = [uid for annotation in dcm_to_annotations(dcm) for uid in annotation.uids]
     return targets if targets else None
 
