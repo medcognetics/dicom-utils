@@ -84,8 +84,8 @@ def test_dicom_ellipse_to_bbox(data, bbox) -> None:
 @pytest.mark.parametrize(
     "form, data",
     [
-        ("ELLIPSE", [0] * 8),
-        ("CIRCLE", [0] * 4),
+        (Form("ELLIPSE"), [0] * 8),
+        (Form("CIRCLE"), [0] * 4),
     ],
 )
 def test_dicom_trace_to_bbox(form, data):

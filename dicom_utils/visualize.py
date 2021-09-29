@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Final, Iterator, List, Optional, Tuple
+from enum import Enum
+from typing import Final, Iterator, List, NamedTuple, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -7,24 +8,33 @@ from numpy import ndarray
 
 from .dicom import read_dicom_image
 from .logging import logger
-from .types import Dicom
+from .types import Dicom, DicomAttributeSequence
 
 
 Bbox = Tuple[int, int, int, int]
 presentation_modality: Final[str] = "PR"
 
 
+class Form(Enum):
+    CIRCLE = "CIRCLE"
+    ELLIPSE = "ELLIPSE"
+    POLYLINE = "POLYLINE"
+
+
 @dataclass
 class Annotation:
     """Store an annotation with corresponding DICOM filename"""
 
-    def __init__(self, sop_uid: str, data: List[float], form: str):
-        self.uid = sop_uid
-        self.form = form
-        self.bbox = dicom_trace_to_bbox(data, self.form)
+    def __init__(self, sop_uids: List[str], data: List[float], form: Form):
+        self.uids = sop_uids
+        self.form = Form(form)
+        self.trace = dicom_trace_to_bbox(data, self.form)
+        self.is_rectangle = True  # TODO Add non-rectangular trace support
 
     def __repr__(self):
-        return f"<SOPInstanceUID: {self.uid}, form: {self.form}, bbox: {self.bbox}>"
+        return (
+            f"<SOPInstanceUIDs: {self.uids}, form: {self.form}, trace: {self.trace}, is rectangle: {self.is_rectangle}>"
+        )
 
 
 @dataclass
@@ -45,6 +55,15 @@ class DicomImage:
 
     def __repr__(self):
         return f"<SOPInstanceUID: {self.uid}, shape: {self.pixels.shape}>"
+
+
+class GraphicItem(NamedTuple):
+    data: List[float]
+    form: Form
+
+    def __add__(self, other: "GraphicItem") -> "GraphicItem":
+        assert self.form == other.form == Form.POLYLINE, "Addition is only defined for POLYLINE items"
+        return GraphicItem(self.data + other.data, self.form)
 
 
 def to_collage(images: List[ndarray]) -> ndarray:
@@ -95,11 +114,21 @@ def dicom_circle_to_bbox(data: List[float]) -> Bbox:
     return x0, y0, x1, y1
 
 
-def dicom_trace_to_bbox(data: List[float], form: str) -> Bbox:
-    if form == "CIRCLE":
+def dicom_polylines_to_bbox(data: List[float]) -> Bbox:
+    assert len(data) % 2 == 0, "This function is not implemented to support 3D (x,y,z) coordinates"
+    xs = [rint(x) for x in data[::2]]
+    ys = [rint(x) for x in data[1::2]]
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+    return x0, y0, x1, y1
+
+
+def dicom_trace_to_bbox(data: List[float], form: Form) -> Bbox:
+    if form == Form.CIRCLE:
         return dicom_circle_to_bbox(data)
-    elif form == "ELLIPSE":
+    elif form == Form.ELLIPSE:
         return dicom_ellipse_to_bbox(data)
+    elif form == Form.POLYLINE:
+        return dicom_polylines_to_bbox(data)
     else:
         raise Exception(f"Parsing is not supported for {form}")
 
@@ -131,21 +160,52 @@ def dcms_to_images(dcms: List[Dicom]) -> Iterator[DicomImage]:
             logger.info(e)
 
 
+def distance(a: List[float], b: List[float]) -> float:
+    assert len(a) == len(b), "Expected lists of equal length for calculating distance"
+    return sum((u - v) ** 2 for u, v in zip(a, b))
+
+
+def polylines_are_contiguous(a: List[float], b: List[float]) -> bool:
+    a_start = a[:2]
+    a_stop = a[-2:]
+    b_start = b[:2]
+    return distance(a_start, a_stop) > distance(a_stop, b_start)
+
+
+def are_matching_polylines(a: GraphicItem, b: GraphicItem) -> bool:
+    return a.form == b.form == Form.POLYLINE and polylines_are_contiguous(a.data, b.data)
+
+
+def group_polylines(graphic_items: List[GraphicItem]) -> Iterator[GraphicItem]:
+    """Consecutive polyline traces may have been recorded separately when they were intended to be part of one single
+    trace. Identify this situation and combine polylines accordingly."""
+    while graphic_items:
+        item = graphic_items.pop(0)
+
+        while graphic_items and are_matching_polylines(item, graphic_items[0]):
+            item = item + graphic_items.pop(0)
+
+        yield item
+
+
+def gen_graphic_items(graphic_objects: DicomAttributeSequence) -> Iterator[GraphicItem]:
+    for graphic_object in graphic_objects:
+        assert graphic_object.GraphicAnnotationUnits == "PIXEL"
+        yield GraphicItem(data=graphic_object.GraphicData, form=Form(graphic_object.GraphicType))
+
+
 def dcm_to_annotations(dcm: Dicom, target_sop_uid: Optional[str] = None) -> Iterator[Annotation]:
-    if "GraphicAnnotationSequence" in dcm.dir():
-        for graphic in dcm.GraphicAnnotationSequence:
-            if "GraphicObjectSequence" in graphic.dir():
-                assert len(graphic.ReferencedImageSequence) == 1, "Unexpected ReferencedImageSequence length"
-                sop_uid = graphic.ReferencedImageSequence[0].ReferencedSOPInstanceUID
-                if target_sop_uid is None or sop_uid == target_sop_uid:
-                    assert len(graphic.GraphicObjectSequence) == 1, "Unexpected GraphicObjectSequence length"
-                    data = graphic.GraphicObjectSequence[0].GraphicData
-                    shape = graphic.GraphicObjectSequence[0].GraphicType
-                    yield Annotation(sop_uid, data, shape)
+    for graphic_annotation in dcm.get("GraphicAnnotationSequence", []):
+        referenced_uids = [a.ReferencedSOPInstanceUID for a in graphic_annotation.ReferencedImageSequence]
+        if target_sop_uid is None or target_sop_uid in referenced_uids:
+            # A TextObjectSequence may be present but no GraphicObjectSequence so ".get" is used
+            graphic_items = list(gen_graphic_items(graphic_annotation.get("GraphicObjectSequence", [])))
+            for graphic_item in group_polylines(graphic_items):
+                yield Annotation(sop_uids=referenced_uids, data=graphic_item.data, form=graphic_item.form)
 
 
 def get_pr_reference_targets(dcm: Dicom) -> Optional[List[str]]:
-    targets = [annotation.uid for annotation in dcm_to_annotations(dcm)]
+    targets = [uid for annotation in dcm_to_annotations(dcm) for uid in annotation.uids]
     return targets if targets else None
 
 
@@ -160,8 +220,11 @@ def dcms_to_annotations(dcms: List[Dicom]) -> Iterator[Annotation]:
 def overlay_annotations(images: List[DicomImage], annotations: List[Annotation]) -> None:
     for image in images:
         for annotation in annotations:
-            if annotation.uid == image.uid:
-                draw_bbox(image.pixels, annotation.bbox)
+            if image.uid in annotation.uids:
+                if annotation.is_rectangle:
+                    draw_bbox(image.pixels, annotation.trace)
+                else:
+                    raise Exception("Drawing for non-rectangular traces is not currently supported.")
 
 
 def to_rgb(image: ndarray) -> ndarray:
