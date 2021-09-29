@@ -122,3 +122,26 @@ def test_to_rgb(data, expected_shape):
 def test_to_8bit(data, expected):
     output = to_8bit(np.array(data))
     assert (output == np.array(expected)).all()
+
+
+@pytest.mark.parametrize(
+    "data_a, data_b, expected",
+    [([0, 0], [0, 1], 1)],
+)
+def test_distance(data_a, data_b, expected):
+    assert distance(data_a, data_b) == expected
+
+
+@pytest.mark.parametrize(
+    "data, expected",
+    [
+        ([[0, 1]], [[0, 1]]),
+        ([[0, 1], [1, 2]], [[0, 1], [1, 2]]),
+        ([[0, 1, 8, 9], [8, 9, 3, 4]], [[0, 1, 8, 9, 8, 9, 3, 4]]),
+        ([[0, 1, 2, 3], [8, 9, 3, 4]], [[0, 1, 2, 3], [8, 9, 3, 4]]),
+    ],
+)
+def test_group_polylines(data, expected):
+    data = [GraphicItem(x, Form.POLYLINE) for x in data]
+    expected = [GraphicItem(x, Form.POLYLINE) for x in expected]
+    assert list(group_polylines(data)) == expected

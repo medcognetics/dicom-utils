@@ -165,25 +165,26 @@ def distance(a: List[float], b: List[float]) -> float:
     return sum((u - v) ** 2 for u, v in zip(a, b))
 
 
-def polylines_are_contiguous(a: List[float], b: List[float]) -> bool:
+def are_contiguous_points(a: List[float], b: List[float]) -> bool:
     a_start = a[:2]
     a_stop = a[-2:]
     b_start = b[:2]
     return distance(a_start, a_stop) > distance(a_stop, b_start)
 
 
-def are_matching_polylines(a: GraphicItem, b: GraphicItem) -> bool:
-    return a.form == b.form == Form.POLYLINE and polylines_are_contiguous(a.data, b.data)
+def are_contiguous_polylines(a: GraphicItem, b: GraphicItem) -> bool:
+    return a.form == b.form == Form.POLYLINE and are_contiguous_points(a.data, b.data)
 
 
 def group_polylines(graphic_items: List[GraphicItem]) -> Iterator[GraphicItem]:
     """Consecutive polyline traces may have been recorded separately when they were intended to be part of one single
     trace. Identify this situation and combine polylines accordingly."""
+    graphic_items = graphic_items.copy()
     while graphic_items:
         item = graphic_items.pop(0)
 
-        while graphic_items and are_matching_polylines(item, graphic_items[0]):
-            item = item + graphic_items.pop(0)
+        while graphic_items and are_contiguous_polylines(item, graphic_items[0]):
+            item += graphic_items.pop(0)
 
         yield item
 
