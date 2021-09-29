@@ -5,12 +5,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, cast
 
-from pydicom.dataset import FileDataset
+from pydicom.dataset import Dataset
+from pydicom.sequence import Sequence
 
 
 IMAGE_TYPE = 0x00080008
 
-Dicom = FileDataset
+Dicom = Dataset
+DicomAttributeSequence = Sequence
 
 
 class SimpleImageType(Enum):

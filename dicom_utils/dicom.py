@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 import sys
 from pathlib import Path
-from typing import Dict, Final, Optional, Tuple, Union
+from typing import Dict, Final, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
+import pydicom
 from numpy import ndarray
+from pydicom.uid import UID
 
 from .logging import logger
 from .types import Dicom
@@ -98,7 +100,7 @@ def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     """
     for transfer_syntax_uid in TransferSyntaxUIDs.keys():
         try:
-            dcm.file_meta.TransferSyntaxUID = transfer_syntax_uid
+            dcm.file_meta.TransferSyntaxUID = UID(transfer_syntax_uid)
             pixels = strict_dcm_to_pixels(dcm, dims)
             logger.warning(
                 f"Able to parse pixels according to '{dcm.file_meta.TransferSyntaxUID}' "
@@ -185,7 +187,7 @@ def read_dicom_image(
     pixels = dcm_to_pixels(dcm, dims, strict_interp)
 
     # in some dicoms, pixel value of 0 indicates white
-    if is_inverted(dcm.PhotometricInterpretation):  # type: ignore
+    if is_inverted(dcm.PhotometricInterpretation):
         pixels = invert_color(pixels)
 
     # some dicoms have different endianness - convert to native byte order
@@ -198,3 +200,20 @@ def read_dicom_image(
         pixels = pixels.newbyteorder("=")
 
     return pixels
+
+
+def path_to_dicom_path_list(path: Path) -> List[Path]:
+    if path.is_dir():
+        return [f for f in path.iterdir() if has_dicm_prefix(f)]
+    if path.is_file() and has_dicm_prefix(path):
+        return [path]
+    else:
+        raise FileNotFoundError(path)
+
+
+def path_to_dicoms(path: Path) -> Iterator[Dicom]:
+    for source in path_to_dicom_path_list(path):
+        try:
+            yield pydicom.dcmread(source)
+        except Exception as e:
+            logger.info(e)

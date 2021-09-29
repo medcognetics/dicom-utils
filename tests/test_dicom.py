@@ -57,7 +57,7 @@ class TestReadDicomImage:
         assert isinstance(array2, np.ndarray)
 
         if shape_override is None:
-            assert not (array1 == array2).all()  # type: ignore
-            assert array1.shape == array2.shape  # type: ignore
+            assert not (array1 == array2).all()
+            assert array1.shape == array2.shape
         else:
-            assert array2.shape == (1,) + shape_override  # type: ignore
+            assert array2.shape == (1,) + shape_override

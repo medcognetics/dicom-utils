@@ -3,17 +3,14 @@
 import argparse
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Iterator, List, Optional
+from typing import List, Optional
 
 import matplotlib.pyplot as plt
-import numpy as np
-import pydicom
-from numpy import ndarray
 from PIL import Image
 
-from ..dicom import has_dicm_prefix, read_dicom_image
-from ..logging import logger
+from ..dicom import path_to_dicoms
 from ..types import Dicom
+from ..visualize import chw_to_hwc, dcms_to_annotated_images, to_8bit, to_collage
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -28,42 +25,6 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     return parser
 
 
-def to_collage(images: List[ndarray]) -> ndarray:
-    num_images = len(images)
-
-    assert num_images != 0, "There must be at least one image."
-    assert all(len(i.shape) == 3 for i in images), "The images must have 3 dimensions."
-
-    image_chns, max_image_rows, max_image_cols = np.array([i.shape for i in images]).max(axis=0)
-
-    collage_rows = 1 if num_images < 3 else 2
-    collage_cols = int(num_images / collage_rows + 0.5)
-
-    collage = np.zeros((image_chns, collage_rows * max_image_rows, collage_cols * max_image_cols))
-
-    for i, image in enumerate(images):
-        row = int(i >= collage_cols)
-        col = i % collage_cols
-        start_row = row * max_image_rows
-        start_col = col * max_image_cols
-        image_chns, image_rows, image_cols = image.shape
-        collage[:image_chns, start_row : start_row + image_rows, start_col : start_col + image_cols] = image
-
-    return collage
-
-
-def dcms_to_arrays(dcms: List[Dicom]) -> Iterator[ndarray]:
-    for dcm in dcms:
-        try:
-            yield read_dicom_image(dcm)
-        except Exception as e:
-            logger.info(e)
-
-
-def dcms_to_array(dcms: List[Dicom]) -> ndarray:
-    return to_collage(list(dcms_to_arrays(dcms)))
-
-
 def dicoms_to_graphic(
     dcms: List[Dicom],
     dest: Optional[Path] = None,
@@ -72,25 +33,18 @@ def dicoms_to_graphic(
     quality: int = 95,
     block: bool = True,
 ) -> None:
-    data = dcms_to_array(dcms)
+    images = dcms_to_annotated_images(dcms)
+    data = to_8bit(to_collage([i.pixels for i in images]))
 
-    # min max norm
-    min, max = data.min(), data.max()
-    data = (data - min) / (max - min) * 255
-    data = data.astype(np.uint8)
-    H, W = data.shape[-2:]
-
-    # single image
-    if dcms[0].pixel_array.ndim == 2:
-        data = data[0]  # drop channel
+    if all(i.is_single_slice for i in images):
+        data = chw_to_hwc(data[0])
         if dest is None:
-            plt.imshow(data.reshape(H, W), cmap="gray")
+            plt.imshow(data)
             print("Showing image")
             plt.show(block=block)
         else:
             img = Image.fromarray(data)
             img.save(str(dest), quality=quality)
-
     elif split:
         if dest is not None:
             subdir = Path(dest.with_suffix(""))
@@ -108,7 +62,6 @@ def dicoms_to_graphic(
                 print(f"Showing frame {i}/{len(data)}")
                 plt.show(block=block)
                 break
-
     else:
         frames = [Image.fromarray(frame) for frame in data]
         duration_ms = len(frames) / (fps * 1000)
@@ -117,23 +70,6 @@ def dicoms_to_graphic(
         else:
             path = dest.with_suffix(".gif")
             frames[0].save(path, save_all=True, append_images=frames[1:], duration=duration_ms, quality=quality)
-
-
-def path_to_sources(path: Path) -> List[Path]:
-    if path.is_dir():
-        return [f for f in path.iterdir() if has_dicm_prefix(f)]
-    if path.is_file():
-        return [path]
-    else:
-        raise FileNotFoundError(path)
-
-
-def path_to_dicoms(path: Path) -> Iterator[Dicom]:
-    for source in path_to_sources(path):
-        try:
-            yield pydicom.dcmread(source)
-        except Exception as e:
-            logger.info(e)
 
 
 def main(args: argparse.Namespace) -> None:
