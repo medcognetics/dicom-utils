@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 import pydicom
 import pytest
+from pydicom.data import get_testdata_file
 
 
 @pytest.fixture
 def dicom_file():
-    return pydicom.data.get_testdata_file("CT_small.dcm")  # type: ignore
+    return get_testdata_file("CT_small.dcm")
 
 
 @pytest.fixture

@@ -5,10 +5,11 @@ from typing import Final, Iterator, List, NamedTuple, Optional, Tuple
 import cv2
 import numpy as np
 from numpy import ndarray
+from pydicom.uid import UID
 
 from .dicom import read_dicom_image
 from .logging import logger
-from .types import SOPUID, Dicom, DicomAttributeSequence
+from .types import Dicom, DicomAttributeSequence
 
 
 Bbox = Tuple[int, int, int, int]
@@ -27,8 +28,8 @@ class Form(Enum):
 class Annotation:
     """Store an annotation with corresponding DICOM filename"""
 
-    def __init__(self, sop_uids: List[SOPUID], data: List[float], form: Form):
-        self.uids: List[SOPUID] = sop_uids
+    def __init__(self, sop_uids: List[UID], data: List[float], form: Form):
+        self.uids: List[UID] = sop_uids
         self.form: Form = Form(form)
         self.trace = dicom_trace_to_bbox(data, self.form)
         self.is_rectangle: bool = True  # TODO Add non-rectangular trace support
@@ -44,7 +45,7 @@ class DicomImage:
     """Store DICOM image pixels with associated metadata"""
 
     pixels: ndarray
-    uid: SOPUID
+    uid: UID
 
     @classmethod
     def from_dicom(cls, dicom: Dicom) -> "DicomImage":
@@ -205,11 +206,11 @@ def gen_graphic_items(graphic_objects: DicomAttributeSequence) -> Iterator[Graph
         yield GraphicItem(data=graphic_object.GraphicData, form=Form(graphic_object.GraphicType))
 
 
-def dcm_to_annotations(dcm: Dicom, target_sop_uid: Optional[SOPUID] = None) -> Iterator[Annotation]:
+def dcm_to_annotations(dcm: Dicom, target_sop_uid: Optional[UID] = None) -> Iterator[Annotation]:
     """Search through a DICOM for graphic annotations, and only return annotations corresponding to
     a specific SOPInstanceUID if desired."""
     for graphic_annotation in dcm.get("GraphicAnnotationSequence", []):
-        referenced_uids = [SOPUID(a.ReferencedSOPInstanceUID) for a in graphic_annotation.ReferencedImageSequence]
+        referenced_uids = [UID(a.ReferencedSOPInstanceUID) for a in graphic_annotation.ReferencedImageSequence]
         if target_sop_uid is None or target_sop_uid in referenced_uids:
             # A TextObjectSequence may be present but no GraphicObjectSequence so ".get" is used
             graphic_items = list(gen_graphic_items(graphic_annotation.get("GraphicObjectSequence", [])))
@@ -217,7 +218,7 @@ def dcm_to_annotations(dcm: Dicom, target_sop_uid: Optional[SOPUID] = None) -> I
                 yield Annotation(sop_uids=referenced_uids, data=graphic_item.data, form=graphic_item.form)
 
 
-def get_pr_reference_targets(dcm: Dicom) -> Optional[List[SOPUID]]:
+def get_pr_reference_targets(dcm: Dicom) -> Optional[List[UID]]:
     targets = [uid for annotation in dcm_to_annotations(dcm) for uid in annotation.uids]
     return targets if targets else None
 

@@ -2,7 +2,7 @@ import logging
 from enum import Enum
 from typing import Optional, Union
 
-import pydicom
+from pydicom.config import logger as pydicom_logger
 
 
 logging.basicConfig()
@@ -44,6 +44,6 @@ def set_logging_level(logging_level: Level, pydicom_logging_level: Optional[Leve
     pydicom_logging_level = LoggingLevel(pydicom_logging_level or logging_level)
 
     logger.setLevel(logging_level.value)
-    pydicom.config.logger.setLevel(pydicom_logging_level.value)  # type: ignore
+    pydicom_logger.setLevel(pydicom_logging_level.value)
 
     logger.debug(f"Package logging set to {logging_level} and pydicom logging set to {pydicom_logging_level}.")
