@@ -5,7 +5,7 @@
 import numpy as np
 import pytest
 
-from dicom_utils import read_dicom_image
+from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
 
 
 class TestReadDicomImage:
@@ -61,3 +61,22 @@ class TestReadDicomImage:
             assert array1.shape == array2.shape
         else:
             assert array2.shape == (1,) + shape_override
+
+    @pytest.mark.parametrize(
+        "handler",
+        [
+            KeepVolume(),
+            SliceAtLocation(4),
+            UniformSample(count=4),
+        ],
+    )
+    def test_volume_handling(self, dicom_object, handler, mocker):
+        np.random.seed(42)
+        F = 8
+        spy = mocker.spy(handler, "__call__")
+        dicom_object.NumberOfFrames = F
+        dicom_object.PixelData = np.random.rand(F, 128, 128).tobytes()
+
+        array1 = read_dicom_image(dicom_object, volume_handler=spy)
+        spy.assert_called_once()
+        assert (spy.mock_calls[0].args[0] == dicom_object.pixel_array).all()

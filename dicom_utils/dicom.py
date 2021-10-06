@@ -11,6 +11,7 @@ from pydicom.uid import UID
 
 from .logging import logger
 from .types import Dicom
+from .volume import KeepVolume, VolumeHandler
 
 
 # Taken from https://pydicom.github.io/pydicom/dev/old/image_data_handlers.html
@@ -147,6 +148,7 @@ def read_dicom_image(
     stop_before_pixels: bool = False,
     shape: Optional[Tuple[int, ...]] = None,
     strict_interp: bool = False,
+    volume_handler: VolumeHandler = KeepVolume(),
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -198,6 +200,12 @@ def read_dicom_image(
     # numpy byte order needs to explicitly be native "=" for torch conversion
     if pixels.dtype.byteorder != "=":
         pixels = pixels.newbyteorder("=")
+
+    # apply volume handling for 3D data
+    if len(dims) == 4:
+        pixels = volume_handler(pixels[0])[None]
+        assert len(dims) == 4
+        assert pixels.shape[0] == 1
 
     return pixels
 

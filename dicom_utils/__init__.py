@@ -5,6 +5,7 @@ from .dicom import NoImageError, read_dicom_image
 
 # avoid BrokenPipeError, KeyboardInterrupt
 from .metadata import add_patient_age, dicom_to_json, drop_fields_by_length, get_date
+from .volume import KeepVolume, SliceAtLocation, UniformSample, VolumeHandler
 
 
 try:
@@ -28,4 +29,8 @@ __all__ = [
     "get_date",
     "NoImageError",
     "read_dicom_image",
+    "VolumeHandler",
+    "KeepVolume",
+    "SliceAtLocation",
+    "UniformSample",
 ]
