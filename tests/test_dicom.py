@@ -67,7 +67,7 @@ class TestReadDicomImage:
         [
             KeepVolume(),
             SliceAtLocation(4),
-            UniformSample(count=4),
+            UniformSample(4, method="count"),
         ],
     )
     def test_volume_handling(self, dicom_object, handler, mocker):

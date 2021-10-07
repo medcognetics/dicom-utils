@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABC, abstractmethod
-from typing import Optional, Sized, SupportsIndex, TypeVar
+from typing import Sized, SupportsIndex, TypeVar
 
 
 T = TypeVar("T", bound=SupportsIndex)
@@ -75,39 +75,39 @@ class UniformSample(VolumeHandler):
     Either ``stride`` or ``count`` must be provided.
 
     Args:
-        stride:
-            If given, the stride between sampled frames
+        amount:
+            When when ``method='count'``, the number of frames to sample.
+            When ``method='stride'``, the stride between sampled frames.
 
-        count:
-            If given, the total number of frames to include in the output. Stride will be
-            computed as ``min(num_slices // count, 1)``.
+        method:
+            Either ``'count'`` or ``'stride'``.
     """
 
     def __init__(
         self,
-        stride: Optional[int] = None,
-        count: Optional[int] = None,
+        amount: int,
+        method: str = "count",
     ):
-        if stride is None and count is None:
-            raise ValueError("Either `stride` or `count` must be provided")
-        self.stride = stride
-        self.count = count
+        if method not in ("count", "stride"):
+            raise ValueError(f"`method` {method} must be one of 'count', 'stride'")
+        self.amount = amount
+        self.method = method
 
     def __repr__(self) -> str:
         s = f"{self.__class__.__name__}("
-        s += f"count={self.count}, "
-        s += f"stride={self.stride}"
+        s += f"amount={self.amount}, "
+        s += f"method={self.method}"
         s += ")"
         return s
 
     def __call__(self, x: T) -> T:
-        if self.stride:
-            result = x[:: self.stride]  # type: ignore
-        elif self.count:
+        if self.method == "stride":
+            result = x[:: self.amount]  # type: ignore
+        elif self.method == "count":
             assert isinstance(x, Sized)
             total_slices = len(x)
-            stride = max(total_slices // self.count, 1)
+            stride = max(total_slices // self.amount, 1)
             result = x[::stride]  # type: ignore
         else:
-            raise ValueError(f"Either `stride` or `count` are required: {self.stride}, {self.count}")
+            raise ValueError(f"Invalid method {self.method}")
         return result
