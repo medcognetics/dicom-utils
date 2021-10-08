@@ -53,16 +53,16 @@ class VolumeHandler(ABC):
         """
         # copy dicom and read key tags
         dcm = deepcopy(dcm)
-        num_frames: Optional[SupportsInt] = dcm.get("NumberOfFrames", None)  # type: ignore
+        num_frames: Optional[SupportsInt] = dcm.get("NumberOfFrames", None)
         num_frames = int(num_frames) if num_frames is not None else None
-        is_compressed: bool = dcm.file_meta.TransferSyntaxUID.is_compressed  # type: ignore
+        is_compressed: bool = dcm.file_meta.TransferSyntaxUID.is_compressed
 
         start, stop, stride = self.get_indices(num_frames)
 
         # read data
         if is_compressed:
-            all_frames: Iterator = generate_pixel_data_frame(dcm.PixelData, num_frames)  # type: ignore
-            frames = list(islice(all_frames, start, stop, stride))
+            frame_iterator: Iterator = generate_pixel_data_frame(dcm.PixelData, num_frames)
+            frames = list(islice(frame_iterator, start, stop, stride))
             new_pixel_data = encapsulate(frames)
         else:
             all_frames: np.ndarray = dcm.pixel_array
