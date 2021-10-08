@@ -190,7 +190,7 @@ def read_dicom_image(
     if len(dims) == 4:
         dcm = volume_handler(dcm)
         D: int = int(dcm.get("NumberOfFrames", 1))  # type: ignore
-        dims = (1, D, *dims[-2:])
+        dims = (1, D, *dims[-2:]) if D > 1 else (1, *dims[-2:])
 
     pixels = dcm_to_pixels(dcm, dims, strict_interp)
 

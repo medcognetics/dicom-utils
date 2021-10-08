@@ -77,3 +77,4 @@ class TestReadDicomImage:
         array1 = read_dicom_image(dcm, volume_handler=spy, strict_interp=True)
         spy.assert_called_once()
         assert spy.mock_calls[0].args[0] == dcm, "handler should be called with DICOM object"
+        assert array1.ndim < 4 or array1.shape[1] != 1, "3D dim should be squeezed when D=1"

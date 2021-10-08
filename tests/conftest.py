@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from copy import deepcopy
 from pathlib import Path
 
 import pydicom
@@ -35,36 +36,36 @@ def dicom_file_3d(tmp_path, dicom_object_3d):
 
 
 @pytest.fixture
-def dicom_object_3d():
+def dicom_object_3d(dicom_object):
     series = "1.2.345"
     study = "2.3.456"
+    dcm = deepcopy(dicom_object)
     source = Path(pydicom.data.get_testdata_files("*CT*")[0])  # type: ignore
-    with pydicom.dcmread(source) as dcm:
-        dcm.StudyInstanceUID = study
-        dcm.SeriesInstanceUID = series
-        dcm.SOPInstanceUID = series
-        file_meta = FileMetaDataset()
-        file_meta.MediaStorageSOPClassUID = UID("1.2.345")
-        file_meta.MediaStorageSOPInstanceUID = UID("2.3.456")
+    dcm.StudyInstanceUID = study
+    dcm.SeriesInstanceUID = series
+    dcm.SOPInstanceUID = series
+    file_meta = FileMetaDataset()
+    file_meta.MediaStorageSOPClassUID = UID("1.2.345")
+    file_meta.MediaStorageSOPInstanceUID = UID("2.3.456")
 
-        def func(num_frames, syntax=ExplicitVRLittleEndian):
-            file_meta.TransferSyntaxUID = syntax
-            old_data = dcm.PixelData
-            dcm.NumberOfFrames = num_frames
+    def func(num_frames, syntax=ExplicitVRLittleEndian):
+        file_meta.TransferSyntaxUID = syntax
+        old_data = dcm.PixelData
+        dcm.NumberOfFrames = num_frames
 
-            if syntax.is_compressed:
-                new_data = encapsulate([old_data for _ in range(num_frames)], has_bot=False)
-                dcm.PixelData = new_data
-                dcm.compress(syntax)
+        if syntax.is_compressed:
+            new_data = encapsulate([old_data for _ in range(num_frames)], has_bot=False)
+            dcm.PixelData = new_data
+            dcm.compress(syntax)
 
-            else:
-                new_data = b"".join(old_data for _ in range(num_frames))
-                dcm.PixelData = new_data
+        else:
+            new_data = b"".join(old_data for _ in range(num_frames))
+            dcm.PixelData = new_data
 
-            dcm.file_meta = file_meta
-            return dcm
+        dcm.file_meta = file_meta
+        return dcm
 
-        yield func
+    return func
 
 
 @pytest.fixture(
