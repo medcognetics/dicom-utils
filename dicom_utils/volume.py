@@ -1,17 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import typing
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from itertools import islice
-from typing import Iterator, Optional, Sized, SupportsIndex, SupportsInt, Tuple, TypeVar, Union, overload
+from typing import Any, Iterator, Optional, Protocol, Sized, SupportsInt, Tuple, TypeVar, Union, overload
 
 import numpy as np
 from pydicom import Dataset
 from pydicom.encaps import encapsulate, generate_pixel_data_frame
 
 
-T = TypeVar("T", bound=SupportsIndex)
+class SupportsGetItem(Protocol):
+    def __getitem__(self, key: Any) -> Any:
+        ...
+
+
+T = TypeVar("T", bound=SupportsGetItem)
 U = TypeVar("U", bound=Dataset)
 
 
@@ -40,7 +46,8 @@ class VolumeHandler(ABC):
         r"""Slices an array input according to :func:`get_indices`"""
         num_frames = len(x) if isinstance(x, Sized) else None
         start, stop, stride = self.get_indices(num_frames)
-        result = x[start:stop:stride]  # type: ignore
+        x = typing.cast(SupportsGetItem, x)  # type: ignore
+        result = x[slice(start, stop, stride)]
         return result
 
     def slice_dicom(self, dcm: U) -> U:
