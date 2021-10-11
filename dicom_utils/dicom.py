@@ -186,6 +186,12 @@ def read_dicom_image(
     if stop_before_pixels:
         return np.random.randint(0, 2 ** 10, dims)
 
+    # apply volume handling for 3D data
+    if len(dims) == 4:
+        dcm = volume_handler(dcm)
+        D: int = int(dcm.get("NumberOfFrames", 1))
+        dims = (1, D, *dims[-2:]) if D > 1 else (1, *dims[-2:])
+
     pixels = dcm_to_pixels(dcm, dims, strict_interp)
 
     # in some dicoms, pixel value of 0 indicates white
@@ -200,12 +206,6 @@ def read_dicom_image(
     # numpy byte order needs to explicitly be native "=" for torch conversion
     if pixels.dtype.byteorder != "=":
         pixels = pixels.newbyteorder("=")
-
-    # apply volume handling for 3D data
-    if len(dims) == 4:
-        pixels = volume_handler(pixels[0])[None]
-        assert len(dims) == 4
-        assert pixels.shape[0] == 1
 
     return pixels
 

@@ -70,13 +70,11 @@ class TestReadDicomImage:
             UniformSample(4, method="count"),
         ],
     )
-    def test_volume_handling(self, dicom_object, handler, mocker):
-        np.random.seed(42)
-        F = 8
+    def test_volume_handling(self, dicom_object_3d, handler, mocker, transfer_syntax):
         spy = mocker.spy(handler, "__call__")
-        dicom_object.NumberOfFrames = F
-        dicom_object.PixelData = np.random.rand(F, 128, 128).tobytes()
-
-        array1 = read_dicom_image(dicom_object, volume_handler=spy)
+        F = 8
+        dcm = dicom_object_3d(num_frames=F, syntax=transfer_syntax)
+        array1 = read_dicom_image(dcm, volume_handler=spy, strict_interp=True)
         spy.assert_called_once()
-        assert (spy.mock_calls[0].args[0] == dicom_object.pixel_array).all()
+        assert spy.mock_calls[0].args[0] == dcm, "handler should be called with DICOM object"
+        assert array1.ndim < 4 or array1.shape[1] != 1, "3D dim should be squeezed when D=1"
