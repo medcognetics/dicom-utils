@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import typing
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from itertools import islice
@@ -46,7 +45,6 @@ class VolumeHandler(ABC):
         r"""Slices an array input according to :func:`get_indices`"""
         num_frames = len(x) if isinstance(x, Sized) else None
         start, stop, stride = self.get_indices(num_frames)
-        x = typing.cast(SupportsGetItem, x)  # type: ignore
         result = x[slice(start, stop, stride)]
         return result
 
