@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final, Iterator, List, NamedTuple, Optional, Tuple
+from typing import Any, Final, Iterator, List, NamedTuple, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -12,8 +12,14 @@ from .logging import logger
 from .types import Dicom, DicomAttributeSequence
 
 
+Color = Tuple[int, int, int]
 Bbox = Tuple[int, int, int, int]
 presentation_modality: Final[str] = "PR"
+
+
+def repr(**kwargs: Any) -> str:
+    key_val_str = ", ".join(f"{k.replace('_', ' ')}: {v}" for k, v in kwargs.items())
+    return f"<{key_val_str}>"
 
 
 class Form(Enum):
@@ -25,19 +31,34 @@ class Form(Enum):
 
 
 @dataclass
+class Reference:
+    uid: UID
+    frame: int  # The first frame is denoted as frame number 1
+
+    @classmethod
+    def from_graphic_annotation(cls, ann: Dicom) -> "Reference":
+        return cls(UID(ann.ReferencedSOPInstanceUID), int(ann.get("ReferencedFrameNumber", 1)))
+
+    def __repr__(self):
+        return repr(SOPInstanceUID=self.uid, frame=self.frame)
+
+
+@dataclass
 class Annotation:
     """Store an annotation with corresponding DICOM filename"""
 
-    def __init__(self, sop_uids: List[UID], data: List[float], form: Form):
-        self.uids: List[UID] = sop_uids
+    def __init__(self, refs: List[Reference], data: List[float], form: Form) -> None:
+        self.refs: List[Reference] = refs
         self.form: Form = Form(form)
         self.trace = dicom_trace_to_bbox(data, self.form)
         self.is_rectangle: bool = True  # TODO Add non-rectangular trace support
 
+    @property
+    def uids(self) -> List[UID]:
+        return [ref.uid for ref in self.refs]
+
     def __repr__(self):
-        return (
-            f"<SOPInstanceUIDs: {self.uids}, form: {self.form}, trace: {self.trace}, is rectangle: {self.is_rectangle}>"
-        )
+        return repr(references=self.refs, form=self.form, trace=self.trace, is_rectangle=self.is_rectangle)
 
 
 @dataclass
@@ -53,11 +74,11 @@ class DicomImage:
         return cls(pixels, dicom.SOPInstanceUID)
 
     @property
-    def is_single_slice(self) -> bool:
+    def is_single_frame(self) -> bool:
         return self.pixels.shape[0] == 1
 
     def __repr__(self):
-        return f"<SOPInstanceUID: {self.uid}, shape: {self.pixels.shape}>"
+        return repr(SOPInstanceUID=self.uid, shape=self.pixels.shape)
 
 
 class GraphicItem(NamedTuple):
@@ -81,11 +102,12 @@ def to_collage(images: List[ndarray]) -> ndarray:
 
     image_chns, _, max_image_rows, max_image_cols = np.array([i.shape for i in images]).max(axis=0)
 
+    dtype = images[0].dtype
     collage_rows = 1 if num_images < 3 else 2
     collage_cols = int(num_images / collage_rows + 0.5)
 
     assert all(i.shape[1] == 3 for i in images)
-    collage = np.zeros((image_chns, 3, collage_rows * max_image_rows, collage_cols * max_image_cols))
+    collage = np.zeros((image_chns, 3, collage_rows * max_image_rows, collage_cols * max_image_cols), dtype=dtype)
 
     for i, image in enumerate(images):
         row = int(i >= collage_cols)
@@ -150,13 +172,16 @@ def hwc_to_chw(image: ndarray) -> ndarray:
     return np.rollaxis(image, 2, 0).copy()
 
 
-def draw_bbox(image: ndarray, bbox: Bbox, color: Tuple[float, float, float] = (0, 1, 0), thickness: int = 30) -> None:
-    x0, y0, x1, y1 = bbox
-
-    for i, slice in enumerate(image):
-        slice = chw_to_hwc(slice)
-        cv2.rectangle(slice, (x0, y0), (x1, y1), color, thickness)
-        image[i] = hwc_to_chw(slice)
+def draw_rectangle(
+    image: ndarray,
+    coord0: Tuple[int, int],
+    coord1: Tuple[int, int],
+    color: Color = (0, 255, 0),
+    thickness: int = 30,
+) -> ndarray:
+    image = cv2.UMat(image).get()  # OpenCV can give weird errors without this
+    cv2.rectangle(image, coord0, coord1, color, thickness)
+    return image
 
 
 def dcms_to_images(dcms: List[Dicom]) -> Iterator[DicomImage]:
@@ -210,12 +235,12 @@ def dcm_to_annotations(dcm: Dicom, target_sop_uid: Optional[UID] = None) -> Iter
     """Search through a DICOM for graphic annotations, and only return annotations corresponding to
     a specific SOPInstanceUID if desired."""
     for graphic_annotation in dcm.get("GraphicAnnotationSequence", []):
-        referenced_uids = [UID(a.ReferencedSOPInstanceUID) for a in graphic_annotation.ReferencedImageSequence]
-        if target_sop_uid is None or target_sop_uid in referenced_uids:
+        refs = [Reference.from_graphic_annotation(a) for a in graphic_annotation.ReferencedImageSequence]
+        if target_sop_uid is None or target_sop_uid in [ref.uid for ref in refs]:
             # A TextObjectSequence may be present but no GraphicObjectSequence so ".get" is used
             graphic_items = list(gen_graphic_items(graphic_annotation.get("GraphicObjectSequence", [])))
             for graphic_item in group_polylines(graphic_items):
-                yield Annotation(sop_uids=referenced_uids, data=graphic_item.data, form=graphic_item.form)
+                yield Annotation(refs=refs, data=graphic_item.data, form=graphic_item.form)
 
 
 def get_pr_reference_targets(dcm: Dicom) -> Optional[List[UID]]:
@@ -231,25 +256,41 @@ def dcms_to_annotations(dcms: List[Dicom]) -> Iterator[Annotation]:
             logger.info(e)
 
 
+def overlay_annotations_on_image(image: DicomImage, annotations: List[Annotation]) -> None:
+    pixels = image.pixels
+    assert pixels.shape[1] == 3, "Drawing assumes 3 color channels"
+    assert pixels.dtype == np.uint8, "Drawing assumes 8-bits per color channel"
+
+    for i, frame in enumerate(pixels):
+        frame = chw_to_hwc(frame)
+
+        for annotation in annotations:
+            # The annotation is currently drawn on every frame, but we could selectively draw on only
+            # the applicable frames by checking frames specified in annotation.refs
+            assert annotation.is_rectangle, "Drawing for non-rectangular traces is not currently supported."
+            x0, y0, x1, y1 = annotation.trace
+            frame = draw_rectangle(frame, (x0, y0), (x1, y1))
+
+        pixels[i] = hwc_to_chw(frame)
+
+
 def overlay_annotations(images: List[DicomImage], annotations: List[Annotation]) -> None:
     for image in images:
-        for annotation in annotations:
-            if image.uid in annotation.uids:
-                if annotation.is_rectangle:
-                    draw_bbox(image.pixels, annotation.trace)
-                else:
-                    raise Exception("Drawing for non-rectangular traces is not currently supported.")
+        overlay_annotations_on_image(image, [ann for ann in annotations if image.uid in ann.uids])
 
 
 def to_rgb(image: ndarray) -> ndarray:
-    chns, rows, cols = image.shape
-    rgb = np.zeros((chns, 3, rows, cols))
+    # 2D images will come as 1xHxW (treat as 1xHxW) and 3D images will come as 1xDxHxW (treat as DxHxW)
+    assert image.shape[0] == 1, ""
+    chns, rows, cols = image.shape[-3:]
+    image = image.reshape(chns, rows, cols)
+
+    # uint8 is sufficient for visualization and saves memory which is important for 3D images
+    rgb = np.zeros((chns, 3, rows, cols), dtype=np.uint8)
 
     for i, channel in enumerate(image):
-        norm_pixels = channel / channel.max()
-
         for j in range(3):
-            rgb[i, j, :, :] = norm_pixels
+            rgb[i, j, :, :] = to_8bit(channel)
 
     return rgb
 
@@ -264,4 +305,4 @@ def dcms_to_annotated_images(dcms: List[Dicom]) -> List[DicomImage]:
 def to_8bit(x: ndarray) -> ndarray:
     min, max = x.min(), x.max()
     x = (x - min) / (max - min) * 255
-    return x.astype(np.uint8)
+    return x.round().astype(np.uint8)

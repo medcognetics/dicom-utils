@@ -136,3 +136,4 @@ coverage.xml
 .coverage
 
 dicom_utils/version.py
+tmp
