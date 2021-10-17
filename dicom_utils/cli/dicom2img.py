@@ -36,8 +36,7 @@ def dicoms_to_graphic(
     downsample: int = 1,
 ) -> None:
     images = dcms_to_annotated_images(dcms)
-    data = to_collage([i.pixels for i in images])
-    data = data[:, :, ::downsample, ::downsample]
+    data = to_collage([i.pixels[:, :, ::downsample, ::downsample] for i in images])
 
     if all(i.is_single_frame for i in images) or dest is None:
         data = chw_to_hwc(data[0])
