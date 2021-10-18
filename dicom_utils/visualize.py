@@ -228,6 +228,7 @@ def gen_graphic_items(graphic_objects: DicomAttributeSequence) -> Iterator[Graph
     so we distill the info interest into a generator of GraphicItems."""
     for graphic_object in graphic_objects:
         assert graphic_object.GraphicAnnotationUnits == "PIXEL"
+        assert graphic_object.GraphicDimensions == 2
         yield GraphicItem(data=graphic_object.GraphicData, form=Form(graphic_object.GraphicType))
 
 
