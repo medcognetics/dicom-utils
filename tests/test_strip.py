@@ -12,7 +12,7 @@ from dicom_utils.cli.strip import strip_pixel_data, to_stripped_dicom
 num_dicom_test_files: Final[int] = 3
 
 
-@pytest.fixture(params=pydicom.data.get_testdata_files("*rgb*.dcm")[:num_dicom_test_files])
+@pytest.fixture(params=pydicom.data.get_testdata_files("*rgb*.dcm")[:num_dicom_test_files])  # type: ignore
 def test_dicom_path(request) -> Dataset:
     return request.param
 
