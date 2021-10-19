@@ -93,6 +93,7 @@ def install(version):
                 "dicom2img = dicom_utils.cli.dicom2img:entrypoint",
                 "dicom_types = dicom_utils.cli.dicom_types:entrypoint",
                 "dicom_overlap = dicom_utils.cli.overlap:entrypoint",
+                "dicomstrip = dicom_utils.cli.strip:entrypoint",
             ],
         },
     )
