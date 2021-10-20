@@ -17,7 +17,7 @@ Bbox = Tuple[int, int, int, int]
 presentation_modality: Final[str] = "PR"
 
 
-def repr(**kwargs: Any) -> str:
+def kwargs2str(**kwargs: Any) -> str:
     key_val_str = ", ".join(f"{k.replace('_', ' ')}: {v}" for k, v in kwargs.items())
     return f"<{key_val_str}>"
 
@@ -28,6 +28,10 @@ class Form(Enum):
     POLYLINE = "POLYLINE"
     # POINT - defined by DICOM standard but not currently supported
     # INTERPOLATED - defined by DICOM standard but not currently supported
+
+    def __init__(self, value) -> None:
+        # Make sure CIRCLE is not assigned the name "CIRCL" or some other misspelling
+        assert self.value == self.name == value, f"Enum name/value mismatch {self.value} != {self.name}"
 
 
 @dataclass
@@ -40,7 +44,7 @@ class Reference:
         return cls(UID(ann.ReferencedSOPInstanceUID), int(ann.get("ReferencedFrameNumber", 1)))
 
     def __repr__(self):
-        return repr(SOPInstanceUID=self.uid, frame=self.frame)
+        return kwargs2str(SOPInstanceUID=self.uid, frame=self.frame)
 
 
 @dataclass
@@ -58,7 +62,7 @@ class Annotation:
         return [ref.uid for ref in self.refs]
 
     def __repr__(self):
-        return repr(references=self.refs, form=self.form, trace=self.trace, is_rectangle=self.is_rectangle)
+        return kwargs2str(references=self.refs, form=self.form, trace=self.trace, is_rectangle=self.is_rectangle)
 
 
 @dataclass
@@ -78,7 +82,7 @@ class DicomImage:
         return self.pixels.shape[0] == 1
 
     def __repr__(self):
-        return repr(SOPInstanceUID=self.uid, shape=self.pixels.shape)
+        return kwargs2str(SOPInstanceUID=self.uid, shape=self.pixels.shape)
 
 
 class GraphicItem(NamedTuple):
