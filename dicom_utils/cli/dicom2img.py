@@ -10,12 +10,13 @@ from PIL import Image
 
 from ..dicom import path_to_dicoms
 from ..types import Dicom
-from ..visualize import chw_to_hwc, dcms_to_annotated_images, to_8bit, to_collage
+from ..visualize import chw_to_hwc, dcms_to_annotated_images, to_collage
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument("path", help="DICOM file or folder with files to convert")
     parser.add_argument("-o", "--output", help="output filepath. if directory, use filename from `file`")
+    parser.add_argument("-d", "--downsample", help="downsample images by an integer factor", type=int)
     parser.add_argument(
         "-s", "--split", default=False, action="store_true", help="split multi-frame inputs into separate files"
     )
@@ -32,11 +33,12 @@ def dicoms_to_graphic(
     fps: int = 5,
     quality: int = 95,
     block: bool = True,
+    downsample: int = 1,
 ) -> None:
     images = dcms_to_annotated_images(dcms)
-    data = to_8bit(to_collage([i.pixels for i in images]))
+    data = to_collage([i.pixels[:, :, ::downsample, ::downsample] for i in images])
 
-    if all(i.is_single_slice for i in images):
+    if all(i.is_single_frame for i in images) or dest is None:
         data = chw_to_hwc(data[0])
         if dest is None:
             plt.imshow(data)
@@ -63,13 +65,10 @@ def dicoms_to_graphic(
                 plt.show(block=block)
                 break
     else:
-        frames = [Image.fromarray(frame) for frame in data]
+        frames = [Image.fromarray(chw_to_hwc(frame)) for frame in data]
         duration_ms = len(frames) / (fps * 1000)
-        if dest is None:
-            raise NotImplementedError("3D inputs with no `dest` is not yet supported")
-        else:
-            path = dest.with_suffix(".gif")
-            frames[0].save(path, save_all=True, append_images=frames[1:], duration=duration_ms, quality=quality)
+        path = dest.with_suffix(".gif")
+        frames[0].save(path, save_all=True, append_images=frames[1:], duration=duration_ms, quality=quality)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -81,7 +80,7 @@ def main(args: argparse.Namespace) -> None:
         dest = Path(dest, path.stem).with_suffix(".png")
 
     dcms = list(path_to_dicoms(path))
-    dicoms_to_graphic(dcms, dest, args.split, args.fps, args.quality, not args.noblock)
+    dicoms_to_graphic(dcms, dest, args.split, args.fps, args.quality, not args.noblock, args.downsample)
 
 
 def entrypoint():
