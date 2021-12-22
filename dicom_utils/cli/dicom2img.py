@@ -23,6 +23,7 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument("-f", "--fps", default=5, type=int, help="framerate for animated outputs")
     parser.add_argument("-q", "--quality", default=95, type=int, help="quality of outputs, from 1 to 100")
     parser.add_argument("--noblock", default=False, action="store_true", help="allow matplotlib to block")
+    parser.add_argument("--window", default=False, action="store_true", help="apply window from DICOM metadata")
     return parser
 
 
@@ -34,8 +35,9 @@ def dicoms_to_graphic(
     quality: int = 95,
     block: bool = True,
     downsample: int = 1,
+    **kwargs,
 ) -> None:
-    images = dcms_to_annotated_images(dcms)
+    images = dcms_to_annotated_images(dcms, **kwargs)
     data = to_collage([i.pixels[:, :, ::downsample, ::downsample] for i in images])
 
     if all(i.is_single_frame for i in images) or dest is None:
@@ -80,7 +82,7 @@ def main(args: argparse.Namespace) -> None:
         dest = Path(dest, path.stem).with_suffix(".png")
 
     dcms = list(path_to_dicoms(path))
-    dicoms_to_graphic(dcms, dest, args.split, args.fps, args.quality, not args.noblock, args.downsample)
+    dicoms_to_graphic(dcms, dest, args.split, args.fps, args.quality, not args.noblock, args.downsample, apply_window=args.window)
 
 
 def entrypoint():

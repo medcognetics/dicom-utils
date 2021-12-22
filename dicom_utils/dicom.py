@@ -10,7 +10,7 @@ from numpy import ndarray
 from pydicom.uid import UID
 
 from .logging import logger
-from .types import Dicom
+from .types import Dicom, Window
 from .volume import KeepVolume, VolumeHandler
 
 
@@ -149,6 +149,7 @@ def read_dicom_image(
     shape: Optional[Tuple[int, ...]] = None,
     strict_interp: bool = False,
     volume_handler: VolumeHandler = KeepVolume(),
+    apply_window: bool = True,
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -194,10 +195,6 @@ def read_dicom_image(
 
     pixels = dcm_to_pixels(dcm, dims, strict_interp)
 
-    # in some dicoms, pixel value of 0 indicates white
-    if is_inverted(dcm.PhotometricInterpretation):
-        pixels = invert_color(pixels)
-
     # some dicoms have different endianness - convert to native byte order
     if not is_native_byteorder(pixels):
         pixels = pixels.byteswap().newbyteorder()
@@ -206,6 +203,16 @@ def read_dicom_image(
     # numpy byte order needs to explicitly be native "=" for torch conversion
     if pixels.dtype.byteorder != "=":
         pixels = pixels.newbyteorder("=")
+
+    if apply_window:
+        window = Window.from_dicom(dcm)
+        pixels = window.apply(pixels)
+    else:
+        pixels = pixels - pixels.min()
+
+    ## in some dicoms, pixel value of 0 indicates white
+    if is_inverted(dcm.PhotometricInterpretation):
+        pixels = invert_color(pixels)
 
     return pixels
 
@@ -225,3 +232,17 @@ def path_to_dicoms(path: Path) -> Iterator[Dicom]:
             yield pydicom.dcmread(source)
         except Exception as e:
             logger.info(e)
+
+
+def num_pixels(source: Union[Path, Dicom]) -> int:
+    if isinstance(source, Path):
+        if not source.is_file():
+            raise FileNotFoundError(source)
+        with pydicom.dcmread(source, stop_before_pixels=True, specific_tags=["Rows", "Columns", "NumberOfFrames"]) as dcm:
+            return num_pixels(dcm)
+
+    for necessary_field in ["Rows", "Columns"]:
+        if not hasattr(source, necessary_field):
+            return 0
+    D, H, W = [int(v) for v in [source.get("NumberOfFrames", 1), source.Rows, source.Columns]]
+    return D*H*W

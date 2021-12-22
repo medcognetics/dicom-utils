@@ -73,8 +73,8 @@ class DicomImage:
     uid: UID
 
     @classmethod
-    def from_dicom(cls, dicom: Dicom) -> "DicomImage":
-        pixels = to_rgb(read_dicom_image(dicom))
+    def from_dicom(cls, dicom: Dicom, **kwargs) -> "DicomImage":
+        pixels = to_rgb(read_dicom_image(dicom, **kwargs))
         return cls(pixels, dicom.SOPInstanceUID)
 
     @property
@@ -188,12 +188,12 @@ def draw_rectangle(
     return image
 
 
-def dcms_to_images(dcms: List[Dicom]) -> Iterator[DicomImage]:
+def dcms_to_images(dcms: List[Dicom], **kwargs) -> Iterator[DicomImage]:
     """Some DICOMs may only contain annotations or other non-image information, so we want to
     pull out image data where applicable."""
     for dcm in dcms:
         try:
-            yield DicomImage.from_dicom(dcm)
+            yield DicomImage.from_dicom(dcm, **kwargs)
         except Exception as e:
             logger.info(e)
 
@@ -300,8 +300,8 @@ def to_rgb(image: ndarray) -> ndarray:
     return rgb
 
 
-def dcms_to_annotated_images(dcms: List[Dicom]) -> List[DicomImage]:
-    images = list(dcms_to_images(dcms))
+def dcms_to_annotated_images(dcms: List[Dicom], **kwargs) -> List[DicomImage]:
+    images = list(dcms_to_images(dcms, **kwargs))
     annotations = list(dcms_to_annotations(dcms))
     overlay_annotations(images, annotations)
     return images
