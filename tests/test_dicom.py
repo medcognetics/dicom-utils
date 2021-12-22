@@ -4,8 +4,10 @@
 
 import numpy as np
 import pytest
+from pydicom import DataElement
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
+from dicom_utils.types import WINDOW_CENTER, WINDOW_WIDTH, Window
 
 
 class TestReadDicomImage:
@@ -78,3 +80,53 @@ class TestReadDicomImage:
         spy.assert_called_once()
         assert spy.mock_calls[0].args[0] == dcm, "handler should be called with DICOM object"
         assert array1.ndim < 4 or array1.shape[1] != 1, "3D dim should be squeezed when D=1"
+
+    @pytest.mark.parametrize(
+        "apply,center,width",
+        [
+            pytest.param(True, None, None),
+            pytest.param(True, DataElement(WINDOW_CENTER, "DS", 512), None),
+            pytest.param(True, None, DataElement(WINDOW_WIDTH, "DS", 512)),
+            pytest.param(True, DataElement(WINDOW_CENTER, "DS", 512), DataElement(WINDOW_WIDTH, "DS", 256)),
+            pytest.param(True, DataElement(WINDOW_CENTER, "DS", 256), DataElement(WINDOW_WIDTH, "DS", 512)),
+            pytest.param(
+                True,
+                DataElement(WINDOW_CENTER, "DS", [100, 200, 300]),
+                DataElement(WINDOW_WIDTH, "DS", [200, 300, 400]),
+            ),
+            pytest.param(False, DataElement(WINDOW_CENTER, "DS", 512), DataElement(WINDOW_WIDTH, "DS", 256)),
+            pytest.param(False, DataElement(WINDOW_CENTER, "DS", 256), DataElement(WINDOW_WIDTH, "DS", 512)),
+            pytest.param(
+                False,
+                DataElement(WINDOW_CENTER, "DS", [100, 200, 300]),
+                DataElement(WINDOW_WIDTH, "DS", [200, 300, 400]),
+            ),
+        ],
+    )
+    def test_apply_window(self, dicom_object, apply, center, width):
+        # set metadata
+        if center is not None:
+            dicom_object[WINDOW_CENTER] = center
+        if width is not None:
+            dicom_object[WINDOW_WIDTH] = width
+
+        window = Window.from_dicom(dicom_object)
+        pixels = read_dicom_image(dicom_object, apply_window=False)
+        window_pixels = read_dicom_image(dicom_object, apply_window=apply)
+
+        if center is not None and width is not None and apply:
+            assert (window_pixels >= 0).all()
+            assert (window_pixels <= window.width).all()
+            assert (window_pixels[pixels <= window.lower_bound] == 0).all()
+            assert (window_pixels[pixels >= window.upper_bound] == window.upper_bound - window.lower_bound).all()
+
+        elif apply:
+            pixels = dicom_object.pixel_array
+            assert window_pixels.min() == 0
+            # tolerance of 1 here for rounding errors
+            assert window_pixels.max() - (pixels.max() - pixels.min()) <= 1
+
+        else:
+            assert (window_pixels == pixels).all()
+
+        window = Window.from_dicom(dicom_object)

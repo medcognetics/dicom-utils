@@ -10,7 +10,7 @@ from numpy import ndarray
 from pydicom.uid import UID
 
 from .logging import logger
-from .types import Dicom
+from .types import Dicom, Window
 from .volume import KeepVolume, VolumeHandler
 
 
@@ -149,6 +149,7 @@ def read_dicom_image(
     shape: Optional[Tuple[int, ...]] = None,
     strict_interp: bool = False,
     volume_handler: VolumeHandler = KeepVolume(),
+    apply_window: bool = False,
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -194,10 +195,6 @@ def read_dicom_image(
 
     pixels = dcm_to_pixels(dcm, dims, strict_interp)
 
-    # in some dicoms, pixel value of 0 indicates white
-    if is_inverted(dcm.PhotometricInterpretation):
-        pixels = invert_color(pixels)
-
     # some dicoms have different endianness - convert to native byte order
     if not is_native_byteorder(pixels):
         pixels = pixels.byteswap().newbyteorder()
@@ -206,6 +203,15 @@ def read_dicom_image(
     # numpy byte order needs to explicitly be native "=" for torch conversion
     if pixels.dtype.byteorder != "=":
         pixels = pixels.newbyteorder("=")
+
+    if apply_window:
+        window = Window.from_dicom(dcm)
+        pixels = window.apply(pixels)
+
+    # in some dicoms, pixel value of 0 indicates white
+    # NOTE: apply inversion after window level
+    if is_inverted(dcm.PhotometricInterpretation):
+        pixels = invert_color(pixels)
 
     return pixels
 
