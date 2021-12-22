@@ -4,11 +4,12 @@ import argparse
 from argparse import ArgumentParser
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
+import statistics
 import pydicom
 
-from ..dicom import has_dicm_prefix
+from ..dicom import has_dicm_prefix, num_pixels
 from ..types import SimpleImageType
 
 
@@ -20,6 +21,8 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
         "--types", "-t", choices=["2d", "tomo", "s-view"], default=None, nargs="+", help="filter by image type"
     )
     parser.add_argument("--jobs", "-j", default=4, help="parallelism")
+    parser.add_argument("--core-only", default=False, action="store_true", help="try to ignore")
+    parser.add_argument("--extra-only", default=False, action="store_true", help="try to ignore")
     # TODO add a field to only return DICOMs with readable image data
     return parser
 
@@ -42,6 +45,16 @@ def check_file(path: Path, args: argparse.Namespace) -> Optional[Path]:
     return path
 
 
+def filter_core(path: Path) -> Set[Path]:
+    all_dicoms = {
+        file: num_pixels(file)
+        for file in path.glob("*")
+        if file.is_file() and has_dicm_prefix(file)
+    }
+    core_size = statistics.mode(all_dicoms.values())
+    return {file for file, size in all_dicoms.items() if size == core_size}
+
+
 def main(args: argparse.Namespace) -> None:
     path = Path(args.path)
     if not path.is_dir():
@@ -58,7 +71,12 @@ def main(args: argparse.Namespace) -> None:
             if args.parents and result.parent not in seen_parents:
                 print(result.parent, flush=True)
             elif not args.parents:
-                print(result, flush=True)
+                if args.core_only and result in filter_core(result.parent):
+                    print(result, flush=True)
+                elif args.extra_only and result not in filter_core(result.parent):
+                    print(result, flush=True)
+                elif not (args.extra_only or args.core_only):
+                    print(result, flush=True)
             seen_parents.add(result.parent)
         except IOError:
             tp.shutdown(wait=False)
