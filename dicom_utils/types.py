@@ -5,11 +5,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, cast
 
+import numpy as np
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence
 
 
 IMAGE_TYPE = 0x00080008
+WINDOW_CENTER = 0x00281050
+WINDOW_WIDTH = 0x00281051
 
 Dicom = Dataset
 DicomAttributeSequence = Sequence
@@ -142,4 +145,76 @@ class ImageType:
         return SimpleImageType.NORMAL
 
 
-__all__ = ["Dicom", "ImageType"]
+@dataclass
+class Window:
+    r"""Contains data related to the window of pixel intensities for display.
+    Window levels are defined realtive to the PhotometricInterpretation of the DICOM image.
+    As such, application of windows should be done before application of inversions.
+    """
+    center: int
+    width: int
+
+    # unused, should eventually store window explanation string
+    descriptor: Optional[str] = None
+
+    def __repr__(self) -> str:
+        s = f"{self.__class__.__name__}("
+        s += f"center={self.center}, "
+        s += f"width={self.width}, "
+        s += f"low={self.lower_bound}, "
+        s += f"high={self.upper_bound}"
+        s += ")"
+        return s
+
+    @classmethod
+    def from_dicom(cls, dcm: Dicom) -> "Window":
+        center = dcm.get(WINDOW_CENTER, None)
+        width = dcm.get(WINDOW_WIDTH, None)
+
+        # fallback to pixel data if center or width is missing
+        if center is None or width is None:
+            pixels = dcm.pixel_array
+            max, min = pixels.max(), pixels.min()
+            center = (max - min) // 2 + min
+            width = max - min
+
+        # for single window levels
+        elif isinstance(center.value, (str, float)):
+            center = center.value
+            width = width.value
+
+        # if multiple levels, read the first
+        # TODO allow window selection by name
+        else:
+            center = center.value[0]
+            width = width.value[0]
+
+        center = int(center)  # type: ignore
+        width = int(width)  # type: ignore
+        return cls(center, width)
+
+    @property
+    def constrained_width(self) -> int:
+        r"""The window width after being constrained to non-negative values"""
+        return int(self.upper_bound - self.lower_bound)
+
+    @property
+    def lower_bound(self) -> float:
+        return max(self.center - (self.width // 2), 0)
+
+    @property
+    def upper_bound(self) -> float:
+        return self.center + (self.width // 2)
+
+    def apply(self, pixels: np.ndarray) -> np.ndarray:
+        r"""Applies this window to an array of pixel data. Since DICOM windows are defined
+        relative to the original pixel values, windows should be applied only to original
+        pixel values.
+        """
+        # record dtype so we can restore floats to input dtype
+        pixels = pixels.clip(min=self.lower_bound, max=self.upper_bound)
+        pixels = pixels - self.lower_bound
+        return pixels
+
+
+__all__ = ["Dicom", "ImageType", "Window"]
