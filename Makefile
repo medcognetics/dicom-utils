@@ -1,7 +1,7 @@
 .PHONY: clean clean-venv check quality style tag-version test venv upload upload-test
 
 PROJECT=dicom_utils
-PY_VER=python3.9
+PY_VER=python3.8
 PY_VER_SHORT=py$(shell echo $(PY_VER) | sed 's/[^0-9]*//g')
 QUALITY_DIRS=$(PROJECT) tests setup.py tag_enum.py
 CLEAN_DIRS=$(PROJECT) tests
