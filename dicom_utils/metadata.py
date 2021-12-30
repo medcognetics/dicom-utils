@@ -9,6 +9,7 @@ from typing import Any, Dict, Final, Optional
 
 from pydicom import DataElement
 
+from .tags import Tag
 from .types import Dicom
 
 
@@ -19,12 +20,12 @@ GROUPS: Dict[str, str] = {"image": "0028", "media": "0008"}
 # fields with values above this limit will be dropped
 MAX_FIELD_LENGTH: Final[int] = 100
 
-AGE_TAG = 0x00101010
-DOB = 0x00100030
-STUDY_DATE = 0x00080020
-CONTENT_DATE = 0x00080023
-ACQUISITION_DATE = 0x00080022
-DENSITY = 0x40101018
+AGE_TAG = Tag.PatientAge
+DOB = Tag.PatientBirthDate
+STUDY_DATE = Tag.StudyDate
+CONTENT_DATE = Tag.ContentDate
+ACQUISITION_DATE = Tag.AcquisitionDate
+DENSITY = Tag.Density
 
 
 def is_inverted(photo_interp: str) -> bool:

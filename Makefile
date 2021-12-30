@@ -1,9 +1,9 @@
 .PHONY: clean clean-venv check quality style tag-version test venv upload upload-test
 
 PROJECT=dicom_utils
-PY_VER=python3.8
+PY_VER=python3.9
 PY_VER_SHORT=py$(shell echo $(PY_VER) | sed 's/[^0-9]*//g')
-QUALITY_DIRS=$(PROJECT) tests setup.py
+QUALITY_DIRS=$(PROJECT) tests setup.py tag_enum.py
 CLEAN_DIRS=$(PROJECT) tests
 VENV=$(shell pwd)/venv
 PYTHON=$(VENV)/bin/python
@@ -89,6 +89,9 @@ test-ci: $(VENV)/bin/activate $(VENV)/bin/activate-test ## runs CI-only tests
 
 types: $(VENV)/bin/activate node_modules pyrightconfig.json
 	npx --no-install pyright tests $(PROJECT) -p pyrightconfig.json
+
+$(PROJECT)/_tag_enum.py: $(VENV)/bin/activate tag_enum.py
+	$(PYTHON) tag_enum.py $@
 
 upload: package
 	$(PYTHON) -m pip install --upgrade twine
