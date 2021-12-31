@@ -22,4 +22,13 @@ PHITags.remove(Tag.InstitutionAddress)
 
 
 def is_phi(tag: Tag) -> bool:
+    r"""Checks if a tag is known protected health information (PHI)"""
     return tag in PHITags
+
+
+def tag_from_string(s: str) -> Tag:
+    r"""Create a tag from a string keyword"""
+    try:
+        return getattr(Tag, s)
+    except AttributeError:
+        raise ValueError(f"Invalid tag {s}")

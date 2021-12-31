@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import pytest
 
-from dicom_utils.tags import PHITags, Tag, is_phi
+from dicom_utils.tags import PHITags, Tag, is_phi, tag_from_string
 
 
 class TestTag:
@@ -64,3 +64,17 @@ def test_num_phi_tags():
 )
 def test_is_phi(tag, phi):
     assert is_phi(tag) == phi
+
+
+@pytest.mark.parametrize(
+    "string,tag",
+    [
+        pytest.param("StudyInstanceUID", Tag.StudyInstanceUID),
+        pytest.param("SOPInstanceUID", Tag.SOPInstanceUID),
+        pytest.param("EthnicGroup", Tag.EthnicGroup),
+        pytest.param("PatientAge", Tag.PatientAge),
+        pytest.param("FooBar", None, marks=pytest.mark.xfail(raises=ValueError)),
+    ],
+)
+def test_tag_from_str(string, tag):
+    assert tag_from_string(string) == tag
