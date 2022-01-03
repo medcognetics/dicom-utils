@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import inspect
 from argparse import ArgumentParser, _SubParsersAction
 from typing import Callable
 
@@ -11,6 +12,8 @@ from .cli.dicom2img import get_parser as dicom2img_parser
 from .cli.dicom2img import main as dicom2img_main
 from .cli.dicom_types import get_parser as dicom_types_parser
 from .cli.dicom_types import main as dicom_types_main
+from .cli.dicomphi import get_parser as dicomphi_parser
+from .cli.dicomphi import main as dicomphi_main
 from .cli.find import get_parser as find_parser
 from .cli.find import main as find_main
 from .cli.overlap import get_parser as overlap_parser
@@ -24,7 +27,18 @@ Main = Callable[[argparse.Namespace], None]
 Modifier = Callable[[ArgumentParser], None]
 
 
+def assert_name_match(name: str, main: Main, modifier: Modifier) -> None:
+    # Enforce a naming convention to reduce chance of bugs
+    main_module = inspect.getmodule(main)
+    assert main_module
+    assert name in (module := main_module.__name__), f"'{name}' not in '{module}'"
+    modifier_module = inspect.getmodule(modifier)
+    assert modifier_module
+    assert name in (module := modifier_module.__name__), f"'{name}' not in '{module}'"
+
+
 def add_subparser(subparsers: _SubParsersAction, name: str, help: str, main: Main, modifier: Modifier) -> None:
+    assert_name_match(name, main, modifier)
     subparser = subparsers.add_parser(name, help=help)
     subparser.set_defaults(main=main)
     modifier(subparser)
@@ -40,6 +54,7 @@ def main() -> None:
     for name, help, main, modifier in [
         ("cat", "Print DICOM metadata", cat_main, cat_parser),
         ("dicom2img", "Convert DICOM to image file", dicom2img_main, dicom2img_parser),
+        ("dicomphi", "Find PHI in DICOMs", dicomphi_main, dicomphi_parser),
         ("find", "Find DICOM files", find_main, find_parser),
         ("strip", "Strip pixel data out of DICOMs", strip_main, strip_parser),
         ("dicom_types", "Summarize image types", dicom_types_main, dicom_types_parser),
@@ -48,9 +63,9 @@ def main() -> None:
         add_subparser(subparsers, name=name, help=help, main=main, modifier=modifier)
 
     args = parser.parse_args()
-    set_logging_level(args.logging_level, args.pydicom_logging_level)
 
     if hasattr(args, "main"):
+        set_logging_level(args.logging_level, args.pydicom_logging_level)
         args.main(args)
     else:
         parser.print_usage()

@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from .dicom import NoImageError, read_dicom_image
-
 # avoid BrokenPipeError, KeyboardInterrupt
+from .anonymize import anonymize
+from .dicom import NoImageError, read_dicom_image
 from .metadata import add_patient_age, dicom_to_json, drop_fields_by_length, get_date
 from .volume import KeepVolume, SliceAtLocation, UniformSample, VolumeHandler
 
@@ -23,6 +23,7 @@ except ImportError:
 __all__ = [
     "__version__",
     "add_patient_age",
+    "anonymize",
     "dicom_to_json",
     "drop_empty_tags",
     "drop_fields_by_length",
