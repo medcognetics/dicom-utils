@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import pytest
+from pydicom.tag import Tag as PydicomTag
 
-from dicom_utils.tags import PHITags, Tag, is_phi, tag_from_string
+from dicom_utils.tags import PHITags, Tag, create_tag, get_display_width, is_phi
 
 
 class TestTag:
@@ -67,14 +68,28 @@ def test_is_phi(tag, phi):
 
 
 @pytest.mark.parametrize(
-    "string,tag",
+    "val,tag",
     [
         pytest.param("StudyInstanceUID", Tag.StudyInstanceUID),
         pytest.param("SOPInstanceUID", Tag.SOPInstanceUID),
         pytest.param("EthnicGroup", Tag.EthnicGroup),
         pytest.param("PatientAge", Tag.PatientAge),
+        pytest.param(Tag.PatientAge, Tag.PatientAge),
+        pytest.param(PydicomTag("PatientAge"), Tag.PatientAge),
         pytest.param("FooBar", None, marks=pytest.mark.xfail(raises=ValueError)),
+        pytest.param(1.0, None, marks=pytest.mark.xfail(raises=TypeError)),
     ],
 )
-def test_tag_from_str(string, tag):
-    assert tag_from_string(string) == tag
+def test_create_tag(val, tag):
+    assert create_tag(val) == tag
+
+
+def test_get_display_width():
+    tags = [
+        Tag.StudyInstanceUID,
+        Tag.SeriesInstanceUID,
+        Tag.PatientAge,
+    ]
+    expected = max(len(str(t)) for t in tags)
+    assert get_display_width(tags) == expected
+    assert get_display_width([]) == 0
