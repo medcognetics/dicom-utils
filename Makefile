@@ -69,6 +69,7 @@ test: $(VENV)/bin/activate-test ## run unit tests
 		-rs \
 		--cov=./$(PROJECT) \
 		--cov-report=xml \
+		--cov-report=term \
 		-s -v \
 		./tests/
 
