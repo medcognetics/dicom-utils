@@ -18,6 +18,14 @@ entrypoints provided by setup.py
 The following scripts are provided:
   * `dicomcat` - Print DICOM metadata output as text or JSON
   * `dicomfind` - Find valid DICOM files, with options to filter by image type
+  * `dicomphi` - Find and overwrite PHI across DICOM files
   * `dicom2img` - Convert DICOM to static image or GIF
   * `dicom_types` - Print unique values of the "Image Type" field
   * `dicom_overlap` - Find StudyInstanceUID values shared by files in two directories
+
+## PHI Anonymization Rules
+If anonymization is enabled when running `dicomphi`, fields defined in
+[this script](https://github.com/medcognetics/dicom-anonymizer/blob/master/dicomanonymizer/dicomfields.py)
+are anonymized
+with the exception of fields which are affected by additional rules located 
+[here](https://github.com/medcognetics/dicom-utils/blob/master/dicom_utils/anonymize.py).

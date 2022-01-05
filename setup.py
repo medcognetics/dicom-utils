@@ -75,6 +75,8 @@ def install(version):
         author_email="tidalpaladin@gmail.com",
         packages=find_packages(""),
         install_requires=[
+            "dicom-anonymizer @ git+https://github.com/medcognetics/dicom-anonymizer.git@v1.0.7-fork",
+            "colorama",
             "matplotlib",
             "pydicom",
             "Pillow",
@@ -94,6 +96,7 @@ def install(version):
                 "dicom_types = dicom_utils.cli.dicom_types:entrypoint",
                 "dicom_overlap = dicom_utils.cli.overlap:entrypoint",
                 "dicomstrip = dicom_utils.cli.strip:entrypoint",
+                "dicomphi = dicom_utils.cli.dicomphi:entrypoint",
             ],
         },
     )
