@@ -3,7 +3,7 @@
 import pytest
 from pydicom.tag import Tag as PydicomTag
 
-from dicom_utils.tags import PHITags, Tag, create_tag, get_display_width, is_phi
+from dicom_utils.tags import Tag, create_tag, get_display_width, is_phi
 
 
 class TestTag:
@@ -43,21 +43,22 @@ class TestTag:
     def test_element(self, tag, expected):
         assert tag.element == expected
 
-
-def test_num_phi_tags():
-    assert len(PHITags) == 239
+    @pytest.mark.parametrize(
+        "tag,expected",
+        [
+            pytest.param(Tag.SeriesInstanceUID, (0x0020, 0x000E)),
+            pytest.param(Tag.StudyInstanceUID, (0x0020, 0x000D)),
+        ],
+    )
+    def test_tag_tuple(self, tag, expected):
+        assert tag.tag_tuple == expected
 
 
 @pytest.mark.parametrize(
     "tag,phi",
     [
-        pytest.param(Tag.StudyInstanceUID, False),
-        pytest.param(Tag.SeriesInstanceUID, False),
-        pytest.param(Tag.SOPInstanceUID, False),
-        pytest.param(Tag.EthnicGroup, False),
-        pytest.param(Tag.PatientAge, False),
-        pytest.param(Tag.InstitutionName, False),
-        pytest.param(Tag.InstitutionAddress, False),
+        pytest.param(Tag.Manufacturer, False),
+        pytest.param(Tag.ManufacturerModelName, False),
         pytest.param(Tag.PatientBirthDate, True),
         pytest.param(Tag.PatientName, True),
         pytest.param(Tag.Occupation, True),
