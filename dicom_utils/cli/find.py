@@ -51,7 +51,7 @@ def filter_core(path: Path) -> Set[Path]:
         for file in path.glob("*")
         if file.is_file() and has_dicm_prefix(file)
     }
-    core_size = statistics.mode(all_dicoms.values())
+    core_size = max(statistics.multimode(all_dicoms.values()))
     return {file for file, size in all_dicoms.items() if size == core_size}
 
 
