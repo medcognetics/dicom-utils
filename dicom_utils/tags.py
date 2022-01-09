@@ -32,14 +32,6 @@ def get_display_width(tags: Iterable[Tag]) -> int:
 PHITags: Final = {create_tag(t) for t in ALL_TAGS if len(t) == 2}
 
 
-# Remove certain tags picked up by keyword matching
-# PHITags.remove(Tag.PatientIdentityRemoved)
-# PHITags.remove(Tag.DeidentificationMethod)
-# PHITags.remove(Tag.DeidentificationMethodCodeSequence)
-# PHITags.remove(Tag.DateOfLastDetectorCalibration)
-# PHITags.remove(Tag.InstitutionAddress)
-
-
 def is_phi(tag: Tag) -> bool:
     r"""Checks if a tag is known protected health information (PHI)"""
     return tag in PHITags

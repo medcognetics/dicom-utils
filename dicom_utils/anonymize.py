@@ -55,7 +55,6 @@ rules: Final[RuleMap] = {
 # TODO these tags are anonymized, but we probably want to keep them
 # (0x0010, 0x2150), # Country of Residence
 # (0x0010, 0x2160), # Ethnic Group
-# (0x0010, 0x1010), # Patient's Age
 # (0x0032, 0x4000), # Study Comments (potential case notes)
 # (0x0008, 0x103E), # Series Description
 # (0x0008, 0x0080), # Institution Name
