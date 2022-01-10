@@ -73,7 +73,7 @@ def install(version):
         version=version,
         author="Scott Chase Waggener",
         author_email="tidalpaladin@gmail.com",
-        packages=find_packages(""),
+        packages=find_packages(),
         install_requires=[
             "dicom-anonymizer @ git+https://github.com/medcognetics/dicom-anonymizer.git@v1.0.7-fork",
             "colorama",
