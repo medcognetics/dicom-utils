@@ -40,7 +40,7 @@ PROJECT = "dicom_utils"
 
 extras = {}
 extras["testing"] = ["pytest", "pytest-mock", "pytest-cov", "pytest-xdist"]
-extras["dev"] = extras["testing"]
+extras["dev"] = extras["testing"] + ["colorama==0.4.3"]
 
 
 def write_version_info():
@@ -86,7 +86,7 @@ def install(version):
             "opencv-python",
         ],
         extras_require=extras,
-        python_requires=">=3.7.0",
+        python_requires=">=3.7.0,<3.10",
         entry_points={
             "console_scripts": [
                 "dicomutils = dicom_utils.cli.__main__:main",

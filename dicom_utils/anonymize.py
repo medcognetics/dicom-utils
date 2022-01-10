@@ -1,10 +1,11 @@
 import re
-from typing import Any, Callable, Dict, Final, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, Final, Optional, TypeVar
 
 from dicomanonymizer import anonymize_dataset
 from pydicom import Dataset
 
 from .hash import get_medcog_block, get_value_hashes, medcog_name, store_value_hashes
+from .tags import Tag
 
 
 T = TypeVar("T")
@@ -44,12 +45,20 @@ def age_to_anonymized_age(age_str: str) -> str:
         return f"{age:03}Y"
 
 
-TagTuple = Tuple[int, int]
-RuleMap = Dict[TagTuple, RuleHandler]
+RuleMap = Dict[Tag, RuleHandler]
 
 rules: Final[RuleMap] = {
-    (0x0010, 0x1010): RuleHandler(age_to_anonymized_age),
+    Tag.PatientAge: RuleHandler(age_to_anonymized_age),
 }
+
+# TODO these tags are anonymized, but we probably want to keep them
+# (0x0010, 0x2150), # Country of Residence
+# (0x0010, 0x2160), # Ethnic Group
+# (0x0032, 0x4000), # Study Comments (potential case notes)
+# (0x0008, 0x103E), # Series Description
+# (0x0008, 0x0080), # Institution Name
+# (0x0018, 0x1000), # Device Serial Number
+# (0x0010, 0x0040), # Patient's Sex
 
 
 def is_anonymized(ds: Dataset) -> bool:
