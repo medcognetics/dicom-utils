@@ -1,5 +1,5 @@
 import re
-from typing import Any, Callable, Dict, Final, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, Final, Optional, TypeVar
 
 from dicomanonymizer import anonymize_dataset
 from pydicom import Dataset
@@ -45,7 +45,6 @@ def age_to_anonymized_age(age_str: str) -> str:
         return f"{age:03}Y"
 
 
-TagTuple = Tuple[int, int]
 RuleMap = Dict[Tag, RuleHandler]
 
 rules: Final[RuleMap] = {
