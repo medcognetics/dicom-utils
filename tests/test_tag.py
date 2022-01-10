@@ -3,7 +3,7 @@
 import pytest
 from pydicom.tag import Tag as PydicomTag
 
-from dicom_utils.tags import Tag, create_tag, get_display_width, is_phi
+from dicom_utils.tags import Tag, create_tag, get_display_width
 
 
 class TestTag:
@@ -52,20 +52,6 @@ class TestTag:
     )
     def test_tag_tuple(self, tag, expected):
         assert tag.tag_tuple == expected
-
-
-@pytest.mark.parametrize(
-    "tag,phi",
-    [
-        pytest.param(Tag.Manufacturer, False),
-        pytest.param(Tag.ManufacturerModelName, False),
-        pytest.param(Tag.PatientBirthDate, True),
-        pytest.param(Tag.PatientName, True),
-        pytest.param(Tag.Occupation, True),
-    ],
-)
-def test_is_phi(tag, phi):
-    assert is_phi(tag) == phi
 
 
 @pytest.mark.parametrize(

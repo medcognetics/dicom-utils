@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from typing import Final, Iterable, Tuple, Union
+from typing import Iterable, Tuple, Union
 
-from dicomanonymizer.dicomfields import ALL_TAGS
 from pydicom.tag import Tag as PydicomTag
 
 from ._tag_enum import Tag
@@ -26,12 +25,3 @@ def create_tag(val: Union[str, int, Tuple[int, int]]) -> Tag:
 def get_display_width(tags: Iterable[Tag]) -> int:
     r"""Returns the width of the longest tag string"""
     return max((len(str(tag)) for tag in tags), default=0)
-
-
-# Add PHI tags based on keyword
-PHITags: Final = {create_tag(t) for t in ALL_TAGS if len(t) == 2}
-
-
-def is_phi(tag: Tag) -> bool:
-    r"""Checks if a tag is known protected health information (PHI)"""
-    return tag in PHITags
