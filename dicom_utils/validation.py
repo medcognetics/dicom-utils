@@ -361,10 +361,15 @@ class Validator:
         return cls(DEFAULT_TARGETS)
 
     @staticmethod
-    def _format(results: Sequence[ValidationResult], delim: str = "\t", color: bool = False) -> str:
+    def _format(
+        results: Sequence[ValidationResult],
+        delim: str = "\t",
+        color: bool = False,
+        padding: int = 2,
+    ) -> str:
         lens = np.array([x.column_widths(color) for x in results])
         lens = lens.max(axis=0)
-        lens += 2
+        lens += padding
         return delim.join([f"{{:<{x}}}" for x in lens])
 
     @classmethod
