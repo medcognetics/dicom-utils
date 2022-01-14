@@ -8,7 +8,15 @@ import numpy as np
 import pytest
 from pydicom import DataElement
 
-from dicom_utils.types import WINDOW_CENTER, WINDOW_WIDTH, ImageType, SimpleImageType, Window
+from dicom_utils.tags import Tag
+from dicom_utils.types import (
+    WINDOW_CENTER,
+    WINDOW_WIDTH,
+    ImageType,
+    PhotometricInterpretation,
+    SimpleImageType,
+    Window,
+)
 
 
 def get_simple_image_type_test_cases():
@@ -210,3 +218,62 @@ class TestWindow:
         assert (window_pixels <= window.width).all()
         assert (window_pixels[pixels <= window.lower_bound] == 0).all()
         assert (window_pixels[pixels >= window.upper_bound] == window.upper_bound - window.lower_bound).all()
+
+
+class TestPhotometricInterpretation:
+    @pytest.mark.parametrize(
+        "val,expected",
+        [
+            pytest.param(PhotometricInterpretation.UNKNOWN, False),
+            pytest.param(PhotometricInterpretation.MONOCHROME1, True),
+            pytest.param(PhotometricInterpretation.MONOCHROME2, True),
+            pytest.param(PhotometricInterpretation.RGB, True),
+        ],
+    )
+    def test_bool(self, val, expected):
+        assert bool(val) == expected
+
+    @pytest.mark.parametrize(
+        "val,expected",
+        [
+            pytest.param("", PhotometricInterpretation.UNKNOWN),
+            pytest.param("MONOCHROME1", PhotometricInterpretation.MONOCHROME1),
+            pytest.param("MONOCHROME2", PhotometricInterpretation.MONOCHROME2),
+            pytest.param("RGB", PhotometricInterpretation.RGB),
+        ],
+    )
+    def test_from_str(self, val, expected):
+        pm = PhotometricInterpretation.from_str(val)
+        assert pm == expected
+
+    @pytest.mark.parametrize(
+        "val,expected",
+        [
+            pytest.param(PhotometricInterpretation.UNKNOWN, False),
+            pytest.param(PhotometricInterpretation.MONOCHROME1, True),
+            pytest.param(PhotometricInterpretation.MONOCHROME2, True),
+            pytest.param(PhotometricInterpretation.RGB, False),
+        ],
+    )
+    def test_is_monochrome(self, val, expected):
+        assert val.is_monochrome == expected
+
+    @pytest.mark.parametrize(
+        "val,expected",
+        [
+            pytest.param(None, PhotometricInterpretation.UNKNOWN),
+            pytest.param("", PhotometricInterpretation.UNKNOWN),
+            pytest.param("MONOCHROME1", PhotometricInterpretation.MONOCHROME1),
+            pytest.param("MONOCHROME2", PhotometricInterpretation.MONOCHROME2),
+            pytest.param("RGB", PhotometricInterpretation.RGB),
+        ],
+    )
+    def test_from_dicom(self, dicom_object, val, expected):
+        if val is not None:
+            de = DataElement(Tag.PhotometricInterpretation, "CS", val)
+            dicom_object[Tag.PhotometricInterpretation] = de
+        else:
+            del dicom_object[Tag.PhotometricInterpretation]
+
+        pm = PhotometricInterpretation.from_dicom(dicom_object)
+        assert pm == expected

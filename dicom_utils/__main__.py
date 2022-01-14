@@ -20,6 +20,8 @@ from .cli.overlap import get_parser as overlap_parser
 from .cli.overlap import main as overlap_main
 from .cli.strip import get_parser as strip_parser
 from .cli.strip import main as strip_main
+from .cli.validate import get_parser as validate_parser
+from .cli.validate import main as validate_main
 from .logging import LoggingLevel, set_logging_level
 
 
@@ -59,6 +61,7 @@ def main() -> None:
         ("strip", "Strip pixel data out of DICOMs", strip_main, strip_parser),
         ("dicom_types", "Summarize image types", dicom_types_main, dicom_types_parser),
         ("overlap", "Check overlap of study UIDs between dirs", overlap_main, overlap_parser),
+        ("validate", "Validate metadata of a DICOM file", validate_main, validate_parser),
     ]:
         add_subparser(subparsers, name=name, help=help, main=main, modifier=modifier)
 

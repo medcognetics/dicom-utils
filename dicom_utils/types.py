@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, auto
 from typing import Any, Dict, List, Optional, cast
 
 import numpy as np
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence
+
+from .tags import Tag
 
 
 IMAGE_TYPE = 0x00080008
@@ -217,4 +219,43 @@ class Window:
         return pixels
 
 
-__all__ = ["Dicom", "ImageType", "Window"]
+class PhotometricInterpretation(Enum):
+    r"""Enumeration of PhotometricInterpretation values under the DICOM
+    standard. Values pulled from:
+
+        https://dicom.innolitics.com/ciods/rt-dose/image-pixel/00280004
+    """
+    UNKNOWN = 0
+    MONOCHROME1 = 1
+    MONOCHROME2 = 2
+    PALETTE_COLOR = auto()
+    RGB = auto()
+    HSV = auto()
+    ARGB = auto()
+    CMYK = auto()
+    YBR_FULL = auto()
+    YBR_FULL_422 = auto()
+    YBR_PARTIAL_422 = auto()
+    YBR_PARTIAL_420 = auto()
+    YBR_ICT = auto()
+    YBR_RCT = auto()
+
+    def __bool__(self) -> bool:
+        return self != PhotometricInterpretation.UNKNOWN
+
+    @property
+    def is_monochrome(self) -> bool:
+        return 1 <= self.value <= 2
+
+    @classmethod
+    def from_str(cls, string: str) -> "PhotometricInterpretation":
+        string = string.upper()
+        return getattr(cls, string, PhotometricInterpretation.UNKNOWN)
+
+    @classmethod
+    def from_dicom(cls, dcm: Dicom) -> "PhotometricInterpretation":
+        val = dcm.get(Tag.PhotometricInterpretation, None)
+        return PhotometricInterpretation.UNKNOWN if val is None else cls.from_str(val.value)
+
+
+__all__ = ["Dicom", "ImageType", "Window", "PhotometricInterpretation"]

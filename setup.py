@@ -97,6 +97,7 @@ def install(version):
                 "dicom_overlap = dicom_utils.cli.overlap:entrypoint",
                 "dicomstrip = dicom_utils.cli.strip:entrypoint",
                 "dicomphi = dicom_utils.cli.dicomphi:entrypoint",
+                "dicomcheck = dicom_utils.cli.validate:entrypoint",
             ],
         },
     )
