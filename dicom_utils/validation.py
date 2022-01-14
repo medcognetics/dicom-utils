@@ -15,6 +15,7 @@ import pydicom
 from .dicom import Dicom, TransferSyntaxUIDs
 from .metadata import MAX_FIELD_LENGTH
 from .tags import Tag
+from .types import PhotometricInterpretation
 
 
 try:
@@ -94,7 +95,8 @@ def pixel_data_validator(val: Any) -> Optional[str]:
 
 
 def photometric_validator(val: Any) -> Optional[str]:
-    if val not in ["MONOCHROME1", "MONOCHROME2"]:
+    pm = PhotometricInterpretation.from_str(val)
+    if not pm:
         return f"Invalid value {val}"
     return None
 
