@@ -67,8 +67,10 @@ def main(args: argparse.Namespace) -> None:
     with ThreadPoolExecutor(args.jobs) as tp:
         for match in path.rglob(args.name):
             f = tp.submit(check_file, match, args)
-            f.add_done_callback(callback)
             futures.append(f)
+
+        for f in futures:
+            callback(f)
 
 
 def entrypoint():

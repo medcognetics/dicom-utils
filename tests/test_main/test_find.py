@@ -34,9 +34,13 @@ def test_find(dicom_folder, capsys, tmp_path):
         str(tmp_path),
     ]
     runpy.run_module("dicom_utils.cli.find", run_name="__main__", alter_sys=True)
-    captured = capsys.readouterr()
+    captured1 = capsys.readouterr()
+    runpy.run_module("dicom_utils.cli.find", run_name="__main__", alter_sys=True)
+    captured2 = capsys.readouterr()
+
     for p in dicom_folder:
-        assert str(p) in captured.out
+        assert str(p) in captured1.out
+    assert list(sorted(captured1)) == list(sorted(captured2))
 
 
 @pytest.mark.usefixtures("dicom_folder")
