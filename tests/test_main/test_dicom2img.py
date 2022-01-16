@@ -6,8 +6,10 @@ import sys
 from pathlib import Path
 from typing import List
 
+import numpy as np
 import pydicom
 import pytest
+from PIL import Image
 from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.sequence import Sequence
 
@@ -67,3 +69,16 @@ def test_dicom2img(dicom_image_file, dicom_annotation_file, tmp_path, out):
     if out is not None:
         assert "path" in locals()
         assert locals()["path"].is_file()
+
+
+def test_bytes(dicom_image_file, dicom_annotation_file, tmp_path, capsysbinary):
+    sys.argv = [sys.argv[0], str(tmp_path), "--noblock", "--bytes"]
+
+    runpy.run_module("dicom_utils.cli.dicom2img", run_name="__main__", alter_sys=False)
+    captured = capsysbinary.readouterr().out
+    dest = Path(tmp_path, "out.png")
+    with open(dest, "wb") as f:
+        f.write(captured)
+
+    img = np.asarray(Image.open(dest))
+    assert img.shape == (128, 128, 3)
