@@ -1,16 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import argparse
+import sys
 from argparse import ArgumentParser
+from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
 import matplotlib.pyplot as plt
+import numpy as np
 from PIL import Image
 
 from ..dicom import path_to_dicoms
 from ..types import Dicom
-from ..visualize import chw_to_hwc, dcms_to_annotated_images, to_collage
+from ..visualize import DicomImage, chw_to_hwc, dcms_to_annotated_images, to_collage
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -24,7 +27,117 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument("-q", "--quality", default=95, type=int, help="quality of outputs, from 1 to 100")
     parser.add_argument("--noblock", default=False, action="store_true", help="allow matplotlib to block")
     parser.add_argument("--window", default=False, action="store_true", help="apply window from DICOM metadata")
+    parser.add_argument("-b", "--bytes", default=False, action="store_true", help="output a png image as a byte stream")
     return parser
+
+
+class ImageOutput:
+    def __init__(self, images: List[DicomImage], quality: int = 95, downsample: int = 1, **kwargs):
+        self.quality = quality
+        self.images = images
+        self.data = to_collage([i.pixels[:, :, ::downsample, ::downsample] for i in self.images])
+        if self.is_single_frame:
+            self.data = self.data[0]
+
+    @property
+    def chw_data(self) -> np.ndarray:
+        return self.data
+
+    @property
+    def hwc_data(self) -> np.ndarray:
+        return chw_to_hwc(self.data)
+
+    @property
+    def is_single_frame(self) -> bool:
+        return all(i.is_single_frame for i in self.images)
+
+    def to_bytes(self) -> bytes:
+        img = Image.fromarray(self.hwc_data)
+        buf = BytesIO()
+        img.save(buf, format="png", quality=self.quality)
+        return buf.getvalue()
+
+    def print_bytes(self) -> None:
+        sys.stdout.buffer.write(self.to_bytes())
+
+    def save(self, path: Path) -> None:
+        img = Image.fromarray(self.hwc_data)
+        img.save(str(path), quality=self.quality)
+
+    def show(self, block: bool = True, **kwargs) -> None:
+        print("Showing image")
+        plt.imshow(self.hwc_data, **kwargs)
+        plt.show(block=block)
+
+    @staticmethod
+    def from_dicom_images(images: List[DicomImage], split: bool = False, **kwargs) -> "ImageOutput":
+        if all(i.is_single_frame for i in images):
+            return ImageOutput(images, **kwargs)
+        elif split:
+            return SplitImageOutput(images, **kwargs)
+        else:
+            return AnimatedImageOutput(images, **kwargs)
+
+
+class SplitImageOutput(ImageOutput):
+    def to_bytes(self) -> bytes:
+        buf = BytesIO()
+        for i, frame in enumerate(self.data):
+            img = Image.fromarray(chw_to_hwc(frame))
+            img.save(buf, format="png", quality=self.quality)
+        return buf.getvalue()
+
+    def save(self, path: Path) -> None:
+        subdir = Path(path.with_suffix(""))
+        subdir.mkdir(exist_ok=True)
+        for i, frame in enumerate(self.data):
+            path = Path(subdir, Path(f"{i}.png"))
+            img = Image.fromarray(chw_to_hwc(frame))
+            img.save(str(path), quality=self.quality)
+
+    def show(self, **kwargs) -> None:
+        for i, frame in enumerate(self.data):
+            print(f"Showing frame {i}/{len(self.data)}")
+            plt.imshow(chw_to_hwc(frame), cmap="gray")
+            plt.show(block=True)
+
+
+class AnimatedImageOutput(ImageOutput):
+    def __init__(self, images: List[DicomImage], quality: int = 95, downsample: int = 1, fps: int = 5):
+        super().__init__(images, quality, downsample)
+        self.fps = fps
+
+    def _prepare_frames(self) -> List[Image.Image]:
+        frames = [Image.fromarray(chw_to_hwc(frame)) for frame in self.data]
+        return frames
+
+    @property
+    def duration_ms(self) -> float:
+        return len(self.data) / (self.fps * 1000)
+
+    def to_bytes(self) -> bytes:
+        buf = BytesIO()
+        frames = self._prepare_frames()
+        frames[0].save(
+            buf,
+            save_all=True,
+            append_images=frames[1:],
+            duration=self.duration_ms,
+            quality=self.quality,
+            format="gif",
+        )
+        return buf.getvalue()
+
+    def save(self, path: Path) -> None:
+        frames = self._prepare_frames()
+        path = path.with_suffix(".gif")
+        frames[0].save(path, save_all=True, append_images=frames[1:], duration=self.duration_ms, quality=self.quality)
+
+    def show(self, *args, **kwargs) -> None:
+        raise NotImplementedError(
+            "Showing an animated image is not yet implemented. "
+            "Please save to an output GIF file or utilize piped byte stream"
+        )
 
 
 def dicoms_to_graphic(
@@ -34,43 +147,26 @@ def dicoms_to_graphic(
     fps: int = 5,
     quality: int = 95,
     block: bool = True,
+    as_bytes: bool = False,
     downsample: int = 1,
     **kwargs,
 ) -> None:
     images = dcms_to_annotated_images(dcms, **kwargs)
-    data = to_collage([i.pixels[:, :, ::downsample, ::downsample] for i in images])
 
-    if all(i.is_single_frame for i in images) or dest is None:
-        data = chw_to_hwc(data[0])
-        if dest is None:
-            plt.imshow(data)
-            print("Showing image")
-            plt.show(block=block)
-        else:
-            img = Image.fromarray(data)
-            img.save(str(dest), quality=quality)
-    elif split:
-        if dest is not None:
-            subdir = Path(dest.with_suffix(""))
-            subdir.mkdir(exist_ok=True)
-        else:
-            subdir = None
+    handler = ImageOutput.from_dicom_images(
+        images,
+        split,
+        quality=quality,
+        downsample=downsample,
+        fps=fps,
+    )
 
-        for i, frame in enumerate(data):
-            if subdir is not None:
-                path = Path(subdir, Path(f"{i}.png"))
-                img = Image.fromarray(frame)
-                img.save(str(path), quality=quality)
-            else:
-                plt.imshow(frame, cmap="gray")
-                print(f"Showing frame {i}/{len(data)}")
-                plt.show(block=block)
-                break
+    if as_bytes:
+        handler.print_bytes()
+    elif dest is not None:
+        handler.save(dest)
     else:
-        frames = [Image.fromarray(chw_to_hwc(frame)) for frame in data]
-        duration_ms = len(frames) / (fps * 1000)
-        path = dest.with_suffix(".gif")
-        frames[0].save(path, save_all=True, append_images=frames[1:], duration=duration_ms, quality=quality)
+        handler.show(block)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -83,7 +179,15 @@ def main(args: argparse.Namespace) -> None:
 
     dcms = list(path_to_dicoms(path))
     dicoms_to_graphic(
-        dcms, dest, args.split, args.fps, args.quality, not args.noblock, args.downsample, apply_window=args.window
+        dcms,
+        dest,
+        args.split,
+        args.fps,
+        args.quality,
+        not args.noblock,
+        args.bytes,
+        args.downsample,
+        apply_window=args.window,
     )
 
 
