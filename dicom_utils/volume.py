@@ -95,7 +95,7 @@ class SliceAtLocation(VolumeHandler):
 
     Args:
         center:
-            The slice about which to sample
+            The slice about which to sample. Defaults to num_frames / 2
 
         before:
             Optional frames to sample before ``center``.
@@ -109,7 +109,7 @@ class SliceAtLocation(VolumeHandler):
 
     def __init__(
         self,
-        center: int,
+        center: Optional[int] = None,
         before: int = 0,
         after: int = 0,
         stride: int = 1,
@@ -128,8 +128,9 @@ class SliceAtLocation(VolumeHandler):
         return s
 
     def get_indices(self, total_frames: Optional[int]) -> Tuple[int, Optional[int], int]:
-        start = self.center - self.before
-        end = self.center + self.after + 1
+        center = self.center if self.center is not None else total_frames // 2
+        start = center - self.before
+        end = center + self.after + 1
         return start, end, self.stride
 
 

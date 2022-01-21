@@ -1,3 +1,4 @@
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Final, Iterator, List, NamedTuple, Optional, Tuple
@@ -6,6 +7,7 @@ import cv2
 import numpy as np
 from numpy import ndarray
 from pydicom.uid import UID
+from tqdm import tqdm
 
 from .dicom import read_dicom_image
 from .logging import logger
@@ -188,14 +190,32 @@ def draw_rectangle(
     return image
 
 
-def dcms_to_images(dcms: List[Dicom], **kwargs) -> Iterator[DicomImage]:
+def dcms_to_images(dcms: List[Dicom], bar: bool = True, jobs: int = 4, **kwargs) -> Iterator[DicomImage]:
     """Some DICOMs may only contain annotations or other non-image information, so we want to
     pull out image data where applicable."""
-    for dcm in dcms:
+    tqdm_bar = tqdm(desc="Loading images", total=len(dcms), disable=(not bar))
+
+    def func(dcm: Dicom) -> Optional[DicomImage]:
         try:
-            yield DicomImage.from_dicom(dcm, **kwargs)
+            return DicomImage.from_dicom(dcm, **kwargs)
         except Exception as e:
             logger.info(e)
+            return None
+
+    def callback(f: Future):
+        tqdm_bar.update(1)
+
+    futures: List[Future] = []
+    with ThreadPoolExecutor(jobs) as tp:
+        for dcm in dcms:
+            f = tp.submit(func, dcm)
+            f.add_done_callback(callback)
+            futures.append(f)
+
+        for f in futures:
+            if result := f.result():
+                yield result
+    tqdm_bar.close()
 
 
 def distance(a: List[float], b: List[float]) -> float:
@@ -253,8 +273,9 @@ def get_pr_reference_targets(dcm: Dicom) -> Optional[List[UID]]:
     return targets if targets else None
 
 
-def dcms_to_annotations(dcms: List[Dicom]) -> Iterator[Annotation]:
-    for dcm in [d for d in dcms if d.Modality == presentation_modality]:
+def dcms_to_annotations(dcms: List[Dicom], bar: bool = True) -> Iterator[Annotation]:
+    dcms = [d for d in dcms if d.Modality == presentation_modality]
+    for dcm in tqdm(dcms, desc="Loading annotations", disable=(not bar), leave=dcms):
         try:
             yield from dcm_to_annotations(dcm)
         except Exception as e:
