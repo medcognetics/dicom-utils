@@ -200,12 +200,10 @@ def dcms_to_images(dcms: List[Dicom], bar: bool = True, jobs: int = 4, **kwargs)
             return DicomImage.from_dicom(dcm, **kwargs)
         except Exception as e:
             logger.info(e)
-            return
 
     def callback(f: Future):
         tqdm_bar.update(1)
 
-    futures: List[Future] = []
     with ThreadPoolExecutor(jobs) as tp:
         futures: List[Future] = [tp.submit(func, dcm) for dcm in dcms]
         for f in futures:
