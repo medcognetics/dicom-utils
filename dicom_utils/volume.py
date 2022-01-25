@@ -95,7 +95,7 @@ class SliceAtLocation(VolumeHandler):
 
     Args:
         center:
-            The slice about which to sample
+            The slice about which to sample. Defaults to num_frames / 2
 
         before:
             Optional frames to sample before ``center``.
@@ -109,7 +109,7 @@ class SliceAtLocation(VolumeHandler):
 
     def __init__(
         self,
-        center: int,
+        center: Optional[int] = None,
         before: int = 0,
         after: int = 0,
         stride: int = 1,
@@ -127,9 +127,18 @@ class SliceAtLocation(VolumeHandler):
         s += ")"
         return s
 
-    def get_indices(self, total_frames: Optional[int]) -> Tuple[int, Optional[int], int]:
-        start = self.center - self.before
-        end = self.center + self.after + 1
+    def slice_dicom(self, dcm: U) -> U:
+        num_frames: Optional[SupportsInt] = dcm.get("NumberOfFrames", None)
+        if num_frames is None and self.center is None:
+            raise AttributeError(f"`NumberOfFrames` cannot be absent when `{self.__class__.__name__}.center` is `None`")
+        return super().slice_dicom(dcm)
+
+    def get_indices(self, total_frames: Optional[int]) -> Tuple[int, int, int]:
+        if self.center is None and total_frames is None:
+            raise ValueError(f"`total_frames` cannot be `None` when `{self.__class__.__name__}.center` is `None`")
+        center = self.center if self.center is not None else total_frames // 2
+        start = center - self.before
+        end = center + self.after + 1
         return start, end, self.stride
 
 

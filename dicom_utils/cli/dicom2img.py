@@ -14,6 +14,7 @@ from PIL import Image
 from ..dicom import path_to_dicoms
 from ..types import Dicom
 from ..visualize import DicomImage, chw_to_hwc, dcms_to_annotated_images, to_collage
+from ..volume import SliceAtLocation
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -22,6 +23,9 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument("-d", "--downsample", help="downsample images by an integer factor", type=int)
     parser.add_argument(
         "-s", "--split", default=False, action="store_true", help="split multi-frame inputs into separate files"
+    )
+    parser.add_argument(
+        "-v", "--volume", default=False, action="store_true", help="render 3D data as an animation or frame sequence"
     )
     parser.add_argument("-f", "--fps", default=5, type=int, help="framerate for animated outputs")
     parser.add_argument("-q", "--quality", default=95, type=int, help="quality of outputs, from 1 to 100")
@@ -32,6 +36,8 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
 
 
 class ImageOutput:
+    r"""Base class that describes how to render a given collage."""
+
     def __init__(self, images: List[DicomImage], quality: int = 95, downsample: int = 1, **kwargs):
         self.quality = quality
         self.images = images
@@ -80,6 +86,8 @@ class ImageOutput:
 
 
 class SplitImageOutput(ImageOutput):
+    r"""Renderer for 3D data that splits the 3D volume into multiple 2D frames"""
+
     def to_bytes(self) -> bytes:
         buf = BytesIO()
         for i, frame in enumerate(self.data):
@@ -103,6 +111,8 @@ class SplitImageOutput(ImageOutput):
 
 
 class AnimatedImageOutput(ImageOutput):
+    r"""Renderer for 3D data that converts the volume to a 2D animation"""
+
     def __init__(self, images: List[DicomImage], quality: int = 95, downsample: int = 1, fps: int = 5):
         super().__init__(images, quality, downsample)
         self.fps = fps
@@ -144,6 +154,7 @@ def dicoms_to_graphic(
     dcms: List[Dicom],
     dest: Optional[Path] = None,
     split: bool = False,
+    center: bool = False,
     fps: int = 5,
     quality: int = 95,
     block: bool = True,
@@ -151,6 +162,9 @@ def dicoms_to_graphic(
     downsample: int = 1,
     **kwargs,
 ) -> None:
+    if center:
+        kwargs["volume_handler"] = SliceAtLocation()
+
     images = dcms_to_annotated_images(dcms, **kwargs)
 
     handler = ImageOutput.from_dicom_images(
@@ -182,6 +196,7 @@ def main(args: argparse.Namespace) -> None:
         dcms,
         dest,
         args.split,
+        not args.volume,
         args.fps,
         args.quality,
         not args.noblock,
