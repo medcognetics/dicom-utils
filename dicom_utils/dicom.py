@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 from pathlib import Path
-from typing import Dict, Final, Iterator, List, Optional, Tuple, Union
+from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
 import pydicom
@@ -32,6 +32,13 @@ TransferSyntaxUIDs: Final[Dict[str, str]] = {
     "1.2.840.10008.1.2.4.92": "JPEG2000 Multi-component Lossless",
     "1.2.840.10008.1.2.4.93": "JPEG2000 Multi-component",
 }
+
+
+# Pillow is relatively slow so we want to make sure that other handlers are used instead
+default_data_handlers: List[Callable] = pydicom.config.pixel_data_handlers  # type: ignore
+data_handlers = [h for h in default_data_handlers if "pillow" not in h.__name__]
+pydicom.config.pixel_data_handlers = data_handlers  # type: ignore
+assert (a := len(data_handlers) + 1) == (b := len(default_data_handlers)), f"Unexpected data handlers ({a} != {b})"
 
 
 class NoImageError(Exception):

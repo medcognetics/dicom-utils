@@ -29,6 +29,13 @@ def dicom_object(dicom_file):
 
 
 @pytest.fixture
+def dicom_file_j2k() -> str:
+    filename = get_testdata_file("JPEG2000.dcm")
+    assert isinstance(filename, str)
+    return filename
+
+
+@pytest.fixture
 def dicom_file_3d(tmp_path, dicom_object_3d):
     path = Path(tmp_path, "CT_small_3D.dcm")
     dicom_file_3d.save_as(path)

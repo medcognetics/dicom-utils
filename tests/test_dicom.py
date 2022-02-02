@@ -2,11 +2,15 @@
 # -*- coding: utf-8 -*-
 
 
+import time
+
 import numpy as np
+import pydicom
 import pytest
 from pydicom import DataElement
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
+from dicom_utils.dicom import data_handlers, default_data_handlers
 from dicom_utils.types import WINDOW_CENTER, WINDOW_WIDTH, Window
 
 
@@ -130,3 +134,19 @@ class TestReadDicomImage:
             assert (window_pixels == pixels).all()
 
         window = Window.from_dicom(dicom_object)
+
+    def test_decoding_speed(self, dicom_file_j2k: str) -> None:
+        # Make sure that our set of pixel data handlers is actually faster than the default set
+
+        def time_decode() -> float:
+            start_time = time.time()
+            pydicom.dcmread(dicom_file_j2k).pixel_array
+            return time.time() - start_time
+
+        pydicom.config.pixel_data_handlers = default_data_handlers  # type: ignore
+        default_decode_time = time_decode()
+
+        pydicom.config.pixel_data_handlers = data_handlers  # type: ignore
+        decode_time = time_decode()
+
+        assert decode_time < default_decode_time, f"{decode_time} is not less than {default_decode_time}"
