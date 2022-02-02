@@ -83,6 +83,7 @@ def install(version):
             "numpy",
             "pylibjpeg",
             "pylibjpeg-libjpeg",
+            "pylibjpeg-openjpeg",
             "opencv-python",
         ],
         extras_require=extras,
