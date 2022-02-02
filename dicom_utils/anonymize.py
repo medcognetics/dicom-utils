@@ -34,7 +34,7 @@ def str_to_first_int(s: str) -> Optional[int]:
         return int(x[0])
 
 
-def age_to_anonymized_age(age_str: str) -> str:
+def anonymize_age(age_str: str) -> str:
     """So few people live into their 90s that an age greater than 89 is considered to be identifying information."""
     age: Optional[int] = str_to_first_int(age_str)
     if age is None:
@@ -48,17 +48,19 @@ def age_to_anonymized_age(age_str: str) -> str:
 RuleMap = Dict[Tag, RuleHandler]
 
 rules: Final[RuleMap] = {
-    Tag.PatientAge: RuleHandler(age_to_anonymized_age),
+    Tag.PatientAge: RuleHandler(anonymize_age),
+    Tag.PatientSex: preserve_value,
+    Tag.CountryOfResidence: preserve_value,
+    Tag.EthnicGroup: preserve_value,
+    # Institution names should be OK to keep per the following explanation:
+    # "Only names of the individuals associated with the corresponding health
+    # information (i.e., the subjects of the records) and of their relatives,
+    # employers, and household members must be suppressed. There is no explicit
+    # requirement to remove the names of providers or workforce members of the
+    # covered entity or business associate."
+    # https://www.hhs.gov/hipaa/for-professionals/privacy/special-topics/de-identification/index.html#supress
+    Tag.InstitutionName: preserve_value,
 }
-
-# TODO these tags are anonymized, but we probably want to keep them
-# (0x0010, 0x2150), # Country of Residence
-# (0x0010, 0x2160), # Ethnic Group
-# (0x0032, 0x4000), # Study Comments (potential case notes)
-# (0x0008, 0x103E), # Series Description
-# (0x0008, 0x0080), # Institution Name
-# (0x0018, 0x1000), # Device Serial Number
-# (0x0010, 0x0040), # Patient's Sex
 
 
 def is_anonymized(ds: Dataset) -> bool:

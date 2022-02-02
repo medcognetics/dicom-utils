@@ -39,9 +39,9 @@ def test_str_to_first_int(test_data) -> None:
         ("abcdefgh120ijklmnopqrts", "90Y+"),
     ],
 )
-def test_age_to_anonymized_age(test_data) -> None:
+def test_anonymize_age(test_data) -> None:
     input_string, expected_output = test_data
-    assert expected_output == age_to_anonymized_age(input_string)
+    assert expected_output == anonymize_age(input_string)
 
 
 def test_RuleHandler_init() -> None:

@@ -6,11 +6,8 @@ from pydicom.dataset import PrivateBlock
 
 
 fields_to_be_hashed: Final[List[str]] = [
-    "SOPInstanceUID",
-    "StudyInstanceUID",
-    "SeriesInstanceUID",
-    "PatientName",
-    "PatientID",
+    # NOTE: Hashing patient names and other identifying fields may be unsafe
+    # due to bute-force or rainbow table attacks.
     "PixelData",
 ]
 
