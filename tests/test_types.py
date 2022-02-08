@@ -114,6 +114,20 @@ def get_simple_image_type_test_cases():
     _ = pytest.param(d, SimpleImageType.SVIEW, id="sview-2")
     cases.append(_)
 
+    # ['DERIVED', 'PRIMARY']
+    # Data in SeriesDescription
+    d = deepcopy(default)
+    d.update(dict(pixels="DERIVED", series_description="L CC C-View"))
+    _ = pytest.param(d, SimpleImageType.SVIEW, id="sview-3")
+    cases.append(_)
+
+    # ['DERIVED', 'PRIMARY']
+    # Data in SeriesDescription
+    d = deepcopy(default)
+    d.update(dict(pixels="DERIVED", series_description="R MLO S-View"))
+    _ = pytest.param(d, SimpleImageType.SVIEW, id="sview-4")
+    cases.append(_)
+
     # TOMO
 
     # ['DERIVED', 'PRIMARY', 'TOMOSYNTHESIS', 'NONE', '', '', '', '', '150000']

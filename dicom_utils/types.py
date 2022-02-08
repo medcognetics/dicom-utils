@@ -59,6 +59,7 @@ class ImageType:
         * ``"extras"`` - Additional IMAGE_TYPE fields if available
         * ``"NumberOfFrames"`` - Frame count (for TOMO images only)
         * ``"model"`` - Manufacturer's model name
+        * ``"series_description"``
     """
 
     pixels: str
@@ -67,6 +68,7 @@ class ImageType:
     extras: Optional[List[str]] = None
     NumberOfFrames: Optional[int] = None
     model: Optional[str] = None
+    series_description: Optional[str] = None
 
     def __bool__(self) -> bool:
         return bool(self.pixels) and bool(self.exam)
@@ -91,6 +93,7 @@ class ImageType:
         result: Dict[str, Any] = {}
         result["NumberOfFrames"] = dcm.get("NumberOfFrames", None)
         result["model"] = dcm.get("ManufacturerModelName", None)
+        result["series_description"] = dcm.get("SeriesDescription", None)
 
         if IMAGE_TYPE not in dcm.keys():
             return cls("", "", **result)
@@ -129,10 +132,13 @@ class ImageType:
         extras = self.extras
         num_frames = self.NumberOfFrames or 1
         machine = (self.model or "").lower()
+        series_description = (self.series_description or "").lower()
 
         # very solid rules
         if num_frames > 1:
             return SimpleImageType.TOMO
+        if series_description and ("s-view" in series_description or "c-view" in series_description):
+            return SimpleImageType.SVIEW
         if "original" in pixels:
             return SimpleImageType.NORMAL
 
