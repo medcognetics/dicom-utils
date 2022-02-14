@@ -122,18 +122,12 @@ def record_iterator(
     files = list(p for p in files if p.is_file())
     bar = tqdm(desc="Scanning files", total=len(files), unit="file", disable=(not use_bar))
 
-    def callback(f):
-        bar.update(1)
-
-    futures = []
     Pool = ThreadPoolExecutor if threads else ProcessPoolExecutor
     with Pool(jobs) as p:
-        for path in files:
-            f = p.submit(FileRecord.create, path)
-            f.add_done_callback(callback)
-            futures.append(f)
-
-        for path, f in zip(files, futures):
+        futures = [p.submit(FileRecord.create, path) for path in files]
+        for f in futures:
+            f.add_done_callback(lambda _: bar.update(1))
+        for f in futures:
             if f.exception():
                 continue
             elif record := f.result():
