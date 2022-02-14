@@ -18,7 +18,7 @@ from ..tags import Tag
 from ..types import ImageType
 from ..types import PhotometricInterpretation as PI
 from ..types import SimpleImageType as SIT
-from .helpers import SeriesUID, StudyUID
+from .helpers import SOPUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
 
 
@@ -48,7 +48,7 @@ class FileRecord:
     path: Path
     StudyInstanceUID: Optional[StudyUID]
     SeriesInstanceUID: Optional[SeriesUID]
-    SOPInstanceUID: Optional[SeriesUID]
+    SOPInstanceUID: Optional[SOPUID]
 
     TransferSyntaxUID: Optional[TSUID]
 
