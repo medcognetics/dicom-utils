@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Set
+from typing import Any, Dict, Final, Iterator, List, Optional, Sequence, Set, cast
 
 import pydicom
 from tqdm import tqdm
@@ -22,7 +22,7 @@ from .helpers import SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
 
 
-tags: List[Any] = [
+tags: Final = [
     Tag.SeriesInstanceUID,
     Tag.StudyInstanceUID,
     Tag.SOPInstanceUID,
@@ -86,7 +86,7 @@ class FileRecord:
         if not path.is_file():
             raise FileNotFoundError(path)
 
-        with pydicom.dcmread(path, stop_before_pixels=True, specific_tags=tags) as dcm:
+        with pydicom.dcmread(path, stop_before_pixels=True, specific_tags=cast(List[Any], tags)) as dcm:
             values = {tag.name: getattr(dcm, tag.name, None) for tag in tags}
             for key in ("Rows", "Columns", "NumberOfFrames"):
                 values[key] = int(values[key]) if values[key] else None
