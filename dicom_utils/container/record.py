@@ -18,7 +18,7 @@ from ..tags import Tag
 from ..types import ImageType
 from ..types import PhotometricInterpretation as PI
 from ..types import SimpleImageType as SIT
-from .helpers import SOPUID, SeriesUID, StudyUID
+from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
 
 
@@ -95,6 +95,23 @@ class FileRecord:
 
         values.pop("ImageType")
         return cls(path, SimpleImageType=img_type, **values)
+
+    @property
+    def has_image_uid(self) -> bool:
+        return bool(self.SeriesInstanceUID or self.SOPInstanceUID)
+
+    def get_image_uid(self, prefer_sop: bool = True) -> ImageUID:
+        r"""Gets an image level UID. The UID will be chosen from SeriesInstanceUID and SOPInstanceUID,
+        with preference as specified in ``prefer_sop``.
+        """
+        if not self.has_image_uid:
+            raise AttributeError("FileRecord has no UID")
+        if prefer_sop:
+            result = self.SOPInstanceUID or self.SeriesInstanceUID
+        else:
+            result = self.SeriesInstanceUID or self.SOPInstanceUID
+        assert result is not None
+        return result
 
 
 def record_iterator(

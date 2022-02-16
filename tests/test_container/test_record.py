@@ -80,6 +80,36 @@ class TestFileRecord:
         record = replace(record, Rows=rows, Columns=columns, NumberOfFrames=nf)
         assert record.is_volume == exp
 
+    @pytest.mark.parametrize(
+        "series,sop,exp",
+        [
+            pytest.param("1.2", None, True),
+            pytest.param(None, "1.2", True),
+            pytest.param(None, None, False),
+        ],
+    )
+    def test_has_image_uid(self, record, series, sop, exp):
+        record = replace(record, SeriesInstanceUID=series, SOPInstanceUID=sop)
+        assert record.has_image_uid == exp
+
+    @pytest.mark.parametrize(
+        "series,sop,prefer_sop,exp",
+        [
+            pytest.param("1.2", None, True, "1.2"),
+            pytest.param("1.2", None, False, "1.2"),
+            pytest.param(None, "1.2", True, "1.2"),
+            pytest.param(None, "1.2", False, "1.2"),
+            pytest.param("1.2", "2.3", True, "2.3"),
+            pytest.param("1.2", "2.3", False, "1.2"),
+            pytest.param(None, None, True, None, marks=pytest.mark.xfail(raises=AttributeError)),
+            pytest.param(None, None, False, None, marks=pytest.mark.xfail(raises=AttributeError)),
+        ],
+    )
+    def test_get_image_uid(self, record, series, sop, prefer_sop, exp):
+        record = replace(record, SeriesInstanceUID=series, SOPInstanceUID=sop)
+        uid = record.get_image_uid(prefer_sop=prefer_sop)
+        assert uid == exp
+
 
 @pytest.fixture
 def dicom_files(tmp_path, dicom_file):
