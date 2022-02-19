@@ -15,9 +15,10 @@ from ..tags import Tag
 
 # Type checking fails when dataclass attr name matches a type alias.
 # Import types under a different alias
-from ..types import ImageType
+from ..types import ImageType, Laterality
 from ..types import PhotometricInterpretation as PI
 from ..types import SimpleImageType as SIT
+from ..types import ViewPosition
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
 
@@ -36,6 +37,8 @@ tags: Final = [
     Tag.SeriesDescription,
     Tag.PatientName,
     Tag.PatientID,
+    *Laterality.get_required_tags(),
+    *ViewPosition.get_required_tags(),
 ]
 
 
@@ -59,6 +62,8 @@ class FileRecord:
     SimpleImageType: Optional[SIT] = None
     ManufacturerModelName: Optional[str] = None
     SeriesDescription: Optional[str] = None
+    view_position: ViewPosition = ViewPosition.UNKNOWN
+    laterality: Laterality = Laterality.UNKNOWN
 
     PatientName: Optional[str] = None
     PatientID: Optional[str] = None
@@ -92,9 +97,19 @@ class FileRecord:
                 values[key] = int(values[key]) if values[key] else None
             img_type = ImageType.from_dicom(dcm).to_simple_image_type()
             values["TransferSyntaxUID"] = dcm.file_meta.get("TransferSyntaxUID", None)
+            view_position = ViewPosition.from_dicom(dcm)
+            laterality = Laterality.from_dicom(dcm)
 
-        values.pop("ImageType")
-        return cls(path, SimpleImageType=img_type, **values)
+        # pop any values that arent part of the FileRecord constructor
+        values = {k: v for k, v in values.items() if k in cls.__dataclass_fields__.keys()}
+
+        return cls(
+            path,
+            SimpleImageType=img_type,
+            view_position=view_position,
+            laterality=laterality,
+            **values,
+        )
 
     @property
     def has_image_uid(self) -> bool:

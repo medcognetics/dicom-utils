@@ -3,9 +3,10 @@
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, Final, Iterable, List, Optional, TypeVar, cast
 
 import numpy as np
+from pydicom import DataElement
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence
 
@@ -15,9 +16,15 @@ from .tags import Tag
 IMAGE_TYPE = 0x00080008
 WINDOW_CENTER = 0x00281050
 WINDOW_WIDTH = 0x00281051
+UNKNOWN: Final = -1
 
 Dicom = Dataset
 DicomAttributeSequence = Sequence
+
+
+def get_tag_values(tags: Iterable[Tag], dcm: Dicom) -> Dict[Tag, Any]:
+    tags = {tag: dcm[tag].value if tag in dcm else None for tag in tags}
+    return tags
 
 
 class SimpleImageType(Enum):
@@ -264,4 +271,188 @@ class PhotometricInterpretation(Enum):
         return PhotometricInterpretation.UNKNOWN if val is None else cls.from_str(val.value)
 
 
-__all__ = ["Dicom", "ImageType", "Window", "PhotometricInterpretation"]
+T = TypeVar("T")
+
+
+class EnumMixin(Enum):
+    def __bool__(self) -> bool:
+        return not self.is_unknown
+
+    def __repr__(self) -> str:
+        name = self.simple_name
+        return f"{self.__class__.__name__}({name})"
+
+    def __add__(self: T, other: T) -> T:
+        return self or other
+
+    def __mul__(self: T, other: T) -> T:
+        return self or other
+
+    @property
+    def is_unknown(self) -> bool:
+        return self.value == UNKNOWN
+
+    @property
+    def simple_name(self) -> str:
+        return self.name.lower().replace("_", " ")
+
+    @staticmethod
+    def get_required_tags() -> List[Tag]:
+        raise NotImplementedError("get_required_tags() has not been implemented for this class")
+
+
+class Laterality(EnumMixin):
+    UNKNOWN = UNKNOWN
+
+    NONE = 0
+    LEFT = 1
+    RIGHT = 2
+    BILATERAL = 3
+
+    @staticmethod
+    def get_required_tags() -> List[Tag]:
+        return [Tag.ImageLaterality, Tag.FrameLaterality, Tag.SharedFunctionalGroupsSequence]
+
+    @classmethod
+    def from_str(cls, string: str) -> "Laterality":
+        string = string.lower()
+        if string == "none":
+            return cls.NONE
+        if "bi" in string:  # TODO what other patterns describe bilateral?
+            return cls.BILATERAL
+        if "r" in string or "d" in string:
+            return cls.RIGHT
+        if "l" in string or "e" in string:
+            return cls.LEFT
+        return cls.UNKNOWN
+
+    @classmethod
+    def from_tags(cls, tags: Dict[int, Any]) -> "Laterality":
+        # Take subset of 'tags' so that unit tests will fail if we don't maintain get_required_tags()
+        tags = {k: v for k, v in tags.items() if k in cls.get_required_tags()}
+
+        # first try reading ImageLaterality
+        laterality = tags.get(Tag.ImageLaterality, None)
+
+        # fall back to Tag.FrameLaterality
+        if laterality is None:
+            try:
+                laterality = (
+                    tags.get(Tag.SharedFunctionalGroupsSequence)[0]
+                    .get(Tag.FrameAnatomySequence)
+                    .value[0]
+                    .get(Tag.FrameLaterality)
+                    .value
+                )
+            except Exception as ex:
+                print(ex)
+
+        if isinstance(laterality, str):
+            laterality = laterality.strip().lower()
+            if laterality == "l":
+                return cls.LEFT
+            if laterality == "r":
+                return cls.RIGHT
+        # TODO is there a DICOM value for bilateral?
+        return cls.UNKNOWN
+
+    @classmethod
+    def from_dicom(cls, dcm: Dicom) -> "Laterality":
+        return cls.from_tags({int(tag): value for tag, value in get_tag_values(cls.get_required_tags(), dcm).items()})
+
+    @classmethod
+    def from_case_notes(cls, notes: str) -> "Laterality":
+        notes = notes.lower()
+        if "left" in notes:
+            return cls.LEFT
+        elif "right" in notes:
+            return cls.RIGHT
+        elif "bilateral" in notes:
+            return cls.BILATERAL
+        else:
+            return cls.UNKNOWN
+
+    @property
+    def short_str(self) -> str:
+        if self == Laterality.LEFT:
+            return "l"
+        elif self == Laterality.RIGHT:
+            return "r"
+        return ""
+
+
+class ViewPosition(EnumMixin):
+    UNKNOWN = UNKNOWN
+
+    CC = 1
+    MLO = 2
+    ML = 3
+
+    @staticmethod
+    def get_required_tags() -> List[Tag]:
+        return [Tag.ViewPosition, Tag.ViewCodeSequence]
+
+    @classmethod
+    def from_str(cls, string: str) -> "ViewPosition":
+        string = string.lower()
+        if "cc" in string:
+            return cls.CC
+        if "mlo" in string:
+            return cls.MLO
+        if "ml" in string:
+            return cls.ML
+        return cls.UNKNOWN
+
+    @classmethod
+    def from_tags(cls, tags: Dict[int, Any]) -> "ViewPosition":
+        # Take subset of 'tags' so that unit tests will fail if we don't maintain get_required_tags()
+        tags = {k: v for k, v in tags.items() if k in cls.get_required_tags()}
+        view_position = cls.from_view_position_tag(tags.get(Tag.ViewPosition, None))
+        return (
+            view_position
+            if view_position is not cls.UNKNOWN
+            else cls.from_view_code_sequence_tag(tags.get(Tag.ViewCodeSequence, None))
+        )
+
+    @classmethod
+    def from_view_position_tag(cls, view_position: Optional[str]) -> "ViewPosition":
+        if isinstance(view_position, str):
+            view_position = view_position.strip().lower()
+            if view_position == "mlo":
+                return cls.MLO
+            elif view_position == "cc":
+                return cls.CC
+            elif view_position == "ml":
+                return cls.ML
+        return cls.UNKNOWN
+
+    @classmethod
+    def from_view_code_sequence_tag(cls, view_code_sequence: Optional[DataElement]) -> "ViewPosition":
+        for view_code in view_code_sequence or []:
+            meaning = view_code.get("CodeMeaning", None)
+            if isinstance(meaning, str):
+                meaning = meaning.strip().lower()
+                if meaning == "cranio-caudal":
+                    return cls.CC
+                elif meaning == "medio-lateral oblique":
+                    return cls.MLO
+                elif meaning == "medio-lateral":
+                    return cls.ML
+        return cls.UNKNOWN
+
+    @classmethod
+    def from_dicom(cls, dcm: Dicom) -> "ViewPosition":
+        return cls.from_tags({int(tag): value for tag, value in get_tag_values(cls.get_required_tags(), dcm).items()})
+
+    @property
+    def short_str(self) -> str:
+        if self == ViewPosition.CC:
+            return "cc"
+        elif self == ViewPosition.MLO:
+            return "mlo"
+        elif self == ViewPosition.ML:
+            return "ml"
+        return ""
+
+
+__all__ = ["Dicom", "ImageType", "Window", "PhotometricInterpretation", "EnumMixin", "Laterality", "ViewPosition"]
