@@ -10,7 +10,7 @@ import pydicom
 import pytest
 
 from dicom_utils.container import FileRecord, RecordCollection, record_iterator
-from dicom_utils.types import SimpleImageType
+from dicom_utils.types import Laterality, SimpleImageType, ViewPosition
 
 
 class TestFileRecord:
@@ -31,6 +31,8 @@ class TestFileRecord:
         assert rec.SeriesDescription == dcm.get("SeriesDescription", None)
         assert rec.PatientName == dcm.get("PatientName", None)
         assert rec.PatientID == dcm.get("PatientID", None)
+        assert rec.laterality == Laterality.UNKNOWN
+        assert rec.view_position == ViewPosition.UNKNOWN
 
     @pytest.fixture
     def record(self, dicom_file):

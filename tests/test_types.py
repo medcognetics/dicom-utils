@@ -13,8 +13,10 @@ from dicom_utils.types import (
     WINDOW_CENTER,
     WINDOW_WIDTH,
     ImageType,
+    Laterality,
     PhotometricInterpretation,
     SimpleImageType,
+    ViewPosition,
     Window,
 )
 
@@ -291,3 +293,132 @@ class TestPhotometricInterpretation:
 
         pm = PhotometricInterpretation.from_dicom(dicom_object)
         assert pm == expected
+
+
+class TestLaterality:
+    @pytest.mark.parametrize(
+        "orient,expected",
+        [
+            (Laterality.RIGHT, False),
+            (Laterality.LEFT, False),
+            (Laterality.BILATERAL, False),
+            (Laterality.UNKNOWN, True),
+        ],
+    )
+    def test_is_unknown(self, orient, expected):
+        assert orient.is_unknown == expected
+
+    @pytest.mark.parametrize(
+        "string,expected",
+        [
+            ("rcc", Laterality.RIGHT),
+            ("lcc", Laterality.LEFT),
+            ("rmlo", Laterality.RIGHT),
+            ("lmlo", Laterality.LEFT),
+            ("r-cc", Laterality.RIGHT),
+            ("L-MLO", Laterality.LEFT),
+            ("L CC", Laterality.LEFT),
+            ("CCD", Laterality.RIGHT),
+            ("CCE", Laterality.LEFT),
+            ("MLOD", Laterality.RIGHT),
+            ("MLOE", Laterality.LEFT),
+            ("RML", Laterality.RIGHT),
+            ("LML", Laterality.LEFT),
+            ("foo", Laterality.UNKNOWN),
+            ("bi", Laterality.BILATERAL),
+            ("bilateral", Laterality.BILATERAL),
+            ("", Laterality.UNKNOWN),
+            ("none", Laterality.NONE),
+        ],
+    )
+    def test_from_str(self, string, expected):
+        orient = Laterality.from_str(string)
+        assert orient == expected
+
+    @pytest.mark.parametrize(
+        "val,expected",
+        [
+            ("L", Laterality.LEFT),
+            ("R", Laterality.RIGHT),
+            (None, Laterality.UNKNOWN),
+        ],
+    )
+    def test_from_tags(self, val, expected):
+        tags = {0x00200062: val} if val is not None else {}
+        for k in tags:
+            assert k in Laterality.get_required_tags()
+        orient = Laterality.from_tags(tags)
+        assert orient == expected
+
+    def test_bool(self):
+        expr = Laterality.UNKNOWN or Laterality.RIGHT or Laterality.UNKNOWN
+        assert expr == Laterality.RIGHT
+
+    def test_from_dicom(self, dicom_object):
+        # trivial test since this wraps from_tags
+        x = Laterality.from_dicom(dicom_object)
+        assert x == Laterality.UNKNOWN
+
+
+class TestViewPosition:
+    @pytest.mark.parametrize(
+        "orient,expected",
+        [
+            (ViewPosition.CC, False),
+            (ViewPosition.CC, False),
+            (ViewPosition.MLO, False),
+            (ViewPosition.MLO, False),
+            (ViewPosition.UNKNOWN, True),
+        ],
+    )
+    def test_is_unknown(self, orient, expected):
+        assert orient.is_unknown == expected
+
+    @pytest.mark.parametrize(
+        "string,expected",
+        [
+            ("rcc", ViewPosition.CC),
+            ("lcc", ViewPosition.CC),
+            ("rmlo", ViewPosition.MLO),
+            ("lmlo", ViewPosition.MLO),
+            ("r-cc", ViewPosition.CC),
+            ("LMLO", ViewPosition.MLO),
+            ("LCC", ViewPosition.CC),
+            ("CCD", ViewPosition.CC),
+            ("CCE", ViewPosition.CC),
+            ("MLOD", ViewPosition.MLO),
+            ("MLOE", ViewPosition.MLO),
+            ("RML", ViewPosition.ML),
+            ("LML", ViewPosition.ML),
+            ("foo", ViewPosition.UNKNOWN),
+            ("", ViewPosition.UNKNOWN),
+        ],
+    )
+    def test_from_str(self, string, expected):
+        orient = ViewPosition.from_str(string)
+        assert orient == expected
+
+    @pytest.mark.parametrize(
+        "val,expected",
+        [
+            ("MLO", ViewPosition.MLO),
+            ("ML", ViewPosition.ML),
+            ("CC", ViewPosition.CC),
+            ("???", ViewPosition.UNKNOWN),
+        ],
+    )
+    def test_from_tags(self, val, expected):
+        tags = {0x00185101: val} if val is not None else {}
+        for k in tags:
+            assert k in ViewPosition.get_required_tags()
+        orient = ViewPosition.from_tags(tags)
+        assert orient == expected
+
+    def test_bool(self):
+        expr = ViewPosition.UNKNOWN or ViewPosition.CC or ViewPosition.UNKNOWN
+        assert expr == ViewPosition.CC
+
+    def test_from_dicom(self, dicom_object):
+        # trivial test since this wraps from_tags
+        x = ViewPosition.from_dicom(dicom_object)
+        assert x == ViewPosition.UNKNOWN
