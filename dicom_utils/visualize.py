@@ -271,7 +271,7 @@ def get_pr_reference_targets(dcm: Dicom) -> Optional[List[UID]]:
 
 
 def dcms_to_annotations(dcms: List[Dicom], bar: bool = True) -> Iterator[Annotation]:
-    dcms = [d for d in dcms if d.Modality == presentation_modality]
+    dcms = [d for d in dcms if d.get("Modality", "") == presentation_modality]
     for dcm in tqdm(dcms, desc="Loading annotations", disable=(not bar), leave=dcms):
         try:
             yield from dcm_to_annotations(dcm)
