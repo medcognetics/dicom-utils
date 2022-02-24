@@ -10,7 +10,7 @@ from numpy import ndarray
 from pydicom.uid import UID
 
 from .logging import logger
-from .types import Dicom, Window
+from .types import Dicom, PhotometricInterpretation, Window
 from .volume import KeepVolume, VolumeHandler
 
 
@@ -89,7 +89,7 @@ def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     Returns:
         Numpy ndarray of pixel data
     """
-    return np.ndarray(dims, dcm.pixel_array.dtype, dcm.pixel_array)
+    return np.ndarray(dims, dcm.pixel_array.dtype, dcm.pixel_array.tobytes())
 
 
 def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
@@ -157,6 +157,7 @@ def read_dicom_image(
     strict_interp: bool = False,
     volume_handler: VolumeHandler = KeepVolume(),
     apply_window: bool = False,
+    as_uint8: bool = False,
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -166,28 +167,36 @@ def read_dicom_image(
             DICOM object to load images from
         stop_before_pixels:
             If true, return randomly generated data
-        strict_interp:
-            If true, don't make any assumptions for trying to work around parsing errors
         shape:
             Manual shape override when ``stop_before_pixels`` is true. Should not include a channel dimension
+        strict_interp:
+            If true, don't make any assumptions for trying to work around parsing errors
+        volume_handler:
+            Handler for processing 3D volumes
+        apply_window:
+            If ``True``, apply any window given in the DICOM file
+        as_uint8:
+            If ``True``, convert non-uint8 outputs to uint8 using min/max normalization
 
     Shape:
-        - Output: :math:`(1, H, W)` or :math:`(1, D, H, W)`
+        - Output: :math:`(C, H, W)` or :math:`(C, D, H, W)`
     """
     # some dicoms dont have any image data - raise NoImageError
     for necessary_field in ["Rows", "PhotometricInterpretation"]:
         if shape is None and not hasattr(dcm, necessary_field):
             raise NoImageError()
+    pm = PhotometricInterpretation.from_dicom(dcm)
 
+    C = pm.num_channels
     if shape is None:
         # If NumberOfFrames is 1 or not defined, we treat the DICOM image as a single channel 2D image (i.e. 1xHxW).
         # If NumberOfFrames is greater than 1, we treat the DICOM image as a single channel 3D image (i.e. 1xDxHxW).
         D, H, W = [int(v) for v in [dcm.get("NumberOfFrames", 1), dcm.Rows, dcm.Columns]]
-        dims = (1, D, H, W) if D > 1 else (1, H, W)
+        dims = (C, D, H, W) if D > 1 else (C, H, W)
     else:
-        dims = (1,) + shape
+        dims = (C,) + shape
 
-    assert dims[0] == 1, "channel dim == 1"
+    assert dims[0] in (1, 3), "channel dim == 1 or 3"
     assert 3 <= len(dims) <= 4, str(dims)
 
     # return random pixel data in correct shape when stop_before_pixels=True
@@ -198,9 +207,13 @@ def read_dicom_image(
     if len(dims) == 4:
         dcm = volume_handler(dcm)
         D: int = int(dcm.get("NumberOfFrames", 1))
-        dims = (1, D, *dims[-2:]) if D > 1 else (1, *dims[-2:])
+        dims = (C, D, *dims[-2:]) if D > 1 else (C, *dims[-2:])
 
-    pixels = dcm_to_pixels(dcm, dims, strict_interp)
+    # DICOM is channels last, so permute dims
+    channels_last_dims = *dims[1:], dims[0]
+    pixels = dcm_to_pixels(dcm, channels_last_dims, strict_interp)
+    pixels = np.moveaxis(pixels, -1, 0)
+    assert tuple(pixels.shape) == dims
 
     # some dicoms have different endianness - convert to native byte order
     if not is_native_byteorder(pixels):
@@ -217,8 +230,15 @@ def read_dicom_image(
 
     # in some dicoms, pixel value of 0 indicates white
     # NOTE: apply inversion after window level
-    if is_inverted(dcm.PhotometricInterpretation):
+    if pm.is_inverted:
         pixels = invert_color(pixels)
+
+    # convert to uint8 if requested
+    if as_uint8 and pixels.dtype != np.uint8:
+        max, min = pixels.max(), pixels.min()
+        delta = (max - min).clip(min=1)
+        pixels = (pixels - min) / delta
+        pixels = (pixels * 255).astype(np.uint8)
 
     return pixels
 
