@@ -260,6 +260,14 @@ class PhotometricInterpretation(Enum):
     def is_monochrome(self) -> bool:
         return 1 <= self.value <= 2
 
+    @property
+    def num_channels(self) -> int:
+        return 1 if self.is_monochrome else 3
+
+    @property
+    def is_inverted(self) -> bool:
+        return self == PhotometricInterpretation.MONOCHROME1
+
     @classmethod
     def from_str(cls, string: str) -> "PhotometricInterpretation":
         string = string.upper()

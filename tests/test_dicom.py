@@ -10,7 +10,7 @@ import pytest
 from pydicom import DataElement
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
-from dicom_utils.dicom import data_handlers, default_data_handlers
+from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted
 from dicom_utils.types import WINDOW_CENTER, WINDOW_WIDTH, Window
 
 
@@ -150,3 +150,24 @@ class TestReadDicomImage:
         decode_time = time_decode()
 
         assert decode_time < default_decode_time, f"{decode_time} is not less than {default_decode_time}"
+
+    def test_as_uint8(self, dicom_object):
+        array = read_dicom_image(dicom_object, as_uint8=True)
+        assert isinstance(array, np.ndarray)
+        assert array.dtype == np.uint8
+        assert array.min() == 0
+        assert array.max() == 255
+
+    def test_read_rgb(self, dicom_object):
+        test_file = pydicom.data.get_testdata_file("SC_rgb_rle.dcm")  # type: ignore
+        dicom_object = pydicom.dcmread(test_file)
+        array = read_dicom_image(dicom_object)
+        assert isinstance(array, np.ndarray)
+        assert array.shape[0] == 3
+        assert array.shape[-2:] == (100, 100)
+        assert array.dtype == np.uint8
+
+
+def test_deprecated_is_inverted(dicom_object):
+    with pytest.warns(DeprecationWarning):
+        assert not is_inverted(dicom_object.PhotometricInterpretation)
