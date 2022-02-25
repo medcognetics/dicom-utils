@@ -10,7 +10,7 @@ import pytest
 from pydicom import DataElement
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
-from dicom_utils.dicom import data_handlers, default_data_handlers
+from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted
 from dicom_utils.types import WINDOW_CENTER, WINDOW_WIDTH, Window
 
 
@@ -166,3 +166,8 @@ class TestReadDicomImage:
         assert array.shape[0] == 3
         assert array.shape[-2:] == (100, 100)
         assert array.dtype == np.uint8
+
+
+def test_deprecated_is_inverted(dicom_object):
+    with pytest.warns(DeprecationWarning):
+        assert not is_inverted(dicom_object.PhotometricInterpretation)

@@ -3,6 +3,7 @@
 import sys
 from pathlib import Path
 from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
+from warnings import warn
 
 import numpy as np
 import pydicom
@@ -55,13 +56,11 @@ def is_native_byteorder(arr: ndarray) -> bool:
 
 def is_inverted(photo_interp: str) -> bool:
     """Checks if pixel value 0 corresponds to white. See DICOM specification for more details."""
-    if photo_interp == "MONOCHROME1":
-        return True
-    elif photo_interp != "MONOCHROME2":
-        # I don't think we need to handle any interpretations besides MONOCHROME1
-        # and MONOCHROME2 in the case of mammograms.
-        raise Exception(f"Unexpected photometric interpretation '{photo_interp}'")
-    return False
+    warn(
+        "is_inverted is deprecated. Please use PhotometricInterpretation.is_inverted",
+        DeprecationWarning,
+    )
+    return PhotometricInterpretation.from_str(photo_interp).is_inverted
 
 
 def invert_color(img: ndarray) -> ndarray:
