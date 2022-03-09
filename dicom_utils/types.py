@@ -53,6 +53,17 @@ class SimpleImageType(Enum):
         else:
             raise RuntimeError("unknown ImageType value")
 
+    @classmethod
+    def from_str(cls, s: str) -> "SimpleImageType":
+        if "tomo" in s:
+            return cls.TOMO
+        elif "view" in s or "synth" in s:
+            return cls.SVIEW
+        elif "2d" in s or "ffdm" in s:
+            return cls.NORMAL
+        else:
+            return cls.UNKNOWN
+
 
 @dataclass(frozen=True)
 class ImageType:

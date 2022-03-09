@@ -157,6 +157,26 @@ class TestImageType:
         assert simple_img_type == expected
 
 
+class TestSimpleImageType:
+    @pytest.mark.parametrize(
+        "input_str, expected",
+        [
+            ("ffdm", SimpleImageType.NORMAL),
+            ("2d", SimpleImageType.NORMAL),
+            ("synth", SimpleImageType.SVIEW),
+            ("s view", SimpleImageType.SVIEW),
+            ("s-view", SimpleImageType.SVIEW),
+            ("c-view", SimpleImageType.SVIEW),
+            ("", SimpleImageType.UNKNOWN),
+            ("unknown", SimpleImageType.UNKNOWN),
+            ("tomo", SimpleImageType.TOMO),
+            ("tomosynthesis", SimpleImageType.TOMO),
+        ],
+    )
+    def test_from_str(self, input_str, expected):
+        assert expected == SimpleImageType.from_str(input_str)
+
+
 class TestWindow:
     @pytest.mark.parametrize(
         "center,width",
