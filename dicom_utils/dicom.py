@@ -200,7 +200,7 @@ def read_dicom_image(
 
     # return random pixel data in correct shape when stop_before_pixels=True
     if stop_before_pixels:
-        return np.random.randint(0, 2 ** 10, dims)
+        return np.random.randint(0, 2**10, dims)
 
     # apply volume handling for 3D data
     if len(dims) == 4:
