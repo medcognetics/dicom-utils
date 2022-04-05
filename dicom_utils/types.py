@@ -363,8 +363,8 @@ class Laterality(EnumMixin):
                     .get(Tag.FrameLaterality)
                     .value
                 )
-            except Exception as ex:
-                print(ex)
+            except Exception:
+                pass
 
         if isinstance(laterality, str):
             laterality = laterality.strip().lower()
