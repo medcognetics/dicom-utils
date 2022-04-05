@@ -1,11 +1,11 @@
-.PHONY: clean clean-venv check quality style tag-version test venv upload upload-test
+.PHONY: clean clean-env check quality style tag-version test env upload upload-test
 
 PROJECT=dicom_utils
-PY_VER=python3.8
+PY_VER=python3.10
 PY_VER_SHORT=py$(shell echo $(PY_VER) | sed 's/[^0-9]*//g')
 QUALITY_DIRS=$(PROJECT) tests setup.py tag_enum.py
 CLEAN_DIRS=$(PROJECT) tests
-VENV=$(shell pwd)/venv
+VENV=$(shell pwd)/env
 PYTHON=$(VENV)/bin/python
 
 LINE_LEN=120
@@ -31,14 +31,14 @@ clean: ## remove cache files
 	find $(CLEAN_DIRS) -name '*.pyc' -type f -delete
 	find $(CLEAN_DIRS) -name '*,cover' -type f -delete
 
-clean-venv: ## remove the virtual environment directory
+clean-env: ## remove the virtual environment directory
 	rm -rf $(VENV)
 
 init: ## pulls submodules and initializes virtual environment
 	git submodule update --init --recursive
 	$(MAKE) $(VENV)/bin/activate
 
-package: venv
+package: env
 	rm -rf dist
 	$(PYTHON) -m pip install --upgrade setuptools wheel
 	export $(PROJECT)_BUILD_VERSION=$(VERSION) && $(PYTHON) setup.py sdist bdist_wheel
@@ -101,7 +101,7 @@ upload-test: package
 	$(PYTHON) -m pip install --upgrade twine
 	$(PYTHON) -m twine upload --repository testpypi dist/*
 
-venv: $(VENV)/bin/activate ## create a virtual environment for the project
+env: $(VENV)/bin/activate ## create a virtual environment for the project
 
 $(VENV)/bin/activate: setup.py requirements.txt
 	test -d $(VENV) || $(PY_VER) -m venv $(VENV)
@@ -121,7 +121,7 @@ help: ## display this help message
 
 reset:
 	$(MAKE) clean
-	$(MAKE) clean-venv
+	$(MAKE) clean-env
 	$(MAKE) init
 	$(MAKE) $(VENV)/bin/activate-test
 	$(MAKE) check
