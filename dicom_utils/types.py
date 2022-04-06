@@ -330,11 +330,11 @@ class Laterality(EnumMixin):
 
     @staticmethod
     def get_required_tags() -> List[Tag]:
-        return [Tag.ImageLaterality, Tag.FrameLaterality, Tag.SharedFunctionalGroupsSequence]
+        return [Tag.Laterality, Tag.ImageLaterality, Tag.FrameLaterality, Tag.SharedFunctionalGroupsSequence]
 
     @classmethod
     def from_str(cls, string: str) -> "Laterality":
-        string = string.lower()
+        string = string.strip().lower()
         if string == "none":
             return cls.NONE
         if "bi" in string:  # TODO what other patterns describe bilateral?
@@ -351,10 +351,13 @@ class Laterality(EnumMixin):
         tags = {k: v for k, v in tags.items() if k in cls.get_required_tags()}
 
         # first try reading ImageLaterality
-        laterality = tags.get(Tag.ImageLaterality, None)
+        laterality = tags.get(Tag.ImageLaterality, "")
+
+        # next try reading Laterality
+        laterality = laterality or tags.get(Tag.Laterality, "")
 
         # fall back to Tag.FrameLaterality
-        if laterality is None:
+        if not laterality:
             try:
                 laterality = (
                     tags.get(Tag.SharedFunctionalGroupsSequence)[0]
@@ -366,14 +369,14 @@ class Laterality(EnumMixin):
             except Exception:
                 pass
 
-        if isinstance(laterality, str):
-            laterality = laterality.strip().lower()
-            if laterality == "l":
-                return cls.LEFT
-            if laterality == "r":
-                return cls.RIGHT
         # TODO is there a DICOM value for bilateral?
-        return cls.UNKNOWN
+        laterality = laterality.strip().lower() if laterality else ""
+        if laterality == "l":
+            return cls.LEFT
+        elif laterality == "r":
+            return cls.RIGHT
+        else:
+            return cls.UNKNOWN
 
     @classmethod
     def from_dicom(cls, dcm: Dicom) -> "Laterality":
@@ -400,6 +403,11 @@ class Laterality(EnumMixin):
         return ""
 
 
+CC_STRINGS: Final = {"cranio-caudal", "caudal-cranial"}
+ML_STRINGS: Final = {"medio-lateral", "latero-medial", "lateral-medial", "medial-lateral"}
+MLO_STRINGS: Final = {pattern for s in ML_STRINGS for pattern in (f"{s} oblique", f"oblique {s}")}
+
+
 class ViewPosition(EnumMixin):
     UNKNOWN = UNKNOWN
 
@@ -412,13 +420,19 @@ class ViewPosition(EnumMixin):
         return [Tag.ViewPosition, Tag.ViewCodeSequence]
 
     @classmethod
-    def from_str(cls, string: str) -> "ViewPosition":
-        string = string.lower()
-        if "cc" in string:
+    def from_str(cls, string: str, strict: bool = False) -> "ViewPosition":
+        string = string.strip().lower()
+        if string in CC_STRINGS:
             return cls.CC
-        if "mlo" in string:
+        elif string in MLO_STRINGS:
             return cls.MLO
-        if "ml" in string:
+        elif string in ML_STRINGS:
+            return cls.ML
+        elif not strict and "cc" in string:
+            return cls.CC
+        elif not strict and "mlo" in string:
+            return cls.MLO
+        elif not strict and "ml" in string:
             return cls.ML
         return cls.UNKNOWN
 
@@ -450,13 +464,7 @@ class ViewPosition(EnumMixin):
         for view_code in view_code_sequence or []:
             meaning = view_code.get("CodeMeaning", None)
             if isinstance(meaning, str):
-                meaning = meaning.strip().lower()
-                if meaning == "cranio-caudal":
-                    return cls.CC
-                elif meaning == "medio-lateral oblique":
-                    return cls.MLO
-                elif meaning == "medio-lateral":
-                    return cls.ML
+                return cls.from_str(meaning, strict=True)
         return cls.UNKNOWN
 
     @classmethod

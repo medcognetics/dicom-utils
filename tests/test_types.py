@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 from copy import deepcopy
-from typing import Any, Dict, Iterable
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, cast
 
 import numpy as np
 import pytest
@@ -19,6 +20,11 @@ from dicom_utils.types import (
     ViewPosition,
     Window,
 )
+
+
+@dataclass
+class DummyElement:
+    value: Any
 
 
 def get_simple_image_type_test_cases():
@@ -356,15 +362,33 @@ class TestLaterality:
         assert orient == expected
 
     @pytest.mark.parametrize(
-        "val,expected",
+        "laterality,image_laterality,frame_laterality,expected",
         [
-            ("L", Laterality.LEFT),
-            ("R", Laterality.RIGHT),
-            (None, Laterality.UNKNOWN),
+            ("L", None, None, Laterality.LEFT),
+            (None, "L", None, Laterality.LEFT),
+            (None, None, "L", Laterality.LEFT),
+            ("L", "L", "L", Laterality.LEFT),
+            ("R", None, None, Laterality.RIGHT),
+            (None, "R", None, Laterality.RIGHT),
+            (None, None, "R", Laterality.RIGHT),
+            ("R", "R", "R", Laterality.RIGHT),
+            (None, None, None, Laterality.UNKNOWN),
+            ("", "", "", Laterality.UNKNOWN),
         ],
     )
-    def test_from_tags(self, val, expected):
-        tags = {0x00200062: val} if val is not None else {}
+    def test_from_tags(self, laterality, image_laterality, frame_laterality, expected):
+        if frame_laterality:
+            sfgs = [{Tag.FrameAnatomySequence: DummyElement([{Tag.FrameLaterality: DummyElement(frame_laterality)}])}]
+        else:
+            sfgs = None
+
+        tags: Dict[int, Any] = {
+            Tag.Laterality: laterality,
+            Tag.ImageLaterality: image_laterality,
+            Tag.SharedFunctionalGroupsSequence: sfgs,
+        }
+        tags = {k: v for k, v in tags.items() if v is not None}
+
         for k in tags:
             assert k in Laterality.get_required_tags()
         orient = Laterality.from_tags(tags)
@@ -410,6 +434,21 @@ class TestViewPosition:
             ("MLOE", ViewPosition.MLO),
             ("RML", ViewPosition.ML),
             ("LML", ViewPosition.ML),
+            ("medio-lateral", ViewPosition.ML),
+            ("medial-lateral", ViewPosition.ML),
+            ("latero-medial", ViewPosition.ML),
+            ("lateral-medial", ViewPosition.ML),
+            ("cranio-caudal", ViewPosition.CC),
+            ("caudal-cranial", ViewPosition.CC),
+            ("medio-lateral oblique", ViewPosition.MLO),
+            ("medial-lateral oblique", ViewPosition.MLO),
+            ("latero-medial oblique", ViewPosition.MLO),
+            ("lateral-medial oblique", ViewPosition.MLO),
+            ("oblique medio-lateral", ViewPosition.MLO),
+            ("oblique medial-lateral", ViewPosition.MLO),
+            ("oblique latero-medial", ViewPosition.MLO),
+            ("oblique lateral-medial", ViewPosition.MLO),
+            ("???", ViewPosition.UNKNOWN),
             ("foo", ViewPosition.UNKNOWN),
             ("", ViewPosition.UNKNOWN),
         ],
@@ -432,6 +471,38 @@ class TestViewPosition:
         for k in tags:
             assert k in ViewPosition.get_required_tags()
         orient = ViewPosition.from_tags(tags)
+        assert orient == expected
+
+    @pytest.mark.parametrize(
+        "val,expected",
+        [
+            ("medio-lateral", ViewPosition.ML),
+            ("medial-lateral", ViewPosition.ML),
+            ("latero-medial", ViewPosition.ML),
+            ("lateral-medial", ViewPosition.ML),
+            ("cranio-caudal", ViewPosition.CC),
+            ("caudal-cranial", ViewPosition.CC),
+            ("medio-lateral oblique", ViewPosition.MLO),
+            ("medial-lateral oblique", ViewPosition.MLO),
+            ("latero-medial oblique", ViewPosition.MLO),
+            ("lateral-medial oblique", ViewPosition.MLO),
+            ("oblique medio-lateral", ViewPosition.MLO),
+            ("oblique medial-lateral", ViewPosition.MLO),
+            ("oblique latero-medial", ViewPosition.MLO),
+            ("oblique lateral-medial", ViewPosition.MLO),
+            ("???", ViewPosition.UNKNOWN),
+            ("", ViewPosition.UNKNOWN),
+            (None, ViewPosition.UNKNOWN),
+        ],
+    )
+    def test_from_view_code_sequence_tag(self, val, expected):
+        view_code_sequence = [
+            {
+                "CodeMeaning": val,
+            }
+        ]
+        assert Tag.ViewCodeSequence in ViewPosition.get_required_tags()
+        orient = ViewPosition.from_view_code_sequence_tag(cast(DataElement, view_code_sequence))
         assert orient == expected
 
     def test_bool(self):
