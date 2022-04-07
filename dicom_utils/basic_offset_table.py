@@ -80,7 +80,7 @@ class BasicOffsetTable:
         self.fp.is_little_endian = True
 
         if not self.is_present(self.fp):
-            raise ValueError("A BOT was not present")
+            raise ValueError("A basic offset table was not present")
 
         # trim the input stream to just the BOT
         size = self.total_length

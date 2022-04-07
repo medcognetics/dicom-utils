@@ -10,7 +10,7 @@ import pydicom
 from numpy import ndarray
 from pydicom.uid import UID
 
-from .bot import BasicOffsetTable
+from .basic_offset_table import BasicOffsetTable
 from .logging import logger
 from .types import Dicom, PhotometricInterpretation, Window
 from .volume import KeepVolume, VolumeHandler

@@ -4,7 +4,7 @@
 import pytest
 from pydicom.filebase import DicomBytesIO
 
-from dicom_utils.bot import BYTES_PER_LONG, LENGTH, BasicOffsetTable
+from dicom_utils.basic_offset_table import BYTES_PER_LONG, LENGTH, BasicOffsetTable
 from dicom_utils.dicom import Dicom
 
 
