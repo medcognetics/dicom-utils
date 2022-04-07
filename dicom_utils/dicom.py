@@ -10,6 +10,7 @@ import pydicom
 from numpy import ndarray
 from pydicom.uid import UID
 
+from .bot import BasicOffsetTable
 from .logging import logger
 from .types import Dicom, PhotometricInterpretation, Window
 from .volume import KeepVolume, VolumeHandler
@@ -73,6 +74,12 @@ def has_dicm_prefix(filename: Union[str, Path]) -> bool:
     with open(filename, "rb") as f:
         f.seek(128)
         return f.read(4) == b"DICM"
+
+
+def is_compressed(dcm: Dicom) -> bool:
+    r"""Checks if a DICOM is using a compressed transfer syntax"""
+    syntax = dcm.file_meta.TransferSyntaxUID
+    return syntax.is_compressed
 
 
 def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
@@ -201,6 +208,24 @@ def read_dicom_image(
     # return random pixel data in correct shape when stop_before_pixels=True
     if stop_before_pixels:
         return np.random.randint(0, 2**10, dims)
+
+    # validation of compressed data
+    if is_compressed(dcm) and (num_frames := dcm.get("NumberOfFrames", 1)) > 1:
+        if BasicOffsetTable.is_present(dcm):
+            bot = BasicOffsetTable.from_stream(dcm)
+            if not (bot.is_valid and bot.num_frames == num_frames):
+                if strict_interp:
+                    raise ValueError(
+                        "DICOM does not appear to have a valid basic offset table:\n"
+                        f"NumberOfFrames: {dcm.get('NumberOfFrames', 1)}\n"
+                        f"Offsets: {list(bot)}"
+                    )
+                else:
+                    # replace the invalid BOT with an empty one
+                    dcm.PixelData = BasicOffsetTable.remove_from(dcm)
+                    bot = BasicOffsetTable.default()
+                    dcm.PixelData = bot.prepend_to(dcm.PixelData)
+            assert bot.is_valid
 
     # apply volume handling for 3D data
     if len(dims) == 4:
