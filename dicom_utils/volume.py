@@ -68,6 +68,8 @@ class VolumeHandler(ABC):
         if is_compressed:
             frame_iterator: Iterator = generate_pixel_data_frame(dcm.PixelData, num_frames)
             frames = list(islice(frame_iterator, start, stop, stride))
+            if not all(frames):
+                raise IndexError("One or more compressed frames had no contents")
             new_pixel_data = encapsulate(frames)
         else:
             all_frames: np.ndarray = dcm.pixel_array
@@ -75,6 +77,9 @@ class VolumeHandler(ABC):
             new_pixel_data = frames.tobytes()
 
         out_frames = len(frames)
+        if not out_frames:
+            raise IndexError("No frames remain in the sliced DICOM")
+
         dcm.NumberOfFrames = out_frames
         dcm.PixelData = new_pixel_data
         return dcm
