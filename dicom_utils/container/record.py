@@ -15,18 +15,21 @@ from ..tags import Tag
 
 # Type checking fails when dataclass attr name matches a type alias.
 # Import types under a different alias
-from ..types import ImageType, Laterality
+from ..types import ImageType as IT
+from ..types import Laterality, MammogramType, ModalityError
 from ..types import PhotometricInterpretation as PI
-from ..types import SimpleImageType as SIT
 from ..types import ViewPosition
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
 
 
-tags: Final = [
+tags: Final = {
     Tag.SeriesInstanceUID,
     Tag.StudyInstanceUID,
     Tag.SOPInstanceUID,
+    Tag.SOPClassUID,
+    Tag.Modality,
+    Tag.BodyPartExamined,
     Tag.TransferSyntaxUID,
     Tag.Rows,
     Tag.Columns,
@@ -39,7 +42,8 @@ tags: Final = [
     Tag.PatientID,
     *Laterality.get_required_tags(),
     *ViewPosition.get_required_tags(),
-]
+    *MammogramType.get_required_tags(),
+}
 
 
 @dataclass(frozen=True)
@@ -55,11 +59,16 @@ class FileRecord:
 
     TransferSyntaxUID: Optional[TSUID]
 
+    SOPClassUID: Optional[SOPUID] = None
+    Modality: Optional[str] = None
+    BodyPartExamined: Optional[str] = None
+
     Rows: Optional[int] = None
     Columns: Optional[int] = None
     NumberOfFrames: Optional[int] = None
     PhotometricInterpretation: Optional[PI] = None
-    SimpleImageType: Optional[SIT] = None
+    ImageType: Optional[IT] = None
+    mammogram_type: Optional[MammogramType] = None
     ManufacturerModelName: Optional[str] = None
     SeriesDescription: Optional[str] = None
     view_position: ViewPosition = ViewPosition.UNKNOWN
@@ -83,6 +92,10 @@ class FileRecord:
         return self.is_image and ((self.NumberOfFrames or 1) > 1)
 
     @property
+    def is_mammogram(self) -> bool:
+        return self.Modality == "MG"
+
+    @property
     def file_size(self) -> int:
         return self.path.stat().st_size
 
@@ -95,7 +108,12 @@ class FileRecord:
             values = {tag.name: getattr(dcm, tag.name, None) for tag in tags}
             for key in ("Rows", "Columns", "NumberOfFrames"):
                 values[key] = int(values[key]) if values[key] else None
-            img_type = ImageType.from_dicom(dcm).to_simple_image_type()
+            values["ImageType"] = IT.from_dicom(dcm)
+            try:
+                mammogram_type = MammogramType.from_dicom(dcm)
+            except ModalityError:
+                mammogram_type = None
+
             values["TransferSyntaxUID"] = dcm.file_meta.get("TransferSyntaxUID", None)
             view_position = ViewPosition.from_dicom(dcm)
             laterality = Laterality.from_dicom(dcm)
@@ -105,7 +123,7 @@ class FileRecord:
 
         return cls(
             path,
-            SimpleImageType=img_type,
+            mammogram_type=mammogram_type,
             view_position=view_position,
             laterality=laterality,
             **values,

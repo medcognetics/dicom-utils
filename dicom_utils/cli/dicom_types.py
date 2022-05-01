@@ -9,7 +9,8 @@ from typing import List, Optional, Tuple
 import pydicom
 
 from ..dicom import has_dicm_prefix
-from ..types import ImageType
+from ..tags import Tag
+from ..types import ImageType, MammogramType, get_value
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -29,22 +30,16 @@ def check_file(path: Path, args: argparse.Namespace) -> Optional[Tuple[Path, int
         return
     num_frames = 1
     try:
-        tags = [0x00080008, "NumberOfFrames", 0x00081090]
-        with pydicom.dcmread(path, specific_tags=tags, stop_before_pixels=True) as dcm:
-            image_type = dcm.get(0x00080008, None)
-            if not image_type:
-                return
-            image_type = image_type.value
-            if isinstance(image_type, str):
-                image_type = [image_type]
+        tags = {Tag.ImageType, *MammogramType.get_required_tags()}
+        with pydicom.dcmread(path, specific_tags=list(tags), stop_before_pixels=True) as dcm:
             img_type = ImageType.from_dicom(dcm)
-            simple_image_type = img_type.to_simple_image_type()
-            num_frames = img_type.NumberOfFrames or 1
+            mammogram_type = MammogramType.from_dicom(dcm) if dcm.Modality == "MG" else None
+            num_frames = get_value(dcm, Tag.NumberOfFrames, 1)
     except AttributeError:
         return
 
     final_image_type: List[Optional[str]] = [None]
-    return path, num_frames, str(simple_image_type), img_type.simple_repr()
+    return path, num_frames, str(mammogram_type), img_type.simple_repr()
 
 
 def main(args: argparse.Namespace) -> None:

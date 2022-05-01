@@ -35,5 +35,5 @@ def test_dicom_types(dicom_folder, capsys, tmp_path):
     ]
     runpy.run_module("dicom_utils.cli.dicom_types", run_name="__main__", alter_sys=True)
     captured = capsys.readouterr()
-    assert "1 - 2d - ORIGINAL|PRIMARY|AXIAL" in captured.out
+    assert "1 - None - ORIGINAL|PRIMARY|AXIAL" in captured.out
     assert len(captured.out.split("\n")) == 2

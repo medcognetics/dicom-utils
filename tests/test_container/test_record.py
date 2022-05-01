@@ -10,7 +10,7 @@ import pydicom
 import pytest
 
 from dicom_utils.container import FileRecord, RecordCollection, record_iterator
-from dicom_utils.types import Laterality, SimpleImageType, ViewPosition
+from dicom_utils.types import Laterality, ViewPosition
 
 
 class TestFileRecord:
@@ -21,12 +21,13 @@ class TestFileRecord:
         assert rec.StudyInstanceUID == dcm.StudyInstanceUID
         assert rec.SeriesInstanceUID == dcm.SeriesInstanceUID
         assert rec.SOPInstanceUID == dcm.SOPInstanceUID
+        assert rec.SOPClassUID == dcm.SOPClassUID
         assert rec.TransferSyntaxUID == dcm.file_meta.TransferSyntaxUID
         assert rec.Rows == dcm.Rows
         assert rec.Columns == dcm.Columns
         assert rec.NumberOfFrames == dcm.get("NumberOfFrames", None)
         assert rec.PhotometricInterpretation == dcm.PhotometricInterpretation
-        assert rec.SimpleImageType == SimpleImageType.NORMAL
+        assert rec.mammogram_type is None
         assert rec.ManufacturerModelName == dcm.ManufacturerModelName
         assert rec.SeriesDescription == dcm.get("SeriesDescription", None)
         assert rec.PatientName == dcm.get("PatientName", None)

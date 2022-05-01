@@ -22,21 +22,97 @@ Dicom = Dataset
 DicomAttributeSequence = Sequence
 
 
+class ModalityError(Exception):
+    pass
+
+
+def get_value(dcm: Dicom, tag: Tag, default: Any) -> Any:
+    return dcm.get(tag).value if tag in dcm else default
+
+
 def get_tag_values(tags: Iterable[Tag], dcm: Dicom) -> Dict[Tag, Any]:
-    tags = {tag: dcm[tag].value if tag in dcm else None for tag in tags}
+    tags = {tag: get_value(dcm, tag, None) for tag in tags}
     return tags
 
 
-class SimpleImageType(Enum):
-    UNKNOWN = 0
-    NORMAL = 1
-    SVIEW = 2
-    TOMO = 3
+T = TypeVar("T")
+
+
+class EnumMixin(Enum):
+    def __bool__(self) -> bool:
+        return not self.is_unknown
+
+    def __repr__(self) -> str:
+        name = self.simple_name
+        return f"{self.__class__.__name__}({name})"
+
+    def __add__(self: T, other: T) -> T:
+        return self or other
+
+    def __mul__(self: T, other: T) -> T:
+        return self or other
+
+    @property
+    def is_unknown(self) -> bool:
+        return self.value == UNKNOWN
+
+    @property
+    def simple_name(self) -> str:
+        return self.name.lower().replace("_", " ")
 
     @staticmethod
-    def from_dicom(dcm: Dicom) -> "SimpleImageType":
+    def get_required_tags() -> List[Tag]:
+        raise NotImplementedError("get_required_tags() has not been implemented for this class")
+
+
+class MammogramType(EnumMixin):
+    r"""Enum over the subcategories of mammograms"""
+    UNKNOWN = 0
+    FFDM = 1
+    SFM = 2
+    SVIEW = 3
+    TOMO = 4
+
+    @staticmethod
+    def get_required_tags() -> List[Tag]:
+        return [Tag.ImageType, Tag.Modality, Tag.NumberOfFrames, Tag.SeriesDescription]
+
+    @staticmethod
+    def from_dicom(dcm: Dicom) -> "MammogramType":
+        if (modality := get_value(dcm, Tag.Modality, None)) not in (None, "MG"):
+            raise ModalityError(f"Expected modality=MG, found {modality}")
+
+        # if DICOM is a 3D volume, it must be tomo
+        if dcm.NumberOfFrames > 1:
+            return MammogramType.TOMO
+
         img_type = ImageType.from_dicom(dcm)
-        return img_type.to_simple_image_type()
+        pixels = img_type.pixels.lower()
+        exam = img_type.exam.lower()
+        flavor = (img_type.flavor or "").lower()
+        extras = img_type.extras
+        machine = get_value(dcm, Tag.ManufacturerModelName, "").lower()
+        series_description = get_value(dcm, Tag.SeriesDescription, "").lower()
+
+        # if fields 1 and 2 were missing, we know nothing
+        if not img_type.pixels and img_type.exam:
+            return MammogramType.UNKNOWN
+
+        # very solid rules
+        if series_description and ("s-view" in series_description or "c-view" in series_description):
+            return MammogramType.SVIEW
+        if "original" in pixels:
+            return MammogramType.FFDM
+
+        # ok rules
+        if extras is not None and any("generated_2d" in x.lower() for x in extras):
+            return MammogramType.SVIEW
+
+        # not good rules
+        if pixels == "derived" and exam == "primary" and machine == "fdr-3000aws" and flavor != "post_contrast":
+            return MammogramType.SVIEW
+
+        return MammogramType.FFDM
 
     def __str__(self) -> str:
         return repr(self)
@@ -44,8 +120,10 @@ class SimpleImageType(Enum):
     def __repr__(self) -> str:
         if self is self.UNKNOWN:
             return "unknown"
-        elif self is self.NORMAL:
-            return "2d"
+        elif self is self.FFDM:
+            return "ffdm"
+        elif self is self.SFM:
+            return "sfm"
         elif self is self.SVIEW:
             return "s-view"
         elif self is self.TOMO:
@@ -54,13 +132,15 @@ class SimpleImageType(Enum):
             raise RuntimeError("unknown ImageType value")
 
     @classmethod
-    def from_str(cls, s: str) -> "SimpleImageType":
+    def from_str(cls, s: str) -> "MammogramType":
         if "tomo" in s:
             return cls.TOMO
         elif "view" in s or "synth" in s:
             return cls.SVIEW
         elif "2d" in s or "ffdm" in s:
-            return cls.NORMAL
+            return cls.FFDM
+        elif "sfm" in s:
+            return cls.SFM
         else:
             return cls.UNKNOWN
 
@@ -75,26 +155,15 @@ class ImageType:
         * ``"exam"`` - Second element of the IMAGE_TYPE field.
         * ``"flavor"`` - Third element of the IMAGE_TYPE field.
         * ``"extras"`` - Additional IMAGE_TYPE fields if available
-        * ``"NumberOfFrames"`` - Frame count (for TOMO images only)
-        * ``"model"`` - Manufacturer's model name
-        * ``"series_description"``
     """
 
     pixels: str
     exam: str
     flavor: Optional[str] = None
     extras: Optional[List[str]] = None
-    NumberOfFrames: Optional[int] = None
-    model: Optional[str] = None
-    series_description: Optional[str] = None
 
     def __bool__(self) -> bool:
         return bool(self.pixels) and bool(self.exam)
-
-    def __post_init__(self):
-        if (nf := self.NumberOfFrames) is not None and not isinstance(nf, int):
-            object.__setattr__(self, "NumberOfFrames", int(nf))
-        assert self.NumberOfFrames is None or self.NumberOfFrames > 0
 
     def simple_repr(self) -> str:
         s = "|".join(x for x in (self.pixels, self.exam))
@@ -109,9 +178,6 @@ class ImageType:
     @classmethod
     def from_dicom(cls, dcm: Dicom) -> "ImageType":
         result: Dict[str, Any] = {}
-        result["NumberOfFrames"] = dcm.get("NumberOfFrames", None)
-        result["model"] = dcm.get("ManufacturerModelName", None)
-        result["series_description"] = dcm.get("SeriesDescription", None)
 
         if IMAGE_TYPE not in dcm.keys():
             return cls("", "", **result)
@@ -133,42 +199,6 @@ class ImageType:
         assert "pixels" in result.keys()
         assert "exam" in result.keys()
         return cls(**result)
-
-    def to_simple_image_type(self) -> SimpleImageType:
-        r"""Converts the :class:`ImageType` container into a :class:`SimpleImageType`.
-
-        .. warning:
-            This method may be unreliable in its detection of S-View images
-        """
-        # if fields 1 and 2 were missing, we know nothing
-        if not self.pixels and self.exam:
-            return SimpleImageType.UNKNOWN
-
-        pixels = self.pixels.lower()
-        exam = self.exam.lower()
-        flavor = (self.flavor or "").lower()
-        extras = self.extras
-        num_frames = self.NumberOfFrames or 1
-        machine = (self.model or "").lower()
-        series_description = (self.series_description or "").lower()
-
-        # very solid rules
-        if num_frames > 1:
-            return SimpleImageType.TOMO
-        if series_description and ("s-view" in series_description or "c-view" in series_description):
-            return SimpleImageType.SVIEW
-        if "original" in pixels:
-            return SimpleImageType.NORMAL
-
-        # ok rules
-        if extras is not None and any("generated_2d" in x.lower() for x in extras):
-            return SimpleImageType.SVIEW
-
-        # not good rules
-        if pixels == "derived" and exam == "primary" and machine == "fdr-3000aws" and flavor != "post_contrast":
-            return SimpleImageType.SVIEW
-
-        return SimpleImageType.NORMAL
 
 
 @dataclass
@@ -288,36 +318,6 @@ class PhotometricInterpretation(Enum):
     def from_dicom(cls, dcm: Dicom) -> "PhotometricInterpretation":
         val = dcm.get(Tag.PhotometricInterpretation, None)
         return PhotometricInterpretation.UNKNOWN if val is None else cls.from_str(val.value)
-
-
-T = TypeVar("T")
-
-
-class EnumMixin(Enum):
-    def __bool__(self) -> bool:
-        return not self.is_unknown
-
-    def __repr__(self) -> str:
-        name = self.simple_name
-        return f"{self.__class__.__name__}({name})"
-
-    def __add__(self: T, other: T) -> T:
-        return self or other
-
-    def __mul__(self: T, other: T) -> T:
-        return self or other
-
-    @property
-    def is_unknown(self) -> bool:
-        return self.value == UNKNOWN
-
-    @property
-    def simple_name(self) -> str:
-        return self.name.lower().replace("_", " ")
-
-    @staticmethod
-    def get_required_tags() -> List[Tag]:
-        raise NotImplementedError("get_required_tags() has not been implemented for this class")
 
 
 class Laterality(EnumMixin):
