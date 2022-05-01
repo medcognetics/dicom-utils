@@ -83,7 +83,7 @@ class MammogramType(EnumMixin):
             raise ModalityError(f"Expected modality=MG, found {modality}")
 
         # if DICOM is a 3D volume, it must be tomo
-        if dcm.NumberOfFrames > 1:
+        if dcm.get("NumberOfFrames", 1) > 1:
             return MammogramType.TOMO
 
         img_type = ImageType.from_dicom(dcm)
