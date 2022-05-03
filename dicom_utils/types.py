@@ -98,8 +98,8 @@ class MammogramType(EnumMixin):
         return [Tag.ImageType, Tag.Modality, Tag.NumberOfFrames, Tag.SeriesDescription]
 
     @staticmethod
-    def from_dicom(dcm: Dicom, is_sfm: bool = False) -> "MammogramType":
-        if (modality := get_value(dcm, Tag.Modality, None)) not in (None, "MG"):
+    def from_dicom(dcm: Dicom, is_sfm: bool = False, ignore_modality: bool = False) -> "MammogramType":
+        if (modality := get_value(dcm, Tag.Modality, None)) not in (None, "MG") and not ignore_modality:
             raise ModalityError(f"Expected modality=MG, found {modality}")
 
         # if DICOM is a 3D volume, it must be tomo

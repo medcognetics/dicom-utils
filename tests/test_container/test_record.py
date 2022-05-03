@@ -47,6 +47,11 @@ class TestFileRecord:
         assert rec.laterality == Laterality.UNKNOWN
         assert rec.view_position == ViewPosition.UNKNOWN
 
+    @pytest.mark.parametrize("modality", ["CT", "MG", "US"])
+    def test_modality_override(self, dicom_file, modality):
+        rec = FileRecord.create(Path(dicom_file), modality=modality)
+        assert rec.Modality == modality
+
     @pytest.fixture
     def record(self, dicom_file):
         record = FileRecord.create(Path(dicom_file))

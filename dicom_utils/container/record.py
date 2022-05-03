@@ -286,7 +286,7 @@ class FileRecord:
         return Path(pattern).with_suffix(".dcm")
 
     @classmethod
-    def create(cls, path: PathLike, is_sfm: bool = False) -> "FileRecord":
+    def create(cls, path: PathLike, is_sfm: bool = False, modality: Optional[str] = None) -> "FileRecord":
         r"""Creates a :class:`FileRecord` from a DICOM file.
 
         Args:
@@ -302,6 +302,8 @@ class FileRecord:
 
         with cls.read(path) as dcm:
             values = {tag.name: getattr(dcm, tag.name, None) for tag in tags}
+            if modality is not None:
+                values["Modality"] = modality
 
             # overrides for tags that require additional parsing
             for key in ("Rows", "Columns", "NumberOfFrames"):
@@ -311,7 +313,10 @@ class FileRecord:
 
             # attributes that don't correspond directly to a DICOM tag
             try:
-                mammogram_type = MammogramType.from_dicom(dcm, is_sfm=is_sfm)
+                # some mammograms have a modality other than MG.
+                # ignore that error in MammogramType.from_dicom only if "MG" modality override was provided
+                ignore_modality = modality == "MG"
+                mammogram_type = MammogramType.from_dicom(dcm, is_sfm=is_sfm, ignore_modality=ignore_modality)
             except ModalityError:
                 mammogram_type = None
             view_position = ViewPosition.from_dicom(dcm)
