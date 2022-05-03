@@ -37,21 +37,21 @@ def get_tag_values(tags: Iterable[Tag], dcm: Dicom) -> Dict[Tag, Any]:
 
 
 # TODO: these would be better in dicom.py, but circular import issues
-def view_code_iterator(dcm: Dataset) -> Iterator[Dataset]:
+def iterate_view_codes(dcm: Dataset) -> Iterator[Dataset]:
     r"""Iterates over all view codes in an input."""
     view_code_sequence = (get_value(dcm, Tag.ViewCodeSequence, []) or []) if isinstance(dcm, Dataset) else dcm
     for view_code in view_code_sequence:
         yield view_code
 
 
-def view_modifier_code_iterator(dcm: Dataset) -> Iterator[Dataset]:
+def iterate_view_modifier_codes(dcm: Dataset) -> Iterator[Dataset]:
     r"""Iterates over all view modifier codes in an input."""
     # view modifier code can be at top level of dicom, or nested in view codes
     modifier_sequence = (get_value(dcm, Tag.ViewModifierCodeSequence, []) or []) if isinstance(dcm, Dataset) else dcm
     for modifier in modifier_sequence:
         yield modifier
-    for view_code in view_code_iterator(dcm):
-        for modifier in view_modifier_code_iterator(view_code):
+    for view_code in iterate_view_codes(dcm):
+        for modifier in iterate_view_modifier_codes(view_code):
             yield modifier
 
 

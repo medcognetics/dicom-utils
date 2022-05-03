@@ -509,7 +509,3 @@ class TestViewPosition:
         # trivial test since this wraps from_tags
         x = ViewPosition.from_dicom(dicom_object)
         assert x == ViewPosition.UNKNOWN
-
-
-# def test_view_code_iterator(dicom_object):
-#    assert False

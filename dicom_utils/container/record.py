@@ -22,7 +22,7 @@ from ..tags import Tag
 from ..types import ImageType as IT
 from ..types import Laterality, MammogramType, ModalityError
 from ..types import PhotometricInterpretation as PI
-from ..types import ViewPosition, get_value, view_modifier_code_iterator
+from ..types import ViewPosition, get_value, iterate_view_modifier_codes
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
 
@@ -235,10 +235,10 @@ class FileRecord:
     def view_modifier_codes(self) -> Iterator[Dataset]:
         r"""Returns an iterator over all view modifier codes"""
         if self.ViewCodeSequence is not None:
-            for modifier in view_modifier_code_iterator(self.ViewCodeSequence):
+            for modifier in iterate_view_modifier_codes(self.ViewCodeSequence):
                 yield modifier
         if self.ViewModifierCodeSequence is not None:
-            for modifier in view_modifier_code_iterator(self.ViewModifierCodeSequence):
+            for modifier in iterate_view_modifier_codes(self.ViewModifierCodeSequence):
                 yield modifier
 
     def standardized_filename(self, file_id: Optional[str] = None) -> Path:

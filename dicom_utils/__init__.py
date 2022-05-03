@@ -40,7 +40,7 @@ def filter_spam_warnings(patterns: Iterable[str] = SPAM_WARNING_PATTERNS, action
 
 
 SILENCE_ENV_VAR: Final = "SILENCE_PYDICOM_SPAM"
-if os.environ.get("SILENCE_PYDICOM_SPAM", "") == "1":
+if os.environ.get(SILENCE_ENV_VAR, "") == "1":
     filter_spam_warnings()
 
 
