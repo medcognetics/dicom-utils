@@ -15,8 +15,8 @@ from dicom_utils.types import (
     WINDOW_WIDTH,
     ImageType,
     Laterality,
+    MammogramType,
     PhotometricInterpretation,
-    SimpleImageType,
     ViewPosition,
     Window,
 )
@@ -57,55 +57,55 @@ def get_simple_image_type_test_cases():
 
     # ['ORIGINAL', 'PRIMARY']
     d = deepcopy(default)
-    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-1")
+    _ = pytest.param(d, MammogramType.FFDM, id="2d-1")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED"))
-    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-2")
+    _ = pytest.param(d, MammogramType.FFDM, id="2d-2")
     cases.append(_)
 
     # ['ORIGINAL', 'PRIMARY', '', '', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="ORIGINAL", extras=["", "", "", "", "", "150000"]))
-    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-3")
+    _ = pytest.param(d, MammogramType.FFDM, id="2d-3")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'POST_CONTRAST', 'SUBTRACTION', '', '', '', '', '50000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="POST_CONTRAST", extras=["SUBTRACTION", "", "", "50000"]))
-    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-4")
+    _ = pytest.param(d, MammogramType.FFDM, id="2d-4")
     cases.append(_)
 
     # ['ORIGINAL', 'PRIMARY', 'POST_PROCESSED', '', '', '', '', '', '50000']
     d = deepcopy(default)
     d.update(dict(pixels="ORIGINAL", flavor="POST_PROCESSED", extras=["", "", "50000"]))
-    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-5")
+    _ = pytest.param(d, MammogramType.FFDM, id="2d-5")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'TOMO_PROJ', 'RIGHT', '', '', '', '', '150000'] (may be s-view, but no marker on image)
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMO_PROJ", extras=["RIGHT", "", "50000"]))
-    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-6")
+    _ = pytest.param(d, MammogramType.FFDM, id="2d-6")
     cases.append(_)
 
     # ['DERIVED', 'SECONDARY']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", exam="SECONDARY"))
-    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-7")
+    _ = pytest.param(d, MammogramType.FFDM, id="2d-7")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'TOMO_2D', 'LEFT', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMO_2D", extras=["LEFT", "", "", "", "150000"]))
-    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-8")
+    _ = pytest.param(d, MammogramType.FFDM, id="2d-8")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'TOMO_2D', 'RIGHT', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMO_2D", extras=["RIGHT", "", "", "", "150000"]))
-    _ = pytest.param(d, SimpleImageType.NORMAL, id="2d-9")
+    _ = pytest.param(d, MammogramType.FFDM, id="2d-9")
     cases.append(_)
 
     # S-VIEW
@@ -113,27 +113,27 @@ def get_simple_image_type_test_cases():
     # ['DERIVED', 'PRIMARY', 'TOMO', 'GENERATED_2D', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMO", extras=["GENERATED_2D", "", "", "", "150000"]))
-    _ = pytest.param(d, SimpleImageType.SVIEW, id="sview-1")
+    _ = pytest.param(d, MammogramType.SVIEW, id="sview-1")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'TOMOSYNTHESIS', 'GENERATED_2D', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMOSYNTHESIS", extras=["GENERATED_2D", "", "", "", "150000"]))
-    _ = pytest.param(d, SimpleImageType.SVIEW, id="sview-2")
+    _ = pytest.param(d, MammogramType.SVIEW, id="sview-2")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY']
     # Data in SeriesDescription
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", series_description="L CC C-View"))
-    _ = pytest.param(d, SimpleImageType.SVIEW, id="sview-3")
+    _ = pytest.param(d, MammogramType.SVIEW, id="sview-3")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY']
     # Data in SeriesDescription
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", series_description="R MLO S-View"))
-    _ = pytest.param(d, SimpleImageType.SVIEW, id="sview-4")
+    _ = pytest.param(d, MammogramType.SVIEW, id="sview-4")
     cases.append(_)
 
     # TOMO
@@ -141,7 +141,7 @@ def get_simple_image_type_test_cases():
     # ['DERIVED', 'PRIMARY', 'TOMOSYNTHESIS', 'NONE', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", NumberOfFrames=10, flavor="TOMOSYNTHESIS", extras=["NONE", "", "", "150000"]))
-    _ = pytest.param(d, SimpleImageType.TOMO, id="tomo-1")
+    _ = pytest.param(d, MammogramType.TOMO, id="tomo-1")
     cases.append(_)
 
     return cases
@@ -153,34 +153,26 @@ class TestImageType:
         assert img_type.pixels == "ORIGINAL"
         assert img_type.exam == "PRIMARY"
         assert img_type.flavor == "AXIAL"
-        assert img_type.NumberOfFrames is None
-        assert img_type.model == "RHAPSODE"
-
-    @pytest.mark.parametrize("kwargs,expected", get_simple_image_type_test_cases())
-    def test_to_simple_image_type(self, kwargs, expected):
-        img_type = ImageType(**kwargs)
-        simple_img_type = img_type.to_simple_image_type()
-        assert simple_img_type == expected
 
 
-class TestSimpleImageType:
+class TestMammogramType:
     @pytest.mark.parametrize(
         "input_str, expected",
         [
-            ("ffdm", SimpleImageType.NORMAL),
-            ("2d", SimpleImageType.NORMAL),
-            ("synth", SimpleImageType.SVIEW),
-            ("s view", SimpleImageType.SVIEW),
-            ("s-view", SimpleImageType.SVIEW),
-            ("c-view", SimpleImageType.SVIEW),
-            ("", SimpleImageType.UNKNOWN),
-            ("unknown", SimpleImageType.UNKNOWN),
-            ("tomo", SimpleImageType.TOMO),
-            ("tomosynthesis", SimpleImageType.TOMO),
+            ("ffdm", MammogramType.FFDM),
+            ("2d", MammogramType.FFDM),
+            ("synth", MammogramType.SVIEW),
+            ("s view", MammogramType.SVIEW),
+            ("s-view", MammogramType.SVIEW),
+            ("c-view", MammogramType.SVIEW),
+            ("", MammogramType.UNKNOWN),
+            ("unknown", MammogramType.UNKNOWN),
+            ("tomo", MammogramType.TOMO),
+            ("tomosynthesis", MammogramType.TOMO),
         ],
     )
     def test_from_str(self, input_str, expected):
-        assert expected == SimpleImageType.from_str(input_str)
+        assert expected == MammogramType.from_str(input_str)
 
 
 class TestWindow:
@@ -436,18 +428,20 @@ class TestViewPosition:
             ("LML", ViewPosition.ML),
             ("medio-lateral", ViewPosition.ML),
             ("medial-lateral", ViewPosition.ML),
-            ("latero-medial", ViewPosition.ML),
-            ("lateral-medial", ViewPosition.ML),
+            ("latero-medial", ViewPosition.LM),
+            ("lateral-medial", ViewPosition.LM),
             ("cranio-caudal", ViewPosition.CC),
             ("caudal-cranial", ViewPosition.CC),
             ("medio-lateral oblique", ViewPosition.MLO),
             ("medial-lateral oblique", ViewPosition.MLO),
-            ("latero-medial oblique", ViewPosition.MLO),
-            ("lateral-medial oblique", ViewPosition.MLO),
+            ("latero-medial oblique", ViewPosition.LMO),
+            ("lateral-medial oblique", ViewPosition.LMO),
             ("oblique medio-lateral", ViewPosition.MLO),
             ("oblique medial-lateral", ViewPosition.MLO),
-            ("oblique latero-medial", ViewPosition.MLO),
-            ("oblique lateral-medial", ViewPosition.MLO),
+            ("oblique latero-medial", ViewPosition.LMO),
+            ("oblique lateral-medial", ViewPosition.LMO),
+            ("cranio-caudal exaggerated laterally", ViewPosition.XCCL),
+            ("cranio-caudal exaggerated medially", ViewPosition.XCCM),
             ("???", ViewPosition.UNKNOWN),
             ("foo", ViewPosition.UNKNOWN),
             ("", ViewPosition.UNKNOWN),
@@ -478,18 +472,20 @@ class TestViewPosition:
         [
             ("medio-lateral", ViewPosition.ML),
             ("medial-lateral", ViewPosition.ML),
-            ("latero-medial", ViewPosition.ML),
-            ("lateral-medial", ViewPosition.ML),
+            ("latero-medial", ViewPosition.LM),
+            ("lateral-medial", ViewPosition.LM),
             ("cranio-caudal", ViewPosition.CC),
             ("caudal-cranial", ViewPosition.CC),
             ("medio-lateral oblique", ViewPosition.MLO),
             ("medial-lateral oblique", ViewPosition.MLO),
-            ("latero-medial oblique", ViewPosition.MLO),
-            ("lateral-medial oblique", ViewPosition.MLO),
+            ("latero-medial oblique", ViewPosition.LMO),
+            ("lateral-medial oblique", ViewPosition.LMO),
             ("oblique medio-lateral", ViewPosition.MLO),
             ("oblique medial-lateral", ViewPosition.MLO),
-            ("oblique latero-medial", ViewPosition.MLO),
-            ("oblique lateral-medial", ViewPosition.MLO),
+            ("oblique latero-medial", ViewPosition.LMO),
+            ("oblique lateral-medial", ViewPosition.LMO),
+            ("cranio-caudal exaggerated laterally", ViewPosition.XCCL),
+            ("cranio-caudal exaggerated medially", ViewPosition.XCCM),
             ("???", ViewPosition.UNKNOWN),
             ("", ViewPosition.UNKNOWN),
             (None, ViewPosition.UNKNOWN),

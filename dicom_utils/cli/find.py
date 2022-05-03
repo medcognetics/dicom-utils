@@ -9,7 +9,7 @@ from typing import List, Optional
 import pydicom
 
 from ..dicom import has_dicm_prefix
-from ..types import SimpleImageType
+from ..types import MammogramType
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -17,7 +17,7 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument("--name", "-n", default="*", help="glob pattern for filename")
     parser.add_argument("--parents", "-p", default=False, action="store_true", help="return unique parent directories")
     parser.add_argument(
-        "--types", "-t", choices=["2d", "tomo", "s-view"], default=None, nargs="+", help="filter by image type"
+        "--types", "-t", choices=["ffdm", "sfm", "tomo", "s-view"], default=None, nargs="+", help="filter by image type"
     )
     parser.add_argument("--jobs", "-j", default=4, help="parallelism")
     # TODO add a field to only return DICOMs with readable image data
@@ -26,8 +26,8 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
 
 def is_desired_type(path: Path, types: List[str]) -> bool:
     with pydicom.dcmread(path, stop_before_pixels=True) as dcm:
-        simple_image_type = SimpleImageType.from_dicom(dcm)
-    return str(simple_image_type) in types
+        mammogram_type = MammogramType.from_dicom(dcm)
+    return str(mammogram_type) in types
 
 
 def check_file(path: Path, args: argparse.Namespace) -> Optional[Path]:
