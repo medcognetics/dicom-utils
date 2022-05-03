@@ -3,15 +3,16 @@
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, Dict, Final, Iterable, List, Optional, TypeVar, cast
+from typing import Any, Dict, Final, Iterable, List, Optional, TypeVar, cast, Iterator
 
 import numpy as np
 from pydicom import DataElement
-from pydicom.dataset import Dataset
+from pydicom.dataset import Dataset, FileDataset
 from pydicom.sequence import Sequence
 
 from .tags import Tag
 
+VIEW_CODE_MODIFIER_SEQUENCE = 0x00540222
 
 IMAGE_TYPE = 0x00080008
 WINDOW_CENTER = 0x00281050
@@ -33,6 +34,30 @@ def get_value(dcm: Dicom, tag: Tag, default: Any) -> Any:
 def get_tag_values(tags: Iterable[Tag], dcm: Dicom) -> Dict[Tag, Any]:
     tags = {tag: get_value(dcm, tag, None) for tag in tags}
     return tags
+
+
+# TODO: these would be better in dicom.py, but circular import issues
+def view_code_iterator(dcm: Dataset) -> Iterator[Dataset]:
+    view_code_sequence = (
+        (get_value(dcm, Tag.ViewCodeSequence, []) or [])
+        if isinstance(dcm, Dataset)
+        else dcm
+    )
+    for view_code in view_code_sequence:
+        yield view_code
+
+
+def view_modifier_code_iterator(dcm: Dataset) -> Iterator[Dataset]:
+    modifier_sequence = (
+        (get_value(dcm, Tag.ViewModifierCodeSequence, []) or [])
+        if isinstance(dcm, Dataset)
+        else dcm
+    )
+    for modifier in modifier_sequence:
+        yield modifier
+    for view_code in view_code_iterator(dcm):
+        for modifier in view_modifier_code_iterator(view_code):
+            yield modifier
 
 
 T = TypeVar("T")
@@ -78,7 +103,7 @@ class MammogramType(EnumMixin):
         return [Tag.ImageType, Tag.Modality, Tag.NumberOfFrames, Tag.SeriesDescription]
 
     @staticmethod
-    def from_dicom(dcm: Dicom) -> "MammogramType":
+    def from_dicom(dcm: Dicom, is_sfm: bool = False) -> "MammogramType":
         if (modality := get_value(dcm, Tag.Modality, None)) not in (None, "MG"):
             raise ModalityError(f"Expected modality=MG, found {modality}")
 
@@ -99,6 +124,8 @@ class MammogramType(EnumMixin):
             return MammogramType.UNKNOWN
 
         # very solid rules
+        if is_sfm:
+            return MammogramType.SFM
         if series_description and ("s-view" in series_description or "c-view" in series_description):
             return MammogramType.SVIEW
         if "original" in pixels:
@@ -406,6 +433,7 @@ class Laterality(EnumMixin):
 CC_STRINGS: Final = {"cranio-caudal", "caudal-cranial"}
 ML_STRINGS: Final = {"medio-lateral", "latero-medial", "lateral-medial", "medial-lateral"}
 MLO_STRINGS: Final = {pattern for s in ML_STRINGS for pattern in (f"{s} oblique", f"oblique {s}")}
+XCCL_STRINGS: Final = {s + " exaggerated laterally" for s in CC_STRINGS}
 
 
 class ViewPosition(EnumMixin):
@@ -414,6 +442,7 @@ class ViewPosition(EnumMixin):
     CC = 1
     MLO = 2
     ML = 3
+    XCCL = 4
 
     @staticmethod
     def get_required_tags() -> List[Tag]:
@@ -428,6 +457,8 @@ class ViewPosition(EnumMixin):
             return cls.MLO
         elif string in ML_STRINGS:
             return cls.ML
+        elif string in XCCL_STRINGS:
+            return cls.XCCL
         elif not strict and "cc" in string:
             return cls.CC
         elif not strict and "mlo" in string:
@@ -479,6 +510,8 @@ class ViewPosition(EnumMixin):
             return "mlo"
         elif self == ViewPosition.ML:
             return "ml"
+        elif self == ViewPosition.XCCL:
+            return "xccl"
         return ""
 
 

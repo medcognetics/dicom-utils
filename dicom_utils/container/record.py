@@ -3,13 +3,16 @@
 
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Dict, Final, Iterator, List, Optional, Sequence, Set, cast
 
 import pydicom
+from pydicom import Dataset
+from pydicom.uid import SecondaryCaptureImageStorage
 from tqdm import tqdm
+from os import PathLike
 
 from ..tags import Tag
 
@@ -18,7 +21,8 @@ from ..tags import Tag
 from ..types import ImageType as IT
 from ..types import Laterality, MammogramType, ModalityError
 from ..types import PhotometricInterpretation as PI
-from ..types import ViewPosition
+from ..types import ViewPosition, view_code_iterator, view_modifier_code_iterator, get_value
+from ..dicom import Dicom
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
 
@@ -40,19 +44,30 @@ tags: Final = {
     Tag.SeriesDescription,
     Tag.PatientName,
     Tag.PatientID,
+    Tag.PaddleDescription,
+    Tag.StudyDate,
+    Tag.ViewCodeSequence,
+    Tag.ViewModifierCodeSequence,
     *Laterality.get_required_tags(),
     *ViewPosition.get_required_tags(),
     *MammogramType.get_required_tags(),
 }
 
 
-@dataclass(frozen=True)
+
+# NOTE: record contents should follow this naming scheme:
+#   * When a DICOM tag is read directly, attribute name should match tag name.
+#     E.g. Tag StudyInstanceUID -> Attribute StudyInstanceUID
+#   * When a one or more DICOM tags are read with additional parsing logic, attribute 
+#     name should differ from tag name. E.g. attribute `view_position` has advanced parsing 
+#     logic that reads over multiple tags
+@dataclass(frozen=True, order=True)
 class FileRecord:
     r"""Data structure for storing critical information about a DICOM file.
     File IO operations on DICOMs can be expensive, so this class collects all
     required information in a single pass to avoid repeated file opening.
     """
-    path: Path
+    path: Path = field(compare=True)
     StudyInstanceUID: Optional[StudyUID]
     SeriesInstanceUID: Optional[SeriesUID]
     SOPInstanceUID: Optional[SOPUID]
@@ -62,15 +77,19 @@ class FileRecord:
     SOPClassUID: Optional[SOPUID] = None
     Modality: Optional[str] = None
     BodyPartExamined: Optional[str] = None
+    StudyDate: Optional[str] = None
 
     Rows: Optional[int] = None
     Columns: Optional[int] = None
     NumberOfFrames: Optional[int] = None
     PhotometricInterpretation: Optional[PI] = None
     ImageType: Optional[IT] = None
+    ViewCodeSequence: Optional[Dataset] = None
+    ViewModifierCodeSequence: Optional[Dataset] = None
     mammogram_type: Optional[MammogramType] = None
     ManufacturerModelName: Optional[str] = None
     SeriesDescription: Optional[str] = None
+    PaddleDescription: Optional[str] = None
     view_position: ViewPosition = ViewPosition.UNKNOWN
     laterality: Laterality = Laterality.UNKNOWN
 
@@ -84,6 +103,21 @@ class FileRecord:
         return isinstance(other, FileRecord) and self.path == other.path
 
     @property
+    def same_patient_as(self, other: "FileRecord") -> bool:
+        if self.PatientID:
+            return self.PatientID == other.PatientID
+        else: 
+            return self.PatientName and self.PatientName == other.PatientName
+
+    @property
+    def same_study_as(self, other: "FileRecord") -> bool:
+        return self.StudyInstanceUID and self.StudyInstanceUID == other.StudyInstanceUID
+
+    @property
+    def is_secondary_capture(self) -> bool:
+        return (self.SOPClassUID or "") == SecondaryCaptureImageStorage
+
+    @property
     def is_image(self) -> bool:
         return bool(self.Rows and self.Columns and self.PhotometricInterpretation)
 
@@ -93,24 +127,128 @@ class FileRecord:
 
     @property
     def is_mammogram(self) -> bool:
-        return self.Modality == "MG"
+        return self.Modality == "MG" and self.is_image and not self.is_secondary_capture
+
+    @cached_property
+    def is_spot_compression(self) -> bool:
+        if not self.is_mammogram:
+            return False
+        if "SPOT" in (self.PaddleDescription or ""):
+            return True
+        for modifier in self.view_modifier_codes:
+            meaning = get_value(modifier, Tag.CodeMeaning, "").strip().lower()
+            if meaning == "spot compression":
+                return True
+        return False
+
+    @property
+    def is_pr_file(self) -> bool:
+        return self.Modality == "PR"
+
+    @property
+    def is_ultrasound(self) -> bool:
+        return self.Modality == "US" and self.is_image and not self.is_secondary_capture
+
+    @property
+    def is_tomo(self) -> bool:
+        return self.is_mammogram and self.mammogram_type == MammogramType.TOMO
+
+    @property
+    def is_synthetic_view(self) -> bool:
+        return self.is_mammogram and self.mammogram_type == MammogramType.SVIEW
+
+    @property
+    def is_ffdm(self) -> bool:
+        return self.is_mammogram and self.mammogram_type == MammogramType.FFDM
+
+    @property
+    def is_sfm(self) -> bool:
+        return self.is_mammogram and self.mammogram_type == MammogramType.SFM
+
+    @property
+    def is_standard_view(self) -> bool:
+        return self.is_mammogram and self.view_position in {ViewPosition.MLO, ViewPosition.CC}
+
+    @cached_property
+    def is_magnified(self) -> bool:
+        for modifier in self.view_modifier_codes:
+            meaning = get_value(modifier, Tag.CodeMeaning, "").strip().lower()
+            if meaning == "magnification":
+                return True
+        return False
+
+    @cached_property
+    def is_implant_displaced(self) -> bool:
+        if not self.is_mammogram:
+            return False
+        for modifier in self.view_modifier_codes:
+            meaning = get_value(modifier, Tag.CodeMeaning, "").strip().lower()
+            if meaning == "implant displaced":
+                return True
+        return False
 
     @property
     def file_size(self) -> int:
         return self.path.stat().st_size
 
+    @property
+    def year(self) -> Optional[int]:
+        if self.StudyDate and len(self.StudyDate) > 4:
+            return self.StudyDate[:4]
+        return None
+
+    @property
+    def view_modifier_codes(self) -> Iterator[Dataset]:
+        if self.ViewCodeSequence is not None:
+            for modifier in view_modifier_code_iterator(self.ViewCodeSequence):
+                yield modifier
+        if self.ViewModifierCodeSequence is not None:
+            for modifier in view_modifier_code_iterator(self.ViewModifierCodeSequence):
+                yield modifier
+
+    def standardized_filename(self, file_id: Optional[str] = None) -> Path:
+        uid = self.get_image_uid() if file_id is None else file_id
+        if self.is_pr_file:
+            prefix = "pr"
+        elif self.is_ultrasound:
+            prefix = "us"
+        elif self.is_ffdm:
+            prefix = "ffdm"
+        elif self.is_synthetic_view:
+            prefix = "synth"
+        elif self.is_tomo:
+            prefix = "tomo"
+        else:
+            # TODO we could read modality and use that as a prefix
+            prefix = "unkown"
+
+        if self.is_spot_compression:
+            prefix += "_spot"
+        if self.is_magnified:
+            prefix += "_mag"
+        if self.is_implant_displaced:
+            prefix += "_id"
+
+        if self.is_mammogram:
+            view_info = f"{self.laterality.short_str}{self.view_position.short_str}"
+            if view_info:
+                prefix += f"_{view_info}"
+
+        return Path(f"{prefix}_{uid}").with_suffix(".dcm")
+
+
     @classmethod
-    def create(cls, path: Path) -> "FileRecord":
+    def create(cls, path: Path, is_sfm: bool = False) -> "FileRecord":
         if not path.is_file():
             raise FileNotFoundError(path)
 
-        with pydicom.dcmread(path, stop_before_pixels=True, specific_tags=cast(List[Any], tags)) as dcm:
+        with cls.read(path) as dcm:
             values = {tag.name: getattr(dcm, tag.name, None) for tag in tags}
             for key in ("Rows", "Columns", "NumberOfFrames"):
                 values[key] = int(values[key]) if values[key] else None
             values["ImageType"] = IT.from_dicom(dcm)
             try:
-                mammogram_type = MammogramType.from_dicom(dcm)
+                mammogram_type = MammogramType.from_dicom(dcm, is_sfm=is_sfm)
             except ModalityError:
                 mammogram_type = None
 
@@ -122,7 +260,7 @@ class FileRecord:
         values = {k: v for k, v in values.items() if k in cls.__dataclass_fields__.keys()}
 
         return cls(
-            path,
+            path.absolute(),
             mammogram_type=mammogram_type,
             view_position=view_position,
             laterality=laterality,
@@ -145,6 +283,14 @@ class FileRecord:
             result = self.SeriesInstanceUID or self.SOPInstanceUID
         assert result is not None
         return result
+
+    @classmethod
+    def read(cls, path: PathLike, **kwargs) -> Dicom:
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        kwargs.setdefault("stop_before_pixels", True)
+        kwargs.setdefault("specific_tags", tags)
+        return pydicom.dcmread(path, **kwargs)
 
 
 def record_iterator(
@@ -190,6 +336,9 @@ class RecordCollection:
 
     def __init__(self):
         self._lookup: Dict[Path, FileRecord] = {}
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(length={len(self)})"
 
     def __len__(self) -> int:
         r"""Returns the total number of contained records"""

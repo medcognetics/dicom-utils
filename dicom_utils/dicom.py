@@ -9,6 +9,7 @@ import numpy as np
 import pydicom
 from numpy import ndarray
 from pydicom.uid import UID
+from pydicom import Dataset, FileDataset
 
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
