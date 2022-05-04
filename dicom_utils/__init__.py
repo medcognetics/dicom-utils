@@ -8,6 +8,7 @@ from typing import Final, Iterable
 
 from .anonymize import anonymize
 from .dicom import NoImageError, read_dicom_image
+from .dicom_factory import DicomFactory
 from .metadata import add_patient_age, dicom_to_json, drop_fields_by_length, get_date
 from .volume import KeepVolume, SliceAtLocation, UniformSample, VolumeHandler
 
@@ -49,6 +50,7 @@ __all__ = [
     "add_patient_age",
     "anonymize",
     "dicom_to_json",
+    "DicomFactory",
     "drop_empty_tags",
     "drop_fields_by_length",
     "get_date",

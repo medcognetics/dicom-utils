@@ -3,7 +3,7 @@
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, Dict, Final, Iterable, Iterator, List, Optional, TypeVar, cast
+from typing import Any, Dict, Final, Iterable, Iterator, List, NamedTuple, Optional, TypeVar, cast
 
 from pydicom import DataElement
 from pydicom.dataset import Dataset
@@ -19,12 +19,20 @@ Dicom = Dataset
 DicomAttributeSequence = Sequence
 
 
-class ModalityError(Exception):
+class DicomValueError(ValueError):
     pass
 
 
-def get_value(dcm: Dicom, tag: Tag, default: Any) -> Any:
-    return dcm.get(tag).value if tag in dcm else default
+class DicomKeyError(ValueError):
+    pass
+
+
+def get_value(dcm: Dicom, tag: Tag, default: Any, try_file_meta: bool = False) -> Any:
+    if tag in dcm:
+        return dcm.get(tag).value
+    elif try_file_meta and hasattr(dcm, "file_meta") and tag in dcm.file_meta:
+        return dcm.file_meta.get(tag).value
+    return default
 
 
 def get_tag_values(tags: Iterable[Tag], dcm: Dicom) -> Dict[Tag, Any]:
@@ -86,7 +94,7 @@ class MammogramType(EnumMixin):
     UNKNOWN = 0
     FFDM = 1
     SFM = 2
-    SVIEW = 3
+    SYNTH = 3
     TOMO = 4
 
     @staticmethod
@@ -96,7 +104,7 @@ class MammogramType(EnumMixin):
     @staticmethod
     def from_dicom(dcm: Dicom, is_sfm: bool = False, ignore_modality: bool = False) -> "MammogramType":
         if (modality := get_value(dcm, Tag.Modality, None)) not in (None, "MG") and not ignore_modality:
-            raise ModalityError(f"Expected modality=MG, found {modality}")
+            raise DicomValueError(f"Expected modality=MG, found {modality}")
 
         # if DICOM is a 3D volume, it must be tomo
         if dcm.get("NumberOfFrames", 1) > 1:
@@ -118,17 +126,17 @@ class MammogramType(EnumMixin):
         if is_sfm:
             return MammogramType.SFM
         if series_description and ("s-view" in series_description or "c-view" in series_description):
-            return MammogramType.SVIEW
+            return MammogramType.SYNTH
         if "original" in pixels:
             return MammogramType.FFDM
 
         # ok rules
         if extras is not None and any("generated_2d" in x.lower() for x in extras):
-            return MammogramType.SVIEW
+            return MammogramType.SYNTH
 
         # not good rules
         if pixels == "derived" and exam == "primary" and machine == "fdr-3000aws" and flavor != "post_contrast":
-            return MammogramType.SVIEW
+            return MammogramType.SYNTH
 
         return MammogramType.FFDM
 
@@ -142,7 +150,7 @@ class MammogramType(EnumMixin):
             return "ffdm"
         elif self is self.SFM:
             return "sfm"
-        elif self is self.SVIEW:
+        elif self is self.SYNTH:
             return "s-view"
         elif self is self.TOMO:
             return "tomo"
@@ -154,7 +162,7 @@ class MammogramType(EnumMixin):
         if "tomo" in s:
             return cls.TOMO
         elif "view" in s or "synth" in s:
-            return cls.SVIEW
+            return cls.SYNTH
         elif "2d" in s or "ffdm" in s:
             return cls.FFDM
         elif "sfm" in s:
@@ -356,6 +364,7 @@ MLO_STRINGS: Final = {pattern for s in ML_STRINGS for pattern in (f"{s} oblique"
 LMO_STRINGS: Final = {pattern for s in LM_STRINGS for pattern in (f"{s} oblique", f"oblique {s}")}
 XCCL_STRINGS: Final = {s + " exaggerated laterally" for s in CC_STRINGS}
 XCCM_STRINGS: Final = {s + " exaggerated medially" for s in CC_STRINGS}
+AT_STRINGS: Final = {"axillary tail"}
 
 
 class ViewPosition(EnumMixin):
@@ -368,6 +377,7 @@ class ViewPosition(EnumMixin):
     LM = auto()
     XCCL = auto()
     XCCM = auto()
+    AT = auto()
 
     @staticmethod
     def get_required_tags() -> List[Tag]:
@@ -386,6 +396,7 @@ class ViewPosition(EnumMixin):
             cls.LMO: LMO_STRINGS,
             cls.XCCL: XCCL_STRINGS,
             cls.XCCM: XCCM_STRINGS,
+            cls.AT: AT_STRINGS,
         }
         for value, keywords in strict_mapping.items():
             if string in keywords:
@@ -415,10 +426,7 @@ class ViewPosition(EnumMixin):
     @classmethod
     def from_view_position_tag(cls, view_position: Optional[str]) -> "ViewPosition":
         if isinstance(view_position, str):
-            view_position = view_position.strip().lower()
-            for view in cls:
-                if view.short_str == view_position:
-                    return view
+            return cls.from_str(view_position)
         return cls.UNKNOWN
 
     @classmethod
@@ -431,7 +439,14 @@ class ViewPosition(EnumMixin):
 
     @classmethod
     def from_dicom(cls, dcm: Dicom) -> "ViewPosition":
-        return cls.from_tags({int(tag): value for tag, value in get_tag_values(cls.get_required_tags(), dcm).items()})
+        def from_code(code: Dataset) -> ViewPosition:
+            return cls.from_str(get_value(code, Tag.CodeMeaning, ""), strict=True)
+
+        view_position = cls.from_str(get_value(dcm, Tag.ViewPosition, ""))
+        view_codes = {result for code in iterate_view_codes(dcm) if (result := from_code(code))}
+        view_modifier_codes = {result for code in iterate_view_modifier_codes(dcm) if (result := from_code(code))}
+        candidates = view_codes.union(view_modifier_codes).union({view_position})
+        return sorted(candidates, key=lambda x: x.value)[-1]
 
     @property
     def short_str(self) -> str:
@@ -440,4 +455,45 @@ class ViewPosition(EnumMixin):
         return self.name.lower()
 
 
-__all__ = ["Dicom", "ImageType", "PhotometricInterpretation", "EnumMixin", "Laterality", "ViewPosition"]
+class MammogramView(NamedTuple):
+    laterality: Laterality = Laterality.UNKNOWN
+    view: ViewPosition = ViewPosition.UNKNOWN
+
+    def __repr__(self):
+        return f"{self.laterality.short_str}{self.view.short_str}"
+
+    @classmethod
+    def create(cls, laterality: Optional[Laterality] = None, view: Optional[ViewPosition] = None) -> "MammogramView":
+        return cls(
+            laterality or Laterality.UNKNOWN,
+            view or ViewPosition.UNKNOWN,
+        )
+
+    @classmethod
+    def from_dicom(cls, dcm: Dicom) -> "MammogramView":
+        return cls.create(
+            Laterality.from_dicom(dcm),
+            ViewPosition.from_dicom(dcm),
+        )
+
+    @property
+    def is_standard_mammo_view(self) -> bool:
+        r"""Checks if this record corresponds to a standard mammography view.
+        Standard mammography views are the MLO and CC views.
+        """
+        return self.view in {ViewPosition.MLO, ViewPosition.CC}
+
+    @staticmethod
+    def get_required_tags() -> List[Tag]:
+        return [*Laterality.get_required_tags(), *ViewPosition.get_required_tags()]
+
+
+__all__ = [
+    "Dicom",
+    "ImageType",
+    "PhotometricInterpretation",
+    "EnumMixin",
+    "Laterality",
+    "ViewPosition",
+    "MammogramView",
+]

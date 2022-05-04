@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
+from os import PathLike
 from pathlib import Path
 from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
 from warnings import warn
@@ -70,7 +71,7 @@ def invert_color(img: ndarray) -> ndarray:
     return np.max(img) - img
 
 
-def has_dicm_prefix(filename: Union[str, Path]) -> bool:
+def has_dicm_prefix(filename: Union[str, PathLike]) -> bool:
     """DICOM files have a 128 byte preamble followed by bytes 'DICM'."""
     with open(filename, "rb") as f:
         f.seek(128)
