@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Dict, Final, Iterable, Iterator, List, Optional, TypeVar, cast
 
-import numpy as np
 from pydicom import DataElement
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence
@@ -13,9 +12,6 @@ from pydicom.sequence import Sequence
 from .tags import Tag
 
 
-IMAGE_TYPE = 0x00080008
-WINDOW_CENTER = 0x00281050
-WINDOW_WIDTH = 0x00281051
 UNKNOWN: Final = -1
 
 
@@ -173,10 +169,10 @@ class ImageType:
 
     Contains the following attributes:
 
-        * ``"pixels"`` - First element of the IMAGE_TYPE field.
-        * ``"exam"`` - Second element of the IMAGE_TYPE field.
-        * ``"flavor"`` - Third element of the IMAGE_TYPE field.
-        * ``"extras"`` - Additional IMAGE_TYPE fields if available
+        * ``"pixels"`` - First element of the ImageType field.
+        * ``"exam"`` - Second element of the ImageType field.
+        * ``"flavor"`` - Third element of the ImageType field.
+        * ``"extras"`` - Additional ImageType fields if available
     """
 
     pixels: str
@@ -201,11 +197,11 @@ class ImageType:
     def from_dicom(cls, dcm: Dicom) -> "ImageType":
         result: Dict[str, Any] = {}
 
-        if IMAGE_TYPE not in dcm.keys():
+        if Tag.ImageType not in dcm.keys():
             return cls("", "", **result)
 
         # fields 1 and 2 should always be present
-        image_type = cast(List[str], dcm[IMAGE_TYPE].value)
+        image_type = cast(List[str], dcm[Tag.ImageType].value)
         pixels, exam = image_type[:2]
         result["pixels"] = pixels
         result["exam"] = exam
@@ -221,78 +217,6 @@ class ImageType:
         assert "pixels" in result.keys()
         assert "exam" in result.keys()
         return cls(**result)
-
-
-@dataclass
-class Window:
-    r"""Contains data related to the window of pixel intensities for display.
-    Window levels are defined realtive to the PhotometricInterpretation of the DICOM image.
-    As such, application of windows should be done before application of inversions.
-    """
-    center: int
-    width: int
-
-    # unused, should eventually store window explanation string
-    descriptor: Optional[str] = None
-
-    def __repr__(self) -> str:
-        s = f"{self.__class__.__name__}("
-        s += f"center={self.center}, "
-        s += f"width={self.width}, "
-        s += f"low={self.lower_bound}, "
-        s += f"high={self.upper_bound}"
-        s += ")"
-        return s
-
-    @classmethod
-    def from_dicom(cls, dcm: Dicom) -> "Window":
-        center = dcm.get(WINDOW_CENTER, None)
-        width = dcm.get(WINDOW_WIDTH, None)
-
-        # fallback to pixel data if center or width is missing
-        if center is None or width is None:
-            pixels = dcm.pixel_array
-            max, min = pixels.max(), pixels.min()
-            center = (max - min) // 2 + min
-            width = max - min
-
-        # for single window levels
-        elif isinstance(center.value, (str, float)):
-            center = center.value
-            width = width.value
-
-        # if multiple levels, read the first
-        # TODO allow window selection by name
-        else:
-            center = center.value[0]
-            width = width.value[0]
-
-        center = int(center)  # type: ignore
-        width = int(width)  # type: ignore
-        return cls(center, width)
-
-    @property
-    def constrained_width(self) -> int:
-        r"""The window width after being constrained to non-negative values"""
-        return int(self.upper_bound - self.lower_bound)
-
-    @property
-    def lower_bound(self) -> float:
-        return max(self.center - (self.width // 2), 0)
-
-    @property
-    def upper_bound(self) -> float:
-        return self.center + (self.width // 2)
-
-    def apply(self, pixels: np.ndarray) -> np.ndarray:
-        r"""Applies this window to an array of pixel data. Since DICOM windows are defined
-        relative to the original pixel values, windows should be applied only to original
-        pixel values.
-        """
-        # record dtype so we can restore floats to input dtype
-        pixels = pixels.clip(min=self.lower_bound, max=self.upper_bound)
-        pixels = pixels - self.lower_bound
-        return pixels
 
 
 class PhotometricInterpretation(Enum):
@@ -492,12 +416,9 @@ class ViewPosition(EnumMixin):
     def from_view_position_tag(cls, view_position: Optional[str]) -> "ViewPosition":
         if isinstance(view_position, str):
             view_position = view_position.strip().lower()
-            if view_position == "mlo":
-                return cls.MLO
-            elif view_position == "cc":
-                return cls.CC
-            elif view_position == "ml":
-                return cls.ML
+            for view in cls:
+                if view.short_str == view_position:
+                    return view
         return cls.UNKNOWN
 
     @classmethod
@@ -519,4 +440,4 @@ class ViewPosition(EnumMixin):
         return self.name.lower()
 
 
-__all__ = ["Dicom", "ImageType", "Window", "PhotometricInterpretation", "EnumMixin", "Laterality", "ViewPosition"]
+__all__ = ["Dicom", "ImageType", "PhotometricInterpretation", "EnumMixin", "Laterality", "ViewPosition"]

@@ -326,6 +326,7 @@ def dcms_to_annotated_images(dcms: List[Dicom], **kwargs) -> List[DicomImage]:
 
 
 def to_8bit(x: ndarray) -> ndarray:
-    min, max = x.min(), x.max()
-    x = (x - min) / (max - min) * 255
+    pixel_min, pixel_max = x.min(), x.max()
+    delta = max(pixel_max - pixel_min, 1e-9)
+    x = (x - pixel_min) / delta * 255
     return x.round().astype(np.uint8)

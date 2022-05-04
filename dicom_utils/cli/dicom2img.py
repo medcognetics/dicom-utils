@@ -30,7 +30,6 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument("-f", "--fps", default=5, type=int, help="framerate for animated outputs")
     parser.add_argument("-q", "--quality", default=95, type=int, help="quality of outputs, from 1 to 100")
     parser.add_argument("--noblock", default=False, action="store_true", help="allow matplotlib to block")
-    parser.add_argument("--window", default=False, action="store_true", help="apply window from DICOM metadata")
     parser.add_argument("-b", "--bytes", default=False, action="store_true", help="output a png image as a byte stream")
     return parser
 
@@ -202,7 +201,6 @@ def main(args: argparse.Namespace) -> None:
         not args.noblock,
         args.bytes,
         args.downsample,
-        apply_window=args.window,
     )
 
 
