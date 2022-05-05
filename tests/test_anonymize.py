@@ -5,7 +5,7 @@ import pydicom
 import pytest
 
 from dicom_utils.anonymize import *
-from dicom_utils.hash import medcog_addr, medcog_name, private_fields_description
+from dicom_utils.private import MEDCOG_ADDR, MEDCOG_NAME, PRIVATE_ELEMENTS_DESCRIPTION
 
 
 num_dicom_test_files: Final[int] = 3
@@ -58,21 +58,22 @@ def test_RuleHandler() -> None:
 
 
 def test_anonymize(test_dicom) -> None:
-    hash_values = get_value_hashes(test_dicom)
+    medcog_elements = get_medcog_elements(test_dicom)
 
     ds = copy.deepcopy(test_dicom)
     anonymize(ds)
 
     block = get_medcog_block(ds)
-    assert block[0].value == private_fields_description
-    for i, value in enumerate(hash_values):
-        assert block[i + 1].value == value
+    assert block[0].value == PRIVATE_ELEMENTS_DESCRIPTION
+    for i, element in enumerate(medcog_elements):
+        assert block[i + 1].VR == element.VR
+        assert block[i + 1].value == element.value
 
 
 def test_is_anonymized(test_dicom) -> None:
-    not_medcog_name = medcog_name + " "
-    test_dicom.private_block(medcog_addr, not_medcog_name, create=True)
-    test_dicom.private_block(medcog_addr, not_medcog_name, create=False)  # Check block exists (i.e. no exception)
+    not_medcog_name = MEDCOG_NAME + " "
+    test_dicom.private_block(MEDCOG_ADDR, not_medcog_name, create=True)
+    test_dicom.private_block(MEDCOG_ADDR, not_medcog_name, create=False)  # Check block exists (i.e. no exception)
 
     # The non-Medcognetics block we just created should not make us think that the case is anonymized
     assert not is_anonymized(test_dicom)
@@ -80,9 +81,9 @@ def test_is_anonymized(test_dicom) -> None:
     assert is_anonymized(test_dicom)
 
     with pytest.raises(Exception):
-        not_medcog_name = medcog_name + "  "
+        not_medcog_name = MEDCOG_NAME + "  "
         # This should not return the MedCognetics block but should raise an exception that the block doesn't exist
-        test_dicom.private_block(medcog_addr, not_medcog_name, create=False)
+        test_dicom.private_block(MEDCOG_ADDR, not_medcog_name, create=False)
 
 
 def test_double_anonymization(test_dicom) -> None:

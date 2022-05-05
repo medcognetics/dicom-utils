@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Final, Optional, TypeVar
 from dicomanonymizer import anonymize_dataset
 from pydicom import Dataset
 
-from .hash import get_medcog_block, get_value_hashes, medcog_name, store_value_hashes
+from .private import MEDCOG_NAME, get_medcog_block, get_medcog_elements, store_medcog_elements
 from .tags import Tag
 
 
@@ -68,7 +68,7 @@ def is_anonymized(ds: Dataset) -> bool:
         get_medcog_block(ds)
         return True
     except KeyError as e:
-        assert str(e) == f"\"Private creator '{medcog_name}' not found\""
+        assert str(e) == f"\"Private creator '{MEDCOG_NAME}' not found\""
         return False
 
 
@@ -76,6 +76,6 @@ def anonymize(ds: Dataset) -> None:
     # anonymize_dataset() deletes private elements
     # so we need to store value hashes in the MedCognetics private elements after anonymization
     assert not is_anonymized(ds), "DICOM file is already anonymized"
-    value_hashes = get_value_hashes(ds)
+    elements = get_medcog_elements(ds)
     anonymize_dataset(ds, rules)
-    store_value_hashes(ds, value_hashes)
+    store_medcog_elements(ds, elements)
