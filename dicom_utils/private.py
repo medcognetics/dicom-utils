@@ -32,7 +32,7 @@ def get_year(ds: Dataset) -> MedCogElement:
     # is more specific than the year of an event. For instance, the date “January 1, 2009” could not be reported at
     # this level of detail. However, it could be reported in a de-identified data set as “2009”.
     # https://www.hhs.gov/hipaa/for-professionals/privacy/special-topics/de-identification/index.html
-    if study_date := ds.get(Tag.StudyDate, None):
+    if (study_date := ds.get(Tag.StudyDate, None)) and study_date.value:
         study_date = datetime.strptime(study_date.value, DICOM_DATE_FORMAT)
         year = str(study_date.year)
     else:

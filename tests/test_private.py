@@ -4,11 +4,17 @@ from typing import Final
 import pydicom
 import pytest
 
+from tests.test_anonymize import test_dicom
+
+
+test_dicom = test_dicom
+
 from dicom_utils.private import (
     MEDCOG_ADDR,
     MEDCOG_NAME,
     PRIVATE_ELEMENTS_DESCRIPTION,
     get_medcog_elements,
+    get_year,
     hash_any,
     store_medcog_elements,
 )
@@ -47,3 +53,16 @@ def test_store_value_hashes(dicom_test_file) -> None:
     for i, element in enumerate(medcog_elements):
         assert block[i + 1].VR == element.VR
         assert block[i + 1].value == element.value
+
+
+@pytest.mark.parametrize(
+    "date_string, expected_year",
+    [
+        ("20200101", "2020"),
+        ("19901231", "1990"),
+        ("", "????"),
+    ],
+)
+def test_get_year(test_dicom, date_string, expected_year) -> None:
+    test_dicom.StudyDate = date_string
+    assert expected_year == get_year(test_dicom).value
