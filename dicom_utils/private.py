@@ -2,7 +2,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Final, List
+from typing import Any, Callable, Final, List, Optional
 
 from pydicom import Dataset
 from pydicom.dataset import PrivateBlock
@@ -27,17 +27,19 @@ class VR(Enum):
     long_text = "LT"
 
 
+def get_study_date(ds: Dataset) -> Optional[datetime]:
+    if (study_date := ds.get(Tag.StudyDate, None)) and study_date.value:
+        return datetime.strptime(study_date.value, DICOM_DATE_FORMAT)
+
+
 def get_year(ds: Dataset) -> MedCogElement:
     # Elements of dates that are not permitted for disclosure include the day, month, and any other information that
     # is more specific than the year of an event. For instance, the date “January 1, 2009” could not be reported at
     # this level of detail. However, it could be reported in a de-identified data set as “2009”.
     # https://www.hhs.gov/hipaa/for-professionals/privacy/special-topics/de-identification/index.html
-    if (study_date := ds.get(Tag.StudyDate, None)) and study_date.value:
-        study_date = datetime.strptime(study_date.value, DICOM_DATE_FORMAT)
-        year = str(study_date.year)
-    else:
-        year = "????"
-    return MedCogElement(year, VR.long_text.value)
+    study_date = get_study_date(ds)
+    year_str = str(study_date.year) if study_date else "????"
+    return MedCogElement(year_str, VR.long_text.value)
 
 
 def hash_pixel_data(ds: Dataset) -> MedCogElement:
