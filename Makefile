@@ -70,7 +70,6 @@ test: $(VENV)/bin/activate-test ## run unit tests
 		--cov=./$(PROJECT) \
 		--cov-report=xml \
 		--cov-report=term \
-		-s -v \
 		./tests/
 
 test-%: $(VENV)/bin/activate-test ## run unit tests matching a pattern

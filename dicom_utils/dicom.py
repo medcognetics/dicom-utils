@@ -8,11 +8,12 @@ from warnings import warn
 import numpy as np
 import pydicom
 from numpy import ndarray
+from pydicom.pixel_data_handlers.util import apply_voi_lut
 from pydicom.uid import UID
 
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
-from .types import Dicom, PhotometricInterpretation, Window
+from .types import Dicom, PhotometricInterpretation
 from .volume import KeepVolume, VolumeHandler
 
 
@@ -95,7 +96,7 @@ def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     Returns:
         Numpy ndarray of pixel data
     """
-    return np.ndarray(dims, dcm.pixel_array.dtype, dcm.pixel_array.tobytes())
+    return apply_voi_lut(dcm.pixel_array, dcm).reshape(dims)
 
 
 def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
@@ -162,7 +163,6 @@ def read_dicom_image(
     shape: Optional[Tuple[int, ...]] = None,
     strict_interp: bool = False,
     volume_handler: VolumeHandler = KeepVolume(),
-    apply_window: bool = False,
     as_uint8: bool = False,
 ) -> ndarray:
     r"""
@@ -179,8 +179,6 @@ def read_dicom_image(
             If true, don't make any assumptions for trying to work around parsing errors
         volume_handler:
             Handler for processing 3D volumes
-        apply_window:
-            If ``True``, apply any window given in the DICOM file
         as_uint8:
             If ``True``, convert non-uint8 outputs to uint8 using min/max normalization
 
@@ -248,12 +246,7 @@ def read_dicom_image(
     if pixels.dtype.byteorder != "=":
         pixels = pixels.newbyteorder("=")
 
-    if apply_window:
-        window = Window.from_dicom(dcm)
-        pixels = window.apply(pixels)
-
     # in some dicoms, pixel value of 0 indicates white
-    # NOTE: apply inversion after window level
     if pm.is_inverted:
         pixels = invert_color(pixels)
 
