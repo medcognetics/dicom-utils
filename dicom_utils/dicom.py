@@ -96,7 +96,11 @@ def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     Returns:
         Numpy ndarray of pixel data
     """
-    return apply_voi_lut(dcm.pixel_array, dcm).reshape(dims)
+    try:
+        pixels = apply_voi_lut(dcm.pixel_array, dcm)
+    except Exception:
+        pixels = dcm.pixel_array
+    return pixels.reshape(dims)
 
 
 def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
