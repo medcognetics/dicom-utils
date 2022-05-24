@@ -9,6 +9,8 @@ from os import PathLike
 from pathlib import Path
 from typing import Any, Callable, Dict, Final, Hashable, Iterable, Optional, Set, Union, cast
 
+from tqdm import tqdm
+
 from .collection import RecordCollection
 from .input import Input
 from .record import FileRecord, MammogramFileRecord
@@ -40,15 +42,22 @@ class Output(ABC):
         path: PathLike,
         record_filter: Optional[Callable[[FileRecord], bool]] = None,
         collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
+        use_bar: bool = True,
     ):
         self.path = Path(path)
         self.path.mkdir(exist_ok=True, parents=True)
         self.record_filter = record_filter
         self.collection_filter = collection_filter
+        self.use_bar = use_bar
 
     def __call__(self, inp: Union[Input, Dict[str, RecordCollection]]) -> Dict[str, RecordCollection]:
         result: Dict[str, RecordCollection] = {}
-        for name, collection in inp if isinstance(inp, Input) else inp.items():
+        bar = tqdm(
+            inp if isinstance(inp, Input) else inp.items(),
+            leave=False,
+            disable=not self.use_bar,
+        )
+        for name, collection in bar:
             if self.collection_filter is not None and not self.collection_filter(collection):
                 continue
             if self.record_filter is not None:
@@ -100,7 +109,6 @@ class JsonFileOutput(Output):
         result = RecordCollection()
         metadata: Dict[str, Any] = {}
         metadata["StudyInstanceUID"]
-
         return result
 
 
@@ -114,7 +122,12 @@ class LongitudinalPointerOutput(Output):
         reverse_association_lookup = {name: group for group, names in association_lookup.items() for name in names}
 
         result: Dict[str, RecordCollection] = {}
-        for name, collection in inp.items():
+        bar = tqdm(
+            inp.items(),
+            leave=False,
+            disable=not self.use_bar,
+        )
+        for name, collection in bar:
             if self.collection_filter is not None and not self.collection_filter(collection):
                 continue
             if self.record_filter is not None:

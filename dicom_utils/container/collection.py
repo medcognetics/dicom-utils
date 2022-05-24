@@ -48,9 +48,11 @@ class RecordCreator:
         self,
         functions: Optional[Iterable[str]] = None,
         helpers: Optional[Iterable[str]] = [],
+        modality: Optional[str] = None,
     ):
         self.functions = RECORD_REGISTRY.available_keys() if functions is None else functions
         self.helpers = [cast(Type[RecordHelper], HELPER_REGISTRY.get(h))() for h in helpers]
+        self.modality = modality
 
     def __call__(self, path: Path) -> FileRecord:
         result = FileRecord.from_file(path)
@@ -65,6 +67,7 @@ class RecordCreator:
                     result = dtype.from_dicom(
                         path,
                         dcm,
+                        modality=self.modality,
                     )
                 else:
                     result = dtype.from_file(path)
@@ -120,6 +123,7 @@ def record_iterator(
     record_types: Optional[Iterable[str]] = None,
     helpers: Iterable[str] = [],
     ignore_exceptions: bool = False,
+    **kwargs,
 ) -> Iterator[FileRecord]:
     r"""Produces :class:`FileRecord` instances by iterating over an input list of files. If a
     :class:`FileRecord` cannot be from_filed from a path, it will be ignored.
@@ -147,11 +151,14 @@ def record_iterator(
             If ``False``, any exceptions raised during record creation will not be suppressed. By default,
             exceptions are silently ignored and records will not be produced for failing files.
 
+    Keyword Args:
+        Forwarded to :class:`RecordCreator`
+
     Returns:
         Iterator of :class:`FileRecord`s
     """
     files = list(Path(p) for p in files if Path(p).is_file())
-    creator = RecordCreator(record_types, helpers)
+    creator = RecordCreator(record_types, helpers, **kwargs)
     bar = tqdm(desc="Scanning files", total=len(files), unit="file", disable=(not use_bar))
 
     Pool = ThreadPoolExecutor if threads else ProcessPoolExecutor
@@ -233,7 +240,7 @@ class RecordCollection:
     def standardized_filenames(self) -> Iterator[Tuple[Path, FileRecord]]:
         counter: Dict[str, int] = {}
         for rec in self:
-            path = rec.standardized_filename("")
+            path = rec.standardized_filename("id")
             prefix = "_".join(str(path).split("_")[:-1])
             count = counter.get(prefix, 1)
             path = rec.standardized_filename(str(count))
@@ -289,6 +296,7 @@ class RecordCollection:
         ignore_patterns: Sequence[str] = [],
         record_types: Optional[Iterable[str]] = None,
         helpers: Iterable[str] = [],
+        **kwargs,
     ) -> C:
         r"""Create a :class:`RecordCollection` from files in a directory matching a wildcard.
         If a :class:`FileRecord` cannot be from_filed for a file, that file is silently excluded
@@ -312,12 +320,15 @@ class RecordCollection:
 
             ignore_patterns:
                 Strings indicating files that should be ignored. Matching is a simple ``str(pattern) in str(filepath)``.
+
+        Keyword Args:
+            Forwarded to :func:`record_iterator`
         """
         path = Path(path)
         if not path.is_dir():
             raise NotADirectoryError(path)
         files = [p for p in path.rglob(pattern) if not any(ignore in str(p) for ignore in ignore_patterns)]
-        return cls.from_files(files, jobs, use_bar, threads, record_types, helpers)
+        return cls.from_files(files, jobs, use_bar, threads, record_types, helpers, **kwargs)
 
     @classmethod
     def from_files(
@@ -328,6 +339,7 @@ class RecordCollection:
         threads: bool = False,
         record_types: Optional[Iterable[str]] = None,
         helpers: Iterable[str] = [],
+        **kwargs,
     ) -> C:
         r"""Create a :class:`RecordCollection` from a list of files.
         If a :class:`FileRecord` cannot be from_filed for a file, that file is silently excluded
@@ -348,6 +360,9 @@ class RecordCollection:
 
             ignore_patterns:
                 Strings indicating files that should be ignored. Matching is a simple ``str(pattern) in str(filepath)``.
+
+        Keyword Args:
+            Forwarded to :func:`record_iterator`
         """
-        collection = cls(record_iterator(files, jobs, use_bar, threads, record_types, helpers))
+        collection = cls(record_iterator(files, jobs, use_bar, threads, record_types, helpers, **kwargs))
         return collection

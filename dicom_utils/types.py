@@ -284,7 +284,13 @@ class Laterality(EnumMixin):
 
     @staticmethod
     def get_required_tags() -> List[Tag]:
-        return [Tag.Laterality, Tag.ImageLaterality, Tag.FrameLaterality, Tag.SharedFunctionalGroupsSequence]
+        return [
+            Tag.Laterality,
+            Tag.ImageLaterality,
+            Tag.FrameLaterality,
+            Tag.SharedFunctionalGroupsSequence,
+            Tag.PatientOrientation,
+        ]
 
     @classmethod
     def from_str(cls, string: str) -> "Laterality":
@@ -331,6 +337,16 @@ class Laterality(EnumMixin):
             return cls.RIGHT
         else:
             return cls.UNKNOWN
+
+    @classmethod
+    def from_patient_orientation(cls, value: List[str]) -> "Laterality":
+        for item in value:
+            parts = set(str(item))
+            if "L" in parts:
+                return cls.RIGHT
+            elif "R" in parts:
+                return cls.LEFT
+        return cls.UNKNOWN
 
     @classmethod
     def from_dicom(cls, dcm: Dicom) -> "Laterality":
@@ -435,6 +451,15 @@ class ViewPosition(EnumMixin):
             meaning = view_code.get("CodeMeaning", None)
             if isinstance(meaning, str):
                 return cls.from_str(meaning, strict=True)
+        return cls.UNKNOWN
+
+    @classmethod
+    def from_patient_orientation(cls, value: List[str]) -> "ViewPosition":
+        for item in value:
+            if item in ("FL", "FR"):
+                return cls.MLO
+            elif item in ("R", "L"):
+                return cls.CC
         return cls.UNKNOWN
 
     @classmethod

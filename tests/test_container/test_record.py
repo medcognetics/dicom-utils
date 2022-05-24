@@ -546,6 +546,16 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 "1",
                 "synth_spot_mag_id_rxccl_1.dcm",
             ),
+            pytest.param(
+                MammogramType.FFDM,
+                False,
+                False,
+                False,
+                Laterality.UNKNOWN,
+                ViewPosition.UNKNOWN,
+                "2",
+                "ffdm_2.dcm",
+            ),
         ],
     )
     def test_standardized_filename(self, mtype, spot, mag, id, laterality, view_pos, uid, exp, record_factory):

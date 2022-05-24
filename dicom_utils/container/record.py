@@ -137,7 +137,8 @@ class FileRecord:
 
     def standardized_filename(self, file_id: Any = None) -> Path:
         file_id = str(file_id) if file_id is not None else str(self.get_uid() if self.has_uid else "")
-        path = Path(f"{self.path.stem}_{file_id}{self.path.suffix}")
+        parts = [p for p in (self.path.stem, file_id) if p]
+        path = Path(f"{'_'.join(parts)}{self.path.suffix}")
         return path
 
     @classmethod
@@ -216,6 +217,7 @@ class DicomFileRecord(FileRecord):
     TransferSyntaxUID: Optional[TSUID] = None
     Modality: Optional[str] = None
     BodyPartExamined: Optional[str] = None
+    PatientOrientation: Optional[List[str]] = None
     StudyDate: Optional[str] = None
     SeriesDescription: Optional[str] = None
     StudyDescription: Optional[str] = None
@@ -378,7 +380,7 @@ class DicomFileRecord(FileRecord):
         ]
         if self.is_secondary_capture:
             parts.insert(1, "secondary")
-        path = Path("_".join(parts))
+        path = Path("_".join(p for p in parts if p))
         return path
 
     @classmethod
@@ -537,7 +539,7 @@ class MammogramFileRecord(DicomImageFileRecord):
 
         path = super().standardized_filename(file_id)
         parts = [filetype, *modifiers, view] + str(path).split("_")[1:]
-        pattern = "_".join(parts)
+        pattern = "_".join(p for p in parts if p)
         return Path(pattern).with_suffix(".dcm")
 
     @classmethod
@@ -638,6 +640,22 @@ class StudyDateFromPath(RecordHelper):
             year = Path(path).parents[self.level].name
             date = f"{year}0101"
             rec = cast(R, rec.replace(StudyDate=date))
+        return rec
+
+
+@HELPER_REGISTRY(name="patient-orientation")
+class ParsePatientOrientation(RecordHelper):
+    def __call__(self, path: PathLike, rec: R) -> R:
+        if isinstance(rec, MammogramFileRecord):
+            po_laterality = Laterality.from_patient_orientation(rec.PatientOrientation or [])
+            po_view_pos = ViewPosition.from_patient_orientation(rec.PatientOrientation or [])
+            rec = cast(
+                R,
+                rec.replace(
+                    laterality=rec.laterality or po_laterality,
+                    view_position=rec.view_position or po_view_pos,
+                ),
+            )
         return rec
 
 

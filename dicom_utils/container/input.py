@@ -7,7 +7,7 @@ from typing import Callable, Dict, Hashable, Iterable, Iterator, Optional, Tuple
 
 from .collection import RecordCollection
 from .group import GROUP_REGISTRY
-from .record import RECORD_REGISTRY, FileRecord
+from .record import RECORD_REGISTRY, DicomFileRecord, FileRecord
 
 
 class Input:
@@ -46,6 +46,7 @@ class Input:
         helpers: Iterable[str] = [],
         prefix: str = "Case-",
         start: int = 1,
+        require_dicom: bool = True,
         **kwargs,
     ):
         if records is None:
@@ -61,8 +62,13 @@ class Input:
             lambda c1, c2: c1.union(c2),
             (RecordCollection.from_dir(s, record_types=self.records, helpers=helpers, **kwargs) for s in sources),
         )
+        grouped_collections = [
+            c
+            for c in collection.group_by(self.group_fn).values()
+            if not require_dicom or any(isinstance(d, DicomFileRecord) for d in c)
+        ]
 
-        self.cases = self.to_ordered_collections(collection.group_by(self.group_fn).values())
+        self.cases = self.to_ordered_collections(grouped_collections)
 
     @property
     def group_fn(self) -> Callable[[FileRecord], Hashable]:

@@ -298,6 +298,25 @@ class TestLaterality:
         orient = Laterality.from_tags(tags)
         assert orient == expected
 
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (["A", "FL"], Laterality.RIGHT),
+            (["A", "FR"], Laterality.LEFT),
+            (["P", "FL"], Laterality.RIGHT),
+            (["P", "FR"], Laterality.LEFT),
+            (["A", "L"], Laterality.RIGHT),
+            (["A", "R"], Laterality.LEFT),
+            (["P", "L"], Laterality.RIGHT),
+            (["P", "R"], Laterality.LEFT),
+            (["P"], Laterality.UNKNOWN),
+            ([], Laterality.UNKNOWN),
+        ],
+    )
+    def test_from_patient_orientation(self, value, expected):
+        orient = Laterality.from_patient_orientation(value)
+        assert orient == expected
+
     def test_bool(self):
         expr = Laterality.UNKNOWN or Laterality.RIGHT or Laterality.UNKNOWN
         assert expr == Laterality.RIGHT
@@ -413,6 +432,25 @@ class TestViewPosition:
         ]
         assert Tag.ViewCodeSequence in ViewPosition.get_required_tags()
         orient = ViewPosition.from_view_code_sequence_tag(cast(DataElement, view_code_sequence))
+        assert orient == expected
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (["A", "FL"], ViewPosition.MLO),
+            (["A", "FR"], ViewPosition.MLO),
+            (["P", "FL"], ViewPosition.MLO),
+            (["P", "FR"], ViewPosition.MLO),
+            (["A", "L"], ViewPosition.CC),
+            (["A", "R"], ViewPosition.CC),
+            (["P", "L"], ViewPosition.CC),
+            (["P", "R"], ViewPosition.CC),
+            (["P"], ViewPosition.UNKNOWN),
+            ([], ViewPosition.UNKNOWN),
+        ],
+    )
+    def test_from_patient_orientation(self, value, expected):
+        orient = ViewPosition.from_patient_orientation(value)
         assert orient == expected
 
     def test_bool(self):

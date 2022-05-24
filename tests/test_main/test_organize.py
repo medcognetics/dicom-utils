@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from dicom_utils import DicomFactory
-from dicom_utils.container.__main__ import run
+from dicom_utils.cli.organize import organize
 from dicom_utils.container.record import DicomFileRecord
 
 
@@ -28,7 +28,7 @@ class TestSymlinkPipeline:
             paths.append(outputs)
         dest = Path(tmp_path, "symlinks")
         dest.mkdir()
-        result = run(tmp_path, dest, threads=True, use_bar=False)
+        result = organize(tmp_path, dest, threads=True, use_bar=False)
         for output, paths in result.items():
             recs = {k: [p.relative_to(dest) for p in v] for k, v in paths.items()}
             assert len(recs) == num_cases
@@ -59,7 +59,7 @@ class TestSymlinkPipeline:
         dest.mkdir()
         helpers = ["study-date-from-path"]
 
-        result = run(tmp_path, dest, helpers=helpers, threads=True, use_bar=False)
+        result = organize(tmp_path, dest, helpers=helpers, threads=True, use_bar=False)
         for output, paths in result.items():
             recs = {k: [p.relative_to(dest) for p in v] for k, v in paths.items()}
             assert len(recs) == num_cases * num_years
