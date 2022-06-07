@@ -19,7 +19,9 @@ from pydicom.uid import (
 
 
 def get_rand_bytes(num: int) -> bytes:
-    return np.random.default_rng().bytes(num)
+    rand_bytes = np.random.default_rng().bytes(num)
+    assert isinstance(rand_bytes, bytes)
+    return rand_bytes
 
 
 @pytest.fixture
