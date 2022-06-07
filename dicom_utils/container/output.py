@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from functools import partial
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Dict, Final, Hashable, Iterable, Optional, Set, Union, cast
+from typing import Any, Callable, Dict, Final, Hashable, Iterable, Optional, Set, Union, cast, List, Tuple
 
 from tqdm import tqdm
 
@@ -15,6 +15,7 @@ from .collection import RecordCollection
 from .input import Input
 from .record import FileRecord, MammogramFileRecord
 from .registry import Registry
+from ..types import MammogramType
 
 
 YEAR_RE: Final = re.compile(r"\d{4}")
@@ -52,11 +53,7 @@ class Output(ABC):
 
     def __call__(self, inp: Union[Input, Dict[str, RecordCollection]]) -> Dict[str, RecordCollection]:
         result: Dict[str, RecordCollection] = {}
-        bar = tqdm(
-            inp if isinstance(inp, Input) else inp.items(),
-            leave=False,
-            disable=not self.use_bar,
-        )
+        bar = self.tqdm(inp if isinstance(inp, Input) else inp.items())
         for name, collection in bar:
             if self.collection_filter is not None and not self.collection_filter(collection):
                 continue
@@ -70,6 +67,10 @@ class Output(ABC):
                 key = inp.group_fn(next(iter(collection)))
                 self.write_metadata(name, key, collection, dest)
         return result
+
+    @property
+    def tqdm(self) -> Callable:
+        return partial(tqdm, leave=False, disable=not self.use_bar)
 
     @abstractmethod
     def write(self, collection: RecordCollection, dest: Path) -> RecordCollection:
@@ -102,16 +103,6 @@ class SymlinkFileOutput(Output):
         return result
 
 
-@OUTPUT_REGISTRY(name="json", subdir="cases")
-class JsonFileOutput(Output):
-    def write(self, collection: RecordCollection, dest: Path) -> RecordCollection:
-        assert dest.is_dir()
-        result = RecordCollection()
-        metadata: Dict[str, Any] = {}
-        metadata["StudyInstanceUID"]
-        return result
-
-
 @OUTPUT_REGISTRY(name="longitudinal", subdir="cases", derived=True)
 class LongitudinalPointerOutput(Output):
     def __call__(self, inp: Union[Input, Dict[str, RecordCollection]]) -> Dict[str, RecordCollection]:
@@ -122,11 +113,7 @@ class LongitudinalPointerOutput(Output):
         reverse_association_lookup = {name: group for group, names in association_lookup.items() for name in names}
 
         result: Dict[str, RecordCollection] = {}
-        bar = tqdm(
-            inp.items(),
-            leave=False,
-            disable=not self.use_bar,
-        )
+        bar = self.tqdm(inp if isinstance(inp, Input) else inp.items())
         for name, collection in bar:
             if self.collection_filter is not None and not self.collection_filter(collection):
                 continue
@@ -181,6 +168,59 @@ class LongitudinalPointerOutput(Output):
         return RecordCollection([FileRecord(dest)])
 
 
+class FileListOutput(Output):
+
+    def __init__(
+        self,
+        path: PathLike,
+        filename: PathLike,
+        record_filter: Optional[Callable[[FileRecord], bool]] = None,
+        collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
+        use_bar: bool = True,
+        by_case: Optional[bool] = None,
+    ):
+        super().__init__(path, record_filter, collection_filter, use_bar)
+        self.filename = Path(filename)
+        self.by_case = by_case if by_case is not None else (self.record_filter is None)
+
+    def __call__(self, inp: Union[Input, Dict[str, RecordCollection]]) -> Dict[str, RecordCollection]:
+        assert isinstance(inp, dict)
+        result: Dict[str, RecordCollection] = {}
+        bar = self.tqdm(inp if isinstance(inp, Input) else inp.items())
+        dest = Path(self.path, self.filename)
+
+        f = open(dest, "w")
+        for name, collection in bar:
+            # skip entire collection if collection_filter is True
+            if self.collection_filter is not None and not self.collection_filter(collection):
+                continue
+
+            # filter records
+            if self.record_filter:
+                collection = collection.filter(self.record_filter)
+            if (all_records_were_filtered := not collection):
+                continue
+
+            if self.by_case:
+                f.write(f"{name}\n")
+            else:
+                files = [Path(*rec.path.parts[-2:]) for rec in collection]
+                for p in files:
+                    f.write(f"{str(p)}\n")
+
+            result[name] = collection
+        f.close()
+
+        # remove empty file
+        if not dest.stat().st_size:
+            dest.unlink()
+
+        return result
+
+    def write(self, name: str) -> RecordCollection:
+        ...
+
+
 def is_complete_case(c: RecordCollection) -> bool:
     mammograms = c.filter(lambda rec: isinstance(rec, MammogramFileRecord))
     assert all(isinstance(rec, MammogramFileRecord) for rec in mammograms)
@@ -192,18 +232,65 @@ def is_mammogram_case(c: RecordCollection) -> bool:
     return any(isinstance(rec, MammogramFileRecord) for rec in c)
 
 
-OUTPUT_REGISTRY(
-    SymlinkFileOutput,
-    name="symlink-cases",
-    subdir="cases",
-)
-OUTPUT_REGISTRY(
-    partial(SymlinkFileOutput, collection_filter=is_mammogram_case),
-    name="symlink-mammograms",
-    subdir="mammograms",
-)
-OUTPUT_REGISTRY(
-    partial(SymlinkFileOutput, collection_filter=is_complete_case),
-    name="symlink-complete-mammograms",
-    subdir="complete-mammograms",
-)
+def is_mammogram_record(rec: FileRecord, mtype: Optional[MammogramType] = None) -> bool:
+    return (
+        isinstance(rec, MammogramFileRecord) 
+        and 
+        (mtype is None or rec.mammogram_type == mtype)
+    )
+
+
+def is_2d_mammogram(rec: FileRecord) -> bool:
+    return isinstance(rec, MammogramFileRecord) and rec.is_2d
+
+
+def is_spot_mag(rec: FileRecord) -> bool:
+    return isinstance(rec, MammogramFileRecord) and (rec.is_spot_compression or rec.is_magnified)
+
+
+# register primary output groups
+# these should not use a record filter
+PRIMARY_OUTPUT_GROUPS = [
+    ("cases", None),
+    ("mammograms", is_mammogram_case),
+    ("complete-mammograms", is_complete_case),
+]
+for name, collection_filter in PRIMARY_OUTPUT_GROUPS:
+    OUTPUT_REGISTRY(
+        partial(SymlinkFileOutput, collection_filter=collection_filter),
+        name=f"symlink-{name}",
+        subdir=name,
+    )
+    OUTPUT_REGISTRY(
+        partial(
+            FileListOutput, 
+            filename=Path(f"{name}.txt"),
+            collection_filter=collection_filter, 
+        ),
+        name=f"filelist-{name}",
+        subdir="file_lists/by_case",
+        derived=True
+    )
+
+# register primary output groups
+# these can use a record filter
+SECONDARY_OUTPUT_GROUPS: List[Tuple[str, Callable, Callable]] = [
+    (mtype.simple_name, is_mammogram_case, partial(is_mammogram_record, mtype=mtype))
+    for mtype in MammogramType if mtype != MammogramType.UNKNOWN
+]
+SECONDARY_OUTPUT_GROUPS.append(("spot_mag", is_mammogram_case, is_spot_mag))
+for name, collection_filter, record_filter in SECONDARY_OUTPUT_GROUPS:
+    for by_case in (False, True):
+        by_case_str = "by_case" if by_case else "by_file"
+        OUTPUT_REGISTRY(
+            partial(
+                FileListOutput, 
+                filename=Path(f"{name}.txt"),
+                collection_filter=collection_filter, 
+                record_filter=record_filter,
+                by_case=by_case,
+            ),
+            name=f"filelist-{name}-{by_case_str}",
+            subdir=f"file_lists/{by_case_str}",
+            derived=True
+        )

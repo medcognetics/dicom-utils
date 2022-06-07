@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
+from statistics import mode
 from functools import cached_property, partial
 from io import BytesIO, IOBase
 from os import PathLike
@@ -179,7 +180,7 @@ class FileRecord:
         symlink_record.path.symlink_to(symlink_contents)
 
         resolved_path = symlink_record.path.resolve().absolute()
-        real_path = self.path.absolute()
+        real_path = self.path.resolve().absolute()
         assert resolved_path == real_path, f"{resolved_path} did not match {real_path}"
         return symlink_record
 
@@ -286,6 +287,9 @@ class DicomFileRecord(FileRecord):
         for tag, value in self:
             if not isinstance(value, Sequence):
                 result[tag.name] = value
+        result["secondary_capture"] = self.is_secondary_capture
+        result["diagnostic"] = self.is_diagnostic
+        result["screening"] = self.is_screening
         return result
 
     @classmethod
@@ -455,6 +459,11 @@ class DicomImageFileRecord(DicomFileRecord):
                 raise DicomValueError(tag)
         return cast(R, super().from_dicom(path, dcm, modality))
 
+    def to_dict(self) -> Dict[str, Any]:
+        result = super().to_dict()
+        result["magnified"] = self.is_magnified
+        return result
+
 
 @RECORD_REGISTRY(name="mammogram", suffixes=[".dcm"])
 @dataclass(frozen=True, order=False, eq=False)
@@ -471,6 +480,10 @@ class MammogramFileRecord(DicomImageFileRecord):
     @property
     def mammogram_view(self) -> MammogramView:
         return MammogramView.create(self.laterality, self.view_position)
+
+    @property
+    def is_2d(self) -> bool:
+        return self.mammogram_type is not None and self.mammogram_type != MammogramType.TOMO
 
     @cached_property
     def is_spot_compression(self) -> bool:
@@ -586,6 +599,16 @@ class MammogramFileRecord(DicomImageFileRecord):
         )
         return result
 
+    def to_dict(self) -> Dict[str, Any]:
+        result = super().to_dict()
+        result["mammogram_type"] = self.mammogram_type.simple_name
+        result["laterality"] = self.laterality.short_str
+        result["view_position"] = self.view_position.short_str
+        result["spot_compression"] = self.is_spot_compression
+        result["implant_displaced"] = self.is_implant_displaced
+        result["standard_mammo_view"] = self.is_standard_mammo_view
+        return result
+
 
 class RecordHelper(ABC):
     r"""A :class:`RecordHelper` implements logic that is run during :class:`FileRecord`
@@ -663,3 +686,35 @@ class ParsePatientOrientation(RecordHelper):
 for i in range(LEVELS_TO_REGISTER := 3):
     HELPER_REGISTRY(partial(PatientIDFromPath, level=i + 1), name=f"patient-id-from-path-{i+1}")
     HELPER_REGISTRY(partial(StudyDateFromPath, level=i + 1), name=f"study-date-from-path-{i+1}")
+
+
+class DirectoryHelper(RecordHelper):
+
+    def glob(self, path: PathLike, files_only: bool = True) -> Iterator[Path]:
+        path = Path(path)
+        assert path.is_dir()
+        for p in path.glob("*"):
+            if not files_only or p.is_file():
+                yield p
+
+@HELPER_REGISTRY(name="spot-compression")
+class SpotCompressionHelper(DirectoryHelper):
+
+    def __init__(self, size_delta: int = int(1e6)):
+        self.size_delta = size_delta
+
+    def __call__(self, path: PathLike, rec: R) -> R:
+        if isinstance(rec, MammogramFileRecord):
+            path = Path(path)
+            file_sizes = {p: size for p, size in self.file_sizes(path.parent).items() if p.suffix == ".dcm"}
+            if len(file_sizes) > 4 and (is_spot := rec.file_size < mode(file_sizes.values()) - self.size_delta):
+                rec = cast(
+                    R,
+                    rec.replace(
+                        PaddleDescription=(rec.PaddleDescription or "") + " HELPER SPOT"
+                    ),
+                )
+        return cast(R, rec)
+
+    def file_sizes(self, path: PathLike) -> Dict[Path, int]:
+        return {p: p.stat().st_size for p in self.glob(path)}

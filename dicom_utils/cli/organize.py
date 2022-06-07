@@ -54,11 +54,12 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
         choices=GROUP_REGISTRY.available_keys(),
         help="grouping function",
     )
+
     parser.add_argument(
         "-o",
         "--output",
         nargs="+",
-        default=["symlink-cases", "symlink-mammograms", "symlink-complete-mammograms"],
+        default=list(OUTPUT_REGISTRY.available_keys()),
         choices=OUTPUT_REGISTRY.available_keys(),
         help="output functions",
     )

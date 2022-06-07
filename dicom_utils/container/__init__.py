@@ -3,7 +3,7 @@
 
 from .collection import RecordCollection, RecordCreator, record_iterator
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID, TransferSyntaxUID
-from .record import DicomFileRecord, DicomImageFileRecord, FileRecord, MammogramFileRecord
+from .record import DicomFileRecord, DicomImageFileRecord, FileRecord, MammogramFileRecord, RECORD_REGISTRY, HELPER_REGISTRY, RecordHelper
 
 
 __all__ = [
@@ -22,4 +22,7 @@ __all__ = [
     "DicomImageFileRecord",
     "MammogramFileRecord",
     "RecordCreator",
+    "RECORD_REGISTRY",
+    "HELPER_REGISTRY",
+    "RecordHelper",
 ]

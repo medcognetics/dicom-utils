@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from abc import ABC, abstractmethod
 from functools import reduce
 from os import PathLike
 from pathlib import Path
@@ -8,6 +9,52 @@ from typing import Callable, Dict, Hashable, Iterable, Iterator, Optional, Tuple
 from .collection import RecordCollection
 from .group import GROUP_REGISTRY
 from .record import RECORD_REGISTRY, DicomFileRecord, FileRecord
+from .registry import Registry
+
+NAME_REGISTRY = Registry("names")
+
+
+class CaseRenamer(ABC):
+
+    def __init__(self, **kwargs):
+        pass
+    
+    @abstractmethod
+    def __call__(self, collection: RecordCollection, index: int, total: int) -> str:
+        ...
+
+    @classmethod
+    def num_leading_zeros(cls, total: int) -> int:
+        return len(str(total))
+
+    @classmethod
+    def add_leading_zeros(cls, index: int, total: int) -> str:
+        return str(index).zfill(cls.num_leading_zeros(total))
+
+
+@NAME_REGISTRY(name="consecutive")
+class ConsecutiveNamer(CaseRenamer):
+
+    def __init__(self, prefix: str = "Case-", start: int = 1, **kwargs):
+        self.prefix = prefix
+        self.start = start
+    
+    def __call__(self, collection: RecordCollection, index: int, total: int) -> str:
+        return f"{self.prefix}{self.add_leading_zeros(index, total)}"
+
+
+class PatientIDNamer(CaseRenamer):
+
+    def __init__(self, prefix: str = "Case-", **kwargs):
+        self.prefix = prefix
+    
+    def __call__(self, collection: RecordCollection, index: int, total: int) -> str:
+        patient_ids = {
+            pid for rec in collection
+            if isinstance(rec, DicomFileRecord) and (pid := rec.PatientID) is not None
+        }
+        return f"{self.prefix}{self.add_leading_zeros(index, total)}"
+
 
 
 class Input:
