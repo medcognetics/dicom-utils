@@ -37,6 +37,17 @@ T = TypeVar("T", bound=SupportsGetItem)
 U = TypeVar("U", bound=Dataset)
 
 
+def dicom_copy(dcm: U) -> U:
+    # Avoid multiple copies of PixelData which can be 100s of MB
+    pixel_data = dcm.PixelData
+    del dcm.PixelData
+    if hasattr(dcm, "_pixel_array"):
+        del dcm._pixel_array  # Delete possibly cached interpretation of PixelData
+    new_dcm = deepcopy(dcm)
+    dcm.PixelData = new_dcm.PixelData = pixel_data
+    return new_dcm
+
+
 class VolumeHandler(ABC):
     r"""Base class for classes that manipulate 3D Volumes"""
 
@@ -119,7 +130,7 @@ class VolumeHandler(ABC):
 
         """
         # copy dicom and read key tags
-        dcm = deepcopy(dcm)
+        dcm = dicom_copy(dcm)
         num_frames: Optional[SupportsInt] = dcm.get("NumberOfFrames", None)
         num_frames = int(num_frames) if num_frames is not None else None
         is_compressed: bool = dcm.file_meta.TransferSyntaxUID.is_compressed
