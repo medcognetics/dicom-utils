@@ -1,27 +1,26 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from functools import reduce
 from os import PathLike
 from pathlib import Path
-from typing import Callable, Dict, Hashable, Iterable, Iterator, Optional, Tuple, Union, cast
+from typing import Callable, Dict, Hashable, Iterable, Iterator, Optional, Tuple, Type, Union, cast
+
+from registry import Registry
 
 from .collection import RecordCollection
 from .group import GROUP_REGISTRY
-from .record import RECORD_REGISTRY, DicomFileRecord, FileRecord
-from .registry import Registry
+from .record import RECORD_REGISTRY, DicomFileRecord, FileRecord, SupportsPatientID, SupportsStudyDate
 
-NAME_REGISTRY = Registry("names")
+
+NAME_REGISTRY = Registry("names", bound=Type[Callable[[RecordCollection, int, int], str]])
 
 
 class CaseRenamer(ABC):
-
-    def __init__(self, **kwargs):
-        pass
-    
     @abstractmethod
     def __call__(self, collection: RecordCollection, index: int, total: int) -> str:
-        ...
+        raise NotImplementedError
 
     @classmethod
     def num_leading_zeros(cls, total: int) -> int:
@@ -33,28 +32,47 @@ class CaseRenamer(ABC):
 
 
 @NAME_REGISTRY(name="consecutive")
+@dataclass
 class ConsecutiveNamer(CaseRenamer):
+    prefix: str = "Case-"
+    start: int = 1
 
-    def __init__(self, prefix: str = "Case-", start: int = 1, **kwargs):
-        self.prefix = prefix
-        self.start = start
-    
     def __call__(self, collection: RecordCollection, index: int, total: int) -> str:
         return f"{self.prefix}{self.add_leading_zeros(index, total)}"
 
 
+@NAME_REGISTRY(name="patient")
+@dataclass
 class PatientIDNamer(CaseRenamer):
+    prefix: str = "Patient-"
 
-    def __init__(self, prefix: str = "Case-", **kwargs):
-        self.prefix = prefix
-    
     def __call__(self, collection: RecordCollection, index: int, total: int) -> str:
         patient_ids = {
-            pid for rec in collection
-            if isinstance(rec, DicomFileRecord) and (pid := rec.PatientID) is not None
+            pid for rec in collection if isinstance(rec, SupportsPatientID) and (pid := rec.PatientID) is not None
         }
-        return f"{self.prefix}{self.add_leading_zeros(index, total)}"
+        if len(patient_ids) != 1:
+            raise ValueError("Expected 1 PatientID, but found {len(patient_ids)}")
+        pid = next(iter(patient_ids))
+        return f"{self.prefix}{pid}"
 
+
+@NAME_REGISTRY(name="study-date")
+@dataclass
+class StudyDateNamer(CaseRenamer):
+    prefix: str = "Date-"
+    year_only: bool = False
+
+    def __call__(self, collection: RecordCollection, index: int, total: int) -> str:
+        dates = {
+            date
+            for rec in collection
+            if isinstance(rec, SupportsStudyDate)
+            and (date := (rec.StudyYear if self.year_only else rec.StudyDate)) is not None
+        }
+        if len(dates) != 1:
+            raise ValueError("Expected 1 date, but found {len(dates)}")
+        date = next(iter(dates))
+        return f"{self.prefix}{date}"
 
 
 class Input:
@@ -89,9 +107,9 @@ class Input:
         self,
         sources: Union[PathLike, Iterable[PathLike]],
         records: Optional[Iterable[str]] = None,
-        groups: Iterable[str] = ["study-uid"],
-        helpers: Iterable[str] = [],
-        prefix: str = "Case-",
+        groups: Iterable[str] = ["patient-id", "study-uid"],
+        helpers: Iterable[str] = ["case"],
+        namer: str = "consecutive",
         start: int = 1,
         require_dicom: bool = True,
         **kwargs,
@@ -101,21 +119,28 @@ class Input:
         else:
             self.records = records
         self.groups = [GROUP_REGISTRY.get(g) for g in groups]
-        self.prefix = prefix
+        self.namer = NAME_REGISTRY.get(namer)()
         self.start = start
 
+        # scan sources and build a RecordCollection with every valid file found
         sources = [Path(sources)] if isinstance(sources, PathLike) else [Path(p) for p in sources]
         collection = reduce(
             lambda c1, c2: c1.union(c2),
             (RecordCollection.from_dir(s, record_types=self.records, helpers=helpers, **kwargs) for s in sources),
         )
-        grouped_collections = [
-            c
-            for c in collection.group_by(self.group_fn).values()
-            if not require_dicom or any(isinstance(d, DicomFileRecord) for d in c)
-        ]
 
-        self.cases = self.to_ordered_collections(grouped_collections)
+        # apply groupers to generate a dict of key -> group pairs
+        grouped_collections = {
+            key: grouped
+            for key, grouped in collection.group_by(*self.groups).items()
+            if not require_dicom or grouped.contains_record_type(DicomFileRecord)
+        }
+
+        self.cases: Dict[str, RecordCollection] = {}
+        for i, k in enumerate(sorted(grouped_collections.keys())):
+            group = grouped_collections[k]
+            name = self.namer(group, i + 1, len(grouped_collections))
+            self.cases[name] = group
 
     @property
     def group_fn(self) -> Callable[[FileRecord], Hashable]:
@@ -125,15 +150,3 @@ class Input:
         r"""Iterates over pairs of named groups and the :class:`RecordCollection` containing that group."""
         for k, v in self.cases.items():
             yield k, v
-
-    def to_ordered_collections(self, collections: Iterable[RecordCollection]) -> Dict[str, RecordCollection]:
-        collections = list(collections)
-        num_leading_zeros = len(str(len(collections)))
-
-        def get_postfix(i):
-            return str(i + self.start).zfill(num_leading_zeros)
-
-        return {
-            f"{self.prefix}{get_postfix(i)}": col
-            for i, col in enumerate(sorted(collections, key=lambda c: str(c.sort_key)))
-        }

@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
-from statistics import mode
 from functools import cached_property, partial
 from io import BytesIO, IOBase
 from os import PathLike
 from pathlib import Path
+from statistics import mode
 from typing import (
     Any,
     Dict,
@@ -29,6 +29,7 @@ from typing import (
 import pydicom
 from pydicom import Dataset, Sequence
 from pydicom.uid import SecondaryCaptureImageStorage
+from registry import Registry
 
 from ..dicom import Dicom
 from ..tags import Tag
@@ -42,7 +43,6 @@ from ..types import PhotometricInterpretation as PI
 from ..types import ViewPosition, get_value, iterate_view_modifier_codes
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
-from .registry import Registry
 
 
 STANDARD_MAMMO_VIEWS: Final[Set[MammogramView]] = {
@@ -194,7 +194,31 @@ class FileRecord:
 
 @runtime_checkable
 class SupportsStudyUID(Protocol):
-    StudyInstanceUID: Optional[StudyUID]
+    StudyInstanceUID: Optional[StudyUID] = None
+
+
+@runtime_checkable
+class SupportsPatientID(Protocol):
+    PatientID: Optional[str] = None
+
+
+@runtime_checkable
+class SupportsStudyDate(Protocol):
+    StudyDate: Optional[str] = None
+
+    @property
+    def StudyYear(self) -> Optional[int]:
+        r"""Extracts a year from ``StudyDate``.
+
+        Returns:
+            First 4 digits of ``StudyDate`` as an int, or None if a year could not be parsed
+        """
+        if self.StudyDate and len(self.StudyDate) > 4:
+            try:
+                return int(self.StudyDate[:4])
+            except Exception:
+                pass
+        return None
 
 
 # NOTE: record contents should follow this naming scheme:
@@ -689,7 +713,6 @@ for i in range(LEVELS_TO_REGISTER := 3):
 
 
 class DirectoryHelper(RecordHelper):
-
     def glob(self, path: PathLike, files_only: bool = True) -> Iterator[Path]:
         path = Path(path)
         assert path.is_dir()
@@ -697,9 +720,9 @@ class DirectoryHelper(RecordHelper):
             if not files_only or p.is_file():
                 yield p
 
+
 @HELPER_REGISTRY(name="spot-compression")
 class SpotCompressionHelper(DirectoryHelper):
-
     def __init__(self, size_delta: int = int(1e6)):
         self.size_delta = size_delta
 
@@ -710,9 +733,7 @@ class SpotCompressionHelper(DirectoryHelper):
             if len(file_sizes) > 4 and (is_spot := rec.file_size < mode(file_sizes.values()) - self.size_delta):
                 rec = cast(
                     R,
-                    rec.replace(
-                        PaddleDescription=(rec.PaddleDescription or "") + " HELPER SPOT"
-                    ),
+                    rec.replace(PaddleDescription=(rec.PaddleDescription or "") + " HELPER SPOT"),
                 )
         return cast(R, rec)
 

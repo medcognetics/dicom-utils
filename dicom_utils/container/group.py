@@ -4,20 +4,22 @@
 
 from functools import partial
 from pathlib import Path
-from typing import Callable, Hashable, Optional, TypeVar
+from typing import Callable, Hashable, Optional, ParamSpec, TypeVar
+
+from registry import Registry
 
 # Type checking fails when dataclass attr name matches a type alias.
 # Import types under a different alias
 from .helpers import StudyUID
 from .record import FileRecord
-from .registry import Registry
 
 
+P = ParamSpec("P")
 H = TypeVar("H", bound=Hashable)
 
 
 GroupFunction = Callable[[FileRecord], Hashable]
-GROUP_REGISTRY = Registry("group")
+GROUP_REGISTRY = Registry("group", bound=Callable[..., Hashable])
 
 
 @GROUP_REGISTRY(name="study-uid")

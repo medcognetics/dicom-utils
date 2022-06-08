@@ -3,7 +3,7 @@
 from argparse import ArgumentParser, Namespace
 from os import PathLike
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Union, cast
+from typing import Dict, Iterable, List, Optional, Union
 
 from tqdm import tqdm
 
@@ -18,22 +18,23 @@ def organize(
     sources: Union[PathLike, Iterable[PathLike]],
     dest: PathLike,
     records: Optional[Iterable[str]] = None,
-    groups: Iterable[str] = ["study-uid"],
+    groups: Iterable[str] = ["patient-id", "study-uid"],
     helpers: Iterable[str] = [],
+    namer: str = "consecutive",
     outputs: Iterable[str] = ["symlink-cases"],
     prefix: str = "Case-",
     start: int = 1,
     use_bar: bool = True,
     **kwargs,
 ) -> Dict[Output, Dict[str, RecordCollection]]:
-    inp = Input(sources, records, groups, helpers, prefix, start, use_bar=use_bar, **kwargs)
+    inp = Input(sources, records, groups, helpers, namer, prefix, start, use_bar=use_bar, **kwargs)
     opt: List[Output] = []
     derived_opt: List[Output] = []
     for o in outputs:
-        reg_dict = cast(Dict[str, Any], OUTPUT_REGISTRY.get(o, with_metadata=True))
-        subdir = Path(dest, str(reg_dict["metadata"].get("subdir", "")))
-        fn = reg_dict["fn"]
-        derived = reg_dict["metadata"].get("derived", False)
+        reg = OUTPUT_REGISTRY.get_with_metadata(o)
+        subdir = Path(dest, str(reg.metadata.get("subdir", "")))
+        fn = reg.fn
+        derived = reg.metadata.get("derived", False)
         (derived_opt if derived else opt).append(fn(subdir))
 
     result: Dict[Output, Dict[str, RecordCollection]] = {}

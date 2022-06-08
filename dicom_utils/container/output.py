@@ -7,20 +7,20 @@ from abc import ABC, abstractmethod
 from functools import partial
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Dict, Final, Hashable, Iterable, Optional, Set, Union, cast, List, Tuple
+from typing import Callable, Dict, Final, Hashable, Iterable, List, Optional, Set, Tuple, Union, cast
 
+from registry import Registry
 from tqdm import tqdm
 
+from ..types import MammogramType
 from .collection import RecordCollection
 from .input import Input
 from .record import FileRecord, MammogramFileRecord
-from .registry import Registry
-from ..types import MammogramType
 
 
 YEAR_RE: Final = re.compile(r"\d{4}")
 
-OUTPUT_REGISTRY = Registry("output")
+OUTPUT_REGISTRY = Registry("output", bound=Callable[..., Dict[str, RecordCollection]])
 
 
 class Output(ABC):
@@ -169,7 +169,6 @@ class LongitudinalPointerOutput(Output):
 
 
 class FileListOutput(Output):
-
     def __init__(
         self,
         path: PathLike,
@@ -198,7 +197,7 @@ class FileListOutput(Output):
             # filter records
             if self.record_filter:
                 collection = collection.filter(self.record_filter)
-            if (all_records_were_filtered := not collection):
+            if all_records_were_filtered := not collection:
                 continue
 
             if self.by_case:
@@ -233,11 +232,7 @@ def is_mammogram_case(c: RecordCollection) -> bool:
 
 
 def is_mammogram_record(rec: FileRecord, mtype: Optional[MammogramType] = None) -> bool:
-    return (
-        isinstance(rec, MammogramFileRecord) 
-        and 
-        (mtype is None or rec.mammogram_type == mtype)
-    )
+    return isinstance(rec, MammogramFileRecord) and (mtype is None or rec.mammogram_type == mtype)
 
 
 def is_2d_mammogram(rec: FileRecord) -> bool:
@@ -263,20 +258,21 @@ for name, collection_filter in PRIMARY_OUTPUT_GROUPS:
     )
     OUTPUT_REGISTRY(
         partial(
-            FileListOutput, 
+            FileListOutput,
             filename=Path(f"{name}.txt"),
-            collection_filter=collection_filter, 
+            collection_filter=collection_filter,
         ),
         name=f"filelist-{name}",
         subdir="file_lists/by_case",
-        derived=True
+        derived=True,
     )
 
 # register primary output groups
 # these can use a record filter
 SECONDARY_OUTPUT_GROUPS: List[Tuple[str, Callable, Callable]] = [
     (mtype.simple_name, is_mammogram_case, partial(is_mammogram_record, mtype=mtype))
-    for mtype in MammogramType if mtype != MammogramType.UNKNOWN
+    for mtype in MammogramType
+    if mtype != MammogramType.UNKNOWN
 ]
 SECONDARY_OUTPUT_GROUPS.append(("spot_mag", is_mammogram_case, is_spot_mag))
 for name, collection_filter, record_filter in SECONDARY_OUTPUT_GROUPS:
@@ -284,13 +280,13 @@ for name, collection_filter, record_filter in SECONDARY_OUTPUT_GROUPS:
         by_case_str = "by_case" if by_case else "by_file"
         OUTPUT_REGISTRY(
             partial(
-                FileListOutput, 
+                FileListOutput,
                 filename=Path(f"{name}.txt"),
-                collection_filter=collection_filter, 
+                collection_filter=collection_filter,
                 record_filter=record_filter,
                 by_case=by_case,
             ),
             name=f"filelist-{name}-{by_case_str}",
             subdir=f"file_lists/{by_case_str}",
-            derived=True
+            derived=True,
         )

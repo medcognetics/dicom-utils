@@ -19,6 +19,7 @@ from typing import (
     Type,
     TypeVar,
     cast,
+    overload,
 )
 
 from tqdm import tqdm
@@ -27,7 +28,7 @@ from ..dicom import Dicom
 
 # Type checking fails when dataclass attr name matches a type alias.
 # Import types under a different alias
-from .record import HELPER_REGISTRY, RECORD_REGISTRY, DicomFileRecord, FileRecord, RecordHelper, SupportsStudyUID
+from .record import HELPER_REGISTRY, RECORD_REGISTRY, DicomFileRecord, FileRecord, RecordHelper
 
 
 class RecordCreator:
@@ -88,11 +89,11 @@ class RecordCreator:
 
         # exclude candidates by file extension if `path` has an extension
         for name in self.functions:
-            entry = cast(Dict[str, Any], RECORD_REGISTRY.get(name, with_metadata=True))
-            dtype = entry["fn"]
+            entry = RECORD_REGISTRY.get_with_metadata(name)
+            dtype = entry.fn
             assert isinstance(dtype, type)
             assert issubclass(dtype, FileRecord)
-            suffixes = set(entry.get("suffixes", []))
+            suffixes = set(entry.metadata.get("suffixes", []))
             path_suffix = path.suffix.lower()
             valid_candidate = not path_suffix or not suffixes or path_suffix in suffixes
             if valid_candidate:
@@ -218,10 +219,23 @@ class RecordCollection:
         records = {rec for rec in self.records if func(rec)}
         return self.__class__(records)
 
-    def group_by(self: C, func: Callable[[FileRecord], T]) -> Dict[T, C]:
-        result: Dict[T, C] = {}
+    def contains_record_type(self, dtype: Type[FileRecord]) -> bool:
+        return any(isinstance(rec, dtype) for rec in self)
+
+    @overload
+    def group_by(self: C, funcs: Callable[[FileRecord], T]) -> Dict[T, C]:
+        ...
+
+    @overload
+    def group_by(self: C, *funcs: Callable[[FileRecord], T]) -> Dict[Tuple[T, ...], C]:
+        ...
+
+    def group_by(self: C, *funcs: Callable[[FileRecord], Hashable]) -> Dict[Hashable, C]:
+        result: Dict[Hashable, C] = {}
         for record in self.records:
-            key = func(record)
+            key = tuple(f(record) for f in funcs)
+            if len(funcs) == 1:
+                key = key[0]
             result.setdefault(key, self.__class__()).add(record)
         return result
 
@@ -251,30 +265,8 @@ class RecordCollection:
         groups = self.group_by(func)
         return self.__class__({next(iter(g)) for g in groups.values()})
 
-    @property
-    def sort_key(self) -> Hashable:
-        r"""Gets a key that can be used to determinstically sort multiple :class:`RecordCollection`s.
-        If at least one member record has a StudyInstanceUID, then the first element of the sorted
-        StudyInstanceUID set will be used as a sort key. If the collection is empty, ``None`` will be used
-        as a sort key. Otherwise, the first element of the sorted path set will be used as a sort key.
-        """
-        study_uids = sorted(
-            rec.StudyInstanceUID
-            for rec in self
-            if isinstance(rec, SupportsStudyUID) and rec.StudyInstanceUID is not None
-        )
-        if study_uids:
-            return next(iter(study_uids))
-
-        paths = sorted(rec.path for rec in self)
-        if paths:
-            return next(iter(paths))
-
-        return None
-
     def to_dict(self) -> Dict[str, Any]:
         result: Dict[str, Any] = {}
-        result["sort_key"] = str(self.sort_key)
         result["records"] = {}
         for name, record in self.standardized_filenames():
             result["records"][str(name)] = record.to_dict()

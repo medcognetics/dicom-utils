@@ -3,7 +3,15 @@
 
 from .collection import RecordCollection, RecordCreator, record_iterator
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID, TransferSyntaxUID
-from .record import DicomFileRecord, DicomImageFileRecord, FileRecord, MammogramFileRecord, RECORD_REGISTRY, HELPER_REGISTRY, RecordHelper
+from .record import (
+    HELPER_REGISTRY,
+    RECORD_REGISTRY,
+    DicomFileRecord,
+    DicomImageFileRecord,
+    FileRecord,
+    MammogramFileRecord,
+    RecordHelper,
+)
 
 
 __all__ = [
