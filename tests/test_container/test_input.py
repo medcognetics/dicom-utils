@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from dicom_utils.container import RecordCollection
 from dicom_utils.container.input import Input
 
 
@@ -27,5 +26,7 @@ class TestInput:
         Path(tmp_path, "dest")
         p = list(Input(source, use_bar=False))
         assert len(p) == 1
-        assert p[0][0] == "Case-1"
-        assert isinstance(p[0][1], RecordCollection)
+        key = p[0][0]
+        assert isinstance(key, tuple)
+        assert len(key) == 3
+        assert all(isinstance(k, str) for k in key)

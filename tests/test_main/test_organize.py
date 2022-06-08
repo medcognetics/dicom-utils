@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from dicom_utils import DicomFactory
 from dicom_utils.cli.organize import organize
 from dicom_utils.container.record import DicomFileRecord
+from dicom_utils.dicom_factory import CompleteMammographyStudyFactory, DicomFactory
 
 
 class TestSymlinkPipeline:
@@ -14,7 +14,7 @@ class TestSymlinkPipeline:
     @pytest.mark.parametrize("spot", [False, True])
     def test_case_dir_structure(self, tmp_path, implants, spot):
         types = ("ffdm", "tomo", "synth", "ultrasound")
-        factory = DicomFactory.complete_mammography_case_factory(
+        factory = CompleteMammographyStudyFactory(
             types=types,
             spot_compression=spot,
             implants=implants,
@@ -36,7 +36,7 @@ class TestSymlinkPipeline:
 
     def test_longitudinal_case_dir_structure(self, tmp_path):
         types = ("ffdm", "tomo", "synth", "ultrasound")
-        factory = DicomFactory.complete_mammography_case_factory(
+        factory = CompleteMammographyStudyFactory(
             types=types,
         )
         paths = []

@@ -39,3 +39,8 @@ for i in range(3):
 @GROUP_REGISTRY(name="patient-id")
 def group_by_patient_id(rec: FileRecord) -> Optional[str]:
     return getattr(rec, "PatientID", None)
+
+
+@GROUP_REGISTRY(name="study-date")
+def group_by_study_date(rec: FileRecord) -> Optional[str]:
+    return getattr(rec, "StudyDate", None)

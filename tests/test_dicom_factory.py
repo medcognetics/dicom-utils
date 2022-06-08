@@ -7,6 +7,7 @@ from pydicom import Dataset, Sequence
 from pydicom.valuerep import VR
 
 from dicom_utils import DicomFactory
+from dicom_utils.dicom_factory import FACTORY_REGISTRY
 from dicom_utils.tags import Tag
 from dicom_utils.types import MammogramType
 
@@ -67,27 +68,27 @@ class TestDicomFactory:
         assert vr == exp
 
     def test_ffdm_factory(self):
-        factory = DicomFactory.ffdm_factory()
+        factory = FACTORY_REGISTRY.get("ffdm")()
         dcm = factory()
         assert MammogramType.from_dicom(dcm) == MammogramType.FFDM
 
     def test_tomo_factory(self):
-        factory = DicomFactory.tomo_factory()
+        factory = FACTORY_REGISTRY.get("tomo")()
         dcm = factory()
         assert MammogramType.from_dicom(dcm) == MammogramType.TOMO
 
     def test_synth_factory(self):
-        factory = DicomFactory.synth_factory()
+        factory = FACTORY_REGISTRY.get("synth")()
         dcm = factory()
         assert MammogramType.from_dicom(dcm) == MammogramType.SYNTH
 
     def test_ultrasound_factory(self):
-        factory = DicomFactory.ultrasound_factory()
+        factory = FACTORY_REGISTRY.get("ultrasound")()
         dcm = factory()
         assert dcm.Modality == "US"
 
     def test_complete_mammography_case_factory(self):
-        factory = DicomFactory.complete_mammography_case_factory()
+        factory = FACTORY_REGISTRY.get("mammo-case")()
         dicoms = factory()
         assert len(dicoms) == 12
 

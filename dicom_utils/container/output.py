@@ -20,7 +20,7 @@ from .record import FileRecord, MammogramFileRecord
 
 YEAR_RE: Final = re.compile(r"\d{4}")
 
-OUTPUT_REGISTRY = Registry("output", bound=Callable[..., Dict[str, RecordCollection]])
+OUTPUT_REGISTRY = Registry("output", bound=Callable[..., "Output"])
 
 
 class Output(ABC):
@@ -51,10 +51,11 @@ class Output(ABC):
         self.collection_filter = collection_filter
         self.use_bar = use_bar
 
-    def __call__(self, inp: Union[Input, Dict[str, RecordCollection]]) -> Dict[str, RecordCollection]:
+    def __call__(self, inp: Union[Input, Dict[Tuple[str, ...], RecordCollection]]) -> Dict[str, RecordCollection]:
         result: Dict[str, RecordCollection] = {}
         bar = self.tqdm(inp if isinstance(inp, Input) else inp.items())
-        for name, collection in bar:
+        for key, collection in bar:
+            name = str(Path(*key))
             if self.collection_filter is not None and not self.collection_filter(collection):
                 continue
             if self.record_filter is not None:

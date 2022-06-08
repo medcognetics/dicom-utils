@@ -18,16 +18,14 @@ def organize(
     sources: Union[PathLike, Iterable[PathLike]],
     dest: PathLike,
     records: Optional[Iterable[str]] = None,
-    groups: Iterable[str] = ["patient-id", "study-uid"],
+    groups: Iterable[str] = ["patient-id", "study-date", "study-uid"],
     helpers: Iterable[str] = [],
-    namer: str = "consecutive",
+    namers: Iterable[str] = ["patient-id", "study-date", "study-uid"],
     outputs: Iterable[str] = ["symlink-cases"],
-    prefix: str = "Case-",
-    start: int = 1,
     use_bar: bool = True,
     **kwargs,
 ) -> Dict[Output, Dict[str, RecordCollection]]:
-    inp = Input(sources, records, groups, helpers, namer, prefix, start, use_bar=use_bar, **kwargs)
+    inp = Input(sources, records, groups, helpers, namers, use_bar=use_bar, **kwargs)
     opt: List[Output] = []
     derived_opt: List[Output] = []
     for o in outputs:
@@ -35,7 +33,7 @@ def organize(
         subdir = Path(dest, str(reg.metadata.get("subdir", "")))
         fn = reg.fn
         derived = reg.metadata.get("derived", False)
-        (derived_opt if derived else opt).append(fn(subdir))
+        (derived_opt if derived else opt).append(fn(path=subdir))
 
     result: Dict[Output, Dict[str, RecordCollection]] = {}
     for o in tqdm(opt, desc="Writing outputs", disable=not use_bar):
@@ -74,7 +72,6 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     )
 
     parser.add_argument("-m", "--modality", default=None, help="modality override")
-    parser.add_argument("-p", "--prefix", default="MedCog-", help="prefix for output cases")
     parser.add_argument("-j", "--jobs", default=8, type=int, help="number of parallel jobs")
     parser.add_argument(
         "--allow-non-dicom", default=False, action="store_true", help="keep groups that don't include a DICOM file"

@@ -230,7 +230,7 @@ class SupportsStudyDate(Protocol):
 # TODO: find a way to functools.partial this dataclass decorator that works with type checker
 @RECORD_REGISTRY(name="dicom", suffixes=[".dcm"])
 @dataclass(frozen=True, order=False, eq=False)
-class DicomFileRecord(FileRecord):
+class DicomFileRecord(FileRecord, SupportsStudyDate):
     r"""Data structure for storing critical information about a DICOM file.
     File IO operations on DICOMs can be expensive, so this class collects all
     required information in a single pass to avoid repeated file opening.
