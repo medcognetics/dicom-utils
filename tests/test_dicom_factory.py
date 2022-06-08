@@ -90,3 +90,14 @@ class TestDicomFactory:
         factory = DicomFactory.complete_mammography_case_factory()
         dicoms = factory()
         assert len(dicoms) == 12
+
+    @pytest.mark.parametrize("allow", [True, False])
+    def test_nonproto_tag(self, allow):
+        factory = DicomFactory(allow_nonproto_tags=allow)
+        assert Tag.SeriesDescription not in factory.dicom
+        dcm = factory(SeriesDescription="foo")
+
+        if allow:
+            assert dcm.SeriesDescription == "foo"
+        else:
+            assert Tag.SeriesDescription not in dcm

@@ -53,9 +53,16 @@ class DicomFactory:
     """
     dicom: FileDataset
 
-    def __init__(self, proto: Union[PathLike, FileDataset, str] = "CT_small.dcm", seed: int = 42, **kwargs):
+    def __init__(
+        self,
+        proto: Union[PathLike, FileDataset, str] = "CT_small.dcm",
+        seed: int = 42,
+        allow_nonproto_tags: bool = True,
+        **kwargs,
+    ):
         self.seed = int(seed)
         self.rng = default_rng(self.seed)
+        self.allow_nonproto_tags = allow_nonproto_tags
         self.overrides = kwargs
         if isinstance(proto, (PathLike, str)):
             self.path = Path(proto)
@@ -93,6 +100,12 @@ class DicomFactory:
             else:
                 elem = self.data_element(tag, value)
                 dcm[tag] = elem
+
+        if not self.allow_nonproto_tags:
+            for tag_name in overrides.keys():
+                if tag_name not in self.dicom:
+                    del dcm[tag_name]
+
         return dcm
 
     @classmethod
@@ -199,6 +212,7 @@ class DicomFactory:
         types: Iterable[str] = ("ffdm", "synth", "tomo"),
         lateralities: Iterable[str] = ("L", "R"),
         views: Iterable[str] = ("MLO", "CC"),
+        dates: Iterable[str] = ("01012000",),
         **kwargs,
     ) -> "ConcatFactory":
         IMPLANTS = (False, True) if implants else (False,)
@@ -209,8 +223,8 @@ class DicomFactory:
         views = set(views)
 
         factories: List[DicomFactory] = []
-        iterator = product(lateralities, views, types, IMPLANTS, SPOT)
-        for i, (laterality, view, mtype, implant, spot) in enumerate(iterator):
+        iterator = product(lateralities, views, types, IMPLANTS, SPOT, dates)
+        for i, (laterality, view, mtype, implant, spot, date) in enumerate(iterator):
             meanings: List[str] = []
             if not implant and implants:
                 meanings.append("implant displaced")
@@ -225,6 +239,7 @@ class DicomFactory:
                 "ViewModifierCodeSequence": codes,
                 "SOPInstanceUID": f"sop-{i}",
                 "SeriesInstanceUID": f"series-{i}",
+                "StudyDate": date,
             }
             if not hasattr(cls, (factory_name := f"{mtype}_factory")):
                 raise ValueError(f"Factory function {factory_name} not found")
