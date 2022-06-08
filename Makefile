@@ -105,6 +105,7 @@ env: $(VENV)/bin/activate ## create a virtual environment for the project
 $(VENV)/bin/activate: setup.py requirements.txt
 	test -d $(VENV) || $(PY_VER) -m venv $(VENV)
 	$(PYTHON) -m pip install -U pip 
+	$(PYTHON) -m pip install -r requirements.txt
 	$(PYTHON) -m pip install -e .
 	touch $(VENV)/bin/activate
 

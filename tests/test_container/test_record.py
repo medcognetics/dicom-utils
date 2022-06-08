@@ -2,21 +2,160 @@
 # -*- coding: utf-8 -*-
 
 import shutil
-from copy import deepcopy
-from dataclasses import replace
+from dataclasses import fields, replace
+from io import IOBase
+from os import PathLike
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import pydicom
 import pytest
 from pydicom import DataElement, Sequence
 from pydicom.dataset import Dataset
-from pydicom.uid import SecondaryCaptureImageStorage
+from pydicom.uid import AllTransferSyntaxes, SecondaryCaptureImageStorage
 
-from dicom_utils.container import FileRecord, RecordCollection, record_iterator
-from dicom_utils.container.record import STANDARD_MAMMO_VIEWS
+from dicom_utils.container import FileRecord
+from dicom_utils.container.record import (
+    STANDARD_MAMMO_VIEWS,
+    DicomFileRecord,
+    DicomImageFileRecord,
+    MammogramFileRecord,
+)
 from dicom_utils.tags import Tag
-from dicom_utils.types import Laterality, MammogramType, ViewPosition
+from dicom_utils.types import DicomValueError, Laterality, MammogramType, ViewPosition, get_value
+
+
+class TestFileRecord:
+    @pytest.fixture
+    def record_factory(self, tmp_path):
+        def func(filename: PathLike = Path("foo.txt")):
+            filename = Path(tmp_path, filename)
+            filename.parent.mkdir(exist_ok=True, parents=True)
+            filename.touch()
+            record = FileRecord(filename)
+            return record
+
+        return func
+
+    def test_repr(self, record_factory):
+        rec = record_factory("a.txt")
+        s = repr(rec)
+        assert isinstance(s, str)
+        assert rec.__class__.__name__ in s
+
+    def test_hash(self, record_factory):
+        rec1 = record_factory("foo.txt")
+        rec2 = record_factory("foo.txt")
+        rec3 = record_factory("bar.txt")
+        assert hash(rec1) == hash(rec2)
+        assert hash(rec1) != hash(rec3)
+
+    def test_eq(self, record_factory):
+        rec1 = record_factory("foo.txt")
+        rec2 = record_factory("foo.txt")
+        rec3 = record_factory("bar.txt")
+        assert rec1 == rec2
+        assert rec1 != rec3
+
+    def test_compare(self, record_factory):
+        rec1 = record_factory("a.txt")
+        rec2 = record_factory("b.txt")
+        rec3 = record_factory("c.txt")
+        assert sorted([rec3, rec2, rec1]) == [rec1, rec2, rec3]
+
+    def test_has_uid(self, record_factory):
+        rec = record_factory("a.txt")
+        assert rec.has_uid
+
+    def test_get_uid(self, record_factory):
+        rec = record_factory("a.txt")
+        assert rec.get_uid() == str(rec.path.stem)
+
+    @pytest.mark.parametrize(
+        "path,target,exp",
+        [
+            pytest.param("foo/bar.txt", "foo/", "bar.txt"),
+            pytest.param("foo/bar/baz.txt", "foo/baz/bar.txt", "../../bar/baz.txt"),
+            pytest.param("foo/bar/baz.txt", "foo/baz/", "../bar/baz.txt"),
+        ],
+    )
+    def test_relative_to(self, tmp_path, path, target, exp, record_factory):
+        target = Path(tmp_path, target)
+        rec = record_factory(path)
+        relative_rec = rec.relative_to(target)
+        assert type(relative_rec) == type(rec)
+        assert relative_rec.path == Path(exp)
+
+    @pytest.mark.parametrize(
+        "path,target,exp",
+        [
+            pytest.param("foo/bar.txt", "foo/baz.txt", True),
+            pytest.param("foo/baz/bar.txt", "foo/baz.txt", False),
+            pytest.param("foo/baz/bar.txt", "foo/bar/baz.txt", False),
+            pytest.param("foo.txt", "foo.txt", True),
+        ],
+    )
+    def shares_directory_with(self, path1, path2, exp, record_factory):
+        rec1 = record_factory(path1)
+        rec2 = record_factory(path2)
+        assert rec1.shares_directory_with(rec2) == exp
+        assert rec2.shares_directory_with(rec1) == exp
+
+    def test_present_fields(self, record_factory):
+        rec = record_factory()
+        actual = dict(rec.present_fields())
+        expected = {field.name: value for field in fields(rec) if (value := getattr(rec, field.name)) != field.default}
+        assert actual == expected
+
+    def test_file_size(self, record_factory):
+        rec = record_factory()
+        actual = rec.file_size
+        expected = rec.path.stat().st_size
+        assert actual == expected
+
+    def test_is_compressed(self, record_factory):
+        rec = record_factory()
+        assert not rec.is_compressed
+
+    @pytest.mark.parametrize(
+        "path,file_id,exp",
+        [
+            pytest.param("foo/bar.txt", None, "bar_bar.txt"),
+            pytest.param("foo/bar.txt", "2", "bar_2.txt"),
+            pytest.param("foo/bar.txt", 1, "bar_1.txt"),
+        ],
+    )
+    def test_standardized_filename(self, path, file_id, exp, record_factory):
+        rec = record_factory(path)
+        actual = rec.standardized_filename(file_id)
+        assert actual == Path(exp)
+
+    def test_read(self, record_factory):
+        rec = record_factory()
+        stream = rec.__class__.read(rec.path)
+        assert isinstance(stream, IOBase)
+
+    @pytest.mark.parametrize(
+        "path,symlink",
+        [
+            pytest.param("foo/bar/baz.txt", "foo/link/baz.txt"),
+            pytest.param("1/2/baz.txt", "2/1/baz.txt"),
+            pytest.param("1/2/baz.txt", "2/foo.txt"),
+        ],
+    )
+    def test_to_symlink(self, tmp_path, path, symlink, record_factory):
+        rec = record_factory(path)
+        symlink = Path(tmp_path, symlink)
+        symlink_rec = rec.to_symlink(symlink)
+        assert symlink_rec.path.is_symlink()
+        assert symlink_rec.path.resolve() == rec.path
+
+    def test_to_dict(self, record_factory):
+        rec = record_factory("a.txt")
+        rec_dict = rec.to_dict()
+        assert rec_dict["record_type"] == rec.__class__.__name__
+        assert rec_dict["path"] == str(rec.path.absolute())
+        assert rec_dict["resolved_path"] == str(rec.path.resolve().absolute())
 
 
 def make_view_modifier_code(meaning: str) -> Dataset:
@@ -25,62 +164,163 @@ def make_view_modifier_code(meaning: str) -> Dataset:
     return vc
 
 
-class TestFileRecord:
-    def test_create(self, dicom_file):
-        rec = FileRecord.create(Path(dicom_file))
-        dcm = pydicom.dcmread(dicom_file)
-        assert rec.path == Path(dicom_file)
-        assert rec.StudyInstanceUID == dcm.StudyInstanceUID
-        assert rec.SeriesInstanceUID == dcm.SeriesInstanceUID
-        assert rec.SOPInstanceUID == dcm.SOPInstanceUID
-        assert rec.SOPClassUID == dcm.SOPClassUID
-        assert rec.TransferSyntaxUID == dcm.file_meta.TransferSyntaxUID
-        assert rec.Rows == dcm.Rows
-        assert rec.Columns == dcm.Columns
-        assert rec.NumberOfFrames == dcm.get("NumberOfFrames", None)
-        assert rec.PhotometricInterpretation == dcm.PhotometricInterpretation
-        assert rec.mammogram_type is None
-        assert rec.ManufacturerModelName == dcm.ManufacturerModelName
-        assert rec.SeriesDescription == dcm.get("SeriesDescription", None)
-        assert rec.PatientName == dcm.get("PatientName", None)
-        assert rec.PatientID == dcm.get("PatientID", None)
-        assert rec.laterality == Laterality.UNKNOWN
-        assert rec.view_position == ViewPosition.UNKNOWN
+class TestDicomFileRecord(TestFileRecord):
+    @pytest.fixture
+    def record_factory(self, tmp_path, dicom_file):
+        def func(filename: PathLike = Path("foo.txt"), **kwargs):
+            filename = Path(tmp_path, filename)
+            filename.parent.mkdir(exist_ok=True, parents=True)
+            shutil.copy(dicom_file, filename)
+            record = DicomFileRecord.from_file(filename, **kwargs)
+            return record
+
+        return func
+
+    def test_from_file_assigns_tags(self, record_factory):
+        rec = record_factory()
+        dcm = pydicom.dcmread(rec.path, stop_before_pixels=True)
+        for field in fields(rec):
+            tag = getattr(Tag, field.name, None)
+            # shortcut for non-tag fields
+            if tag is None:
+                continue
+            value = getattr(rec, field.name, None)
+            expected = get_value(dcm, tag, None, try_file_meta=True)
+            # shortcut for modality so subclassing tests that override modality
+            # won't fail
+            if tag == Tag.Modality:
+                assert value is not None
+            elif expected is not None:
+                assert value == expected
+
+    def test_from_file_only_reads_once(self, mocker, record_factory):
+        spy = mocker.spy(pydicom, "dcmread")
+        spy.reset_mock()
+        record_factory()
+        spy.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "sop,series,exp",
+        [
+            pytest.param("1.2.345", "2.3.456", True),
+            pytest.param("1.2.345", None, True),
+            pytest.param(None, "2.3.456", True),
+            pytest.param(None, None, False),
+        ],
+    )
+    def test_has_uid(self, sop, series, exp, record_factory):
+        rec = record_factory()
+        rec = rec.replace(
+            SOPInstanceUID=sop,
+            SeriesInstanceUID=series,
+        )
+        assert rec.has_uid == exp
+
+    @pytest.mark.parametrize(
+        "sop,series,prefer_sop,exp",
+        [
+            pytest.param("1.2.345", "2.3.456", False, "2.3.456"),
+            pytest.param("1.2.345", "2.3.456", True, "1.2.345"),
+            pytest.param("1.2.345", None, False, "1.2.345"),
+            pytest.param(None, "2.3.456", True, "2.3.456"),
+            pytest.param(None, None, None, None, marks=pytest.mark.xfail(raises=AttributeError)),
+        ],
+    )
+    def test_get_uid(self, sop, series, prefer_sop, exp, record_factory):
+        rec = record_factory()
+        rec = rec.replace(
+            SOPInstanceUID=sop,
+            SeriesInstanceUID=series,
+        )
+        uid = rec.get_uid(prefer_sop)
+        assert uid == exp
+
+    @pytest.mark.parametrize(
+        "path,modality,file_id,exp",
+        [
+            pytest.param("foo/bar.dcm", "CT", None, "ct_1.2.345.dcm"),
+            pytest.param("foo/bar.dcm", "US", "2", "us_2.dcm"),
+            pytest.param("foo/bar.dcm", "MG", 1, "mg_1.dcm"),
+        ],
+    )
+    def test_standardized_filename(self, path, modality, file_id, exp, record_factory):
+        rec = record_factory(path)
+        sop = "1.2.345"
+        rec = rec.replace(SOPInstanceUID=sop, Modality=modality)
+        actual = rec.standardized_filename(file_id)
+        assert actual == Path(exp)
+
+    def test_read(self, mocker, record_factory):
+        spy = mocker.spy(pydicom, "dcmread")
+        rec = record_factory()
+        spy.reset_mock()
+        stream = rec.__class__.read(rec.path)
+        assert isinstance(stream, pydicom.FileDataset)
+        spy.assert_called_once()
+        assert spy.mock_calls[0].kwargs["stop_before_pixels"]
 
     @pytest.mark.parametrize("modality", ["CT", "MG", "US"])
-    def test_modality_override(self, dicom_file, modality):
-        rec = FileRecord.create(Path(dicom_file), modality=modality)
+    def test_modality_override(self, modality, record_factory):
+        rec = record_factory(modality=modality)
         assert rec.Modality == modality
 
+    @pytest.mark.parametrize(
+        "study_date,exp",
+        [
+            pytest.param("20200101", 2020),
+            pytest.param("00010101", 1),
+            pytest.param("", None),
+            pytest.param("fooo", None),
+            pytest.param("10", None),
+        ],
+    )
+    def test_year(self, study_date, exp, record_factory):
+        rec = record_factory()
+        rec = rec.replace(StudyDate=study_date)
+        assert rec.year == exp
+
+    def test_to_dict(self, record_factory):
+        rec = record_factory("a.dcm")
+        rec_dict = rec.to_dict()
+        assert rec_dict["record_type"] == rec.__class__.__name__
+        assert rec_dict["path"] == str(rec.path.absolute())
+        assert rec_dict["resolved_path"] == str(rec.path.resolve().absolute())
+        assert rec_dict["Modality"] == rec.Modality
+
+
+class TestDicomImageFileRecord(TestDicomFileRecord):
     @pytest.fixture
-    def record(self, dicom_file):
-        record = FileRecord.create(Path(dicom_file))
-        vc = make_view_modifier_code("medio-lateral oblique")
-        record = replace(
-            record,
-            Rows=100,
-            Columns=100,
-            Modality="MG",
-            ViewModifierCodeSequence=Sequence([vc]),
-            laterality=Laterality.LEFT,
-            view_position=ViewPosition.MLO,
-            mammogram_type=MammogramType.FFDM,
-        )
-        return record
+    def record_factory(self, tmp_path, dicom_file):
+        def func(
+            filename: PathLike = Path("foo.txt"),
+            Rows: Optional[int] = 128,
+            Columns: Optional[int] = 128,
+            NumberOfFrames: Optional[int] = None,
+            Modality: Optional[str] = "CT",
+            view_modifier_code: Optional[str] = None,
+            **kwargs,
+        ):
+            filename = Path(tmp_path, filename)
+            filename.parent.mkdir(exist_ok=True, parents=True)
+            shutil.copy(dicom_file, filename)
+            record = DicomImageFileRecord.from_file(filename, **kwargs)
 
-    def test_hash(self, record):
-        assert hash(record) == hash(record.path)
+            if view_modifier_code is not None:
+                vc = make_view_modifier_code(view_modifier_code)
+                view_modifier_code_seq = Sequence([vc])
+            else:
+                view_modifier_code_seq = None
 
-    def test_eq(self, record):
-        rec2 = replace(record, path=Path("foo/bar.dcm"))
-        rec3 = deepcopy(record)
-        assert record != "dog"
-        assert record != rec2
-        assert record == rec3
-        assert rec3 == record
+            record = record.replace(
+                Rows=Rows,
+                Columns=Columns,
+                NumberOfFrames=NumberOfFrames,
+                Modality=kwargs.get("modality", Modality),
+                ViewModifierCodeSequence=view_modifier_code_seq,
+            )
+            return record
 
-    def test_file_size(self, record):
-        assert record.file_size == record.path.stat().st_size
+        return func
 
     @pytest.mark.parametrize(
         "rows,columns,nf,exp",
@@ -92,9 +332,18 @@ class TestFileRecord:
             pytest.param(None, None, None, False),
         ],
     )
-    def test_is_image(self, record, rows, columns, nf, exp):
-        record = replace(record, Rows=rows, Columns=columns, NumberOfFrames=nf)
-        assert record.is_image == exp
+    def test_is_valid_image(self, rows, columns, nf, exp, record_factory):
+        rec = record_factory(Rows=rows, Columns=columns, NumberOfFrames=nf)
+        assert rec.is_valid_image == exp
+
+    @pytest.mark.parametrize(
+        "tsuid,exp",
+        [pytest.param(tsuid, tsuid.is_compressed) for tsuid in AllTransferSyntaxes],
+    )
+    def test_is_compressed(self, tsuid, exp, record_factory):
+        rec = record_factory()
+        rec = rec.replace(TransferSyntaxUID=tsuid)
+        assert rec.is_compressed == exp
 
     @pytest.mark.parametrize(
         "rows,columns,nf,exp",
@@ -108,188 +357,9 @@ class TestFileRecord:
             pytest.param(None, None, None, False),
         ],
     )
-    def test_is_volume(self, record, rows, columns, nf, exp):
-        record = replace(record, Rows=rows, Columns=columns, NumberOfFrames=nf)
-        assert record.is_volume == exp
-
-    @pytest.mark.parametrize(
-        "rows,columns,modality,exp",
-        [
-            pytest.param(100, 100, "MG", True),
-            pytest.param(None, 100, "MG", False),
-            pytest.param(100, None, "MG", False),
-            pytest.param(100, 100, "US", False),
-            pytest.param(100, 100, None, False),
-        ],
-    )
-    def test_is_mammogram(self, record, rows, columns, modality, exp):
-        record = replace(record, Rows=rows, Columns=columns, Modality=modality, mammogram_type=None)
-        assert record.is_mammogram == exp
-
-    @pytest.mark.parametrize(
-        "paddle,code,exp",
-        [
-            pytest.param("SPOT", None, True),
-            pytest.param("SPOT COMPRESSION", None, True),
-            pytest.param(None, None, False),
-            pytest.param(None, "spot compression", True),
-        ],
-    )
-    def test_is_spot_compression(self, record, paddle, code, exp):
-        seq = Sequence([make_view_modifier_code(code)]) if code is not None else None
-        record = replace(
-            record,
-            Modality="MG",
-            PaddleDescription=paddle,
-            ViewModifierCodeSequence=seq,
-        )
-        assert record.is_spot_compression == exp
-
-    @pytest.mark.parametrize(
-        "uid,exp",
-        [
-            pytest.param(SecondaryCaptureImageStorage, True),
-            pytest.param(None, False),
-            pytest.param("", False),
-        ],
-    )
-    def test_is_secondary_capture(self, record, uid, exp):
-        record = replace(
-            record,
-            SOPClassUID=uid,
-        )
-        assert record.is_secondary_capture == exp
-
-    @pytest.mark.parametrize(
-        "modality,exp",
-        [
-            pytest.param("MG", False),
-            pytest.param("PR", True),
-            pytest.param(None, False),
-            pytest.param("", False),
-        ],
-    )
-    def test_is_pr_file(self, record, modality, exp):
-        record = replace(
-            record,
-            Modality=modality,
-            mammogram_type=None,
-        )
-        assert record.is_pr_file == exp
-
-    @pytest.mark.parametrize(
-        "modality,exp",
-        [
-            pytest.param("MG", False),
-            pytest.param("US", True),
-            pytest.param(None, False),
-            pytest.param("", False),
-        ],
-    )
-    def test_is_ultrasound(self, record, modality, exp):
-        record = replace(
-            record,
-            Modality=modality,
-            mammogram_type=None,
-        )
-        assert record.is_ultrasound == exp
-
-    @pytest.mark.parametrize(
-        "modality,nf,mtype,exp",
-        [
-            pytest.param("MG", 1, MammogramType.FFDM, False),
-            pytest.param("MG", 1, MammogramType.SFM, False),
-            pytest.param("US", 2, None, False),
-            pytest.param("MG", 2, MammogramType.TOMO, True),
-            pytest.param("MG", 1, MammogramType.SVIEW, False),
-        ],
-    )
-    def test_is_tomo(self, record, modality, nf, mtype, exp):
-        record = replace(
-            record,
-            Modality=modality,
-            mammogram_type=mtype,
-            NumberOfFrames=nf,
-        )
-        assert record.is_tomo == exp
-
-    @pytest.mark.parametrize(
-        "modality,nf,mtype,exp",
-        [
-            pytest.param("MG", 1, MammogramType.FFDM, False),
-            pytest.param("MG", 1, MammogramType.SFM, False),
-            pytest.param("US", 2, None, False),
-            pytest.param("MG", 2, MammogramType.TOMO, False),
-            pytest.param("MG", 1, MammogramType.SVIEW, True),
-        ],
-    )
-    def test_is_synthetic_view(self, record, modality, nf, mtype, exp):
-        record = replace(
-            record,
-            Modality=modality,
-            mammogram_type=mtype,
-            NumberOfFrames=nf,
-        )
-        assert record.is_synthetic_view == exp
-
-    @pytest.mark.parametrize(
-        "modality,nf,mtype,exp",
-        [
-            pytest.param("MG", 1, MammogramType.FFDM, True),
-            pytest.param("MG", 1, MammogramType.SFM, False),
-            pytest.param("US", 2, None, False),
-            pytest.param("MG", 2, MammogramType.TOMO, False),
-            pytest.param("MG", 1, MammogramType.SVIEW, False),
-        ],
-    )
-    def test_is_ffdm(self, record, modality, nf, mtype, exp):
-        record = replace(
-            record,
-            Modality=modality,
-            mammogram_type=mtype,
-            NumberOfFrames=nf,
-        )
-        assert record.is_ffdm == exp
-
-    @pytest.mark.parametrize(
-        "modality,nf,mtype,exp",
-        [
-            pytest.param("MG", 1, MammogramType.FFDM, False),
-            pytest.param("MG", 1, MammogramType.SFM, True),
-            pytest.param("US", 2, None, False),
-            pytest.param("MG", 2, MammogramType.TOMO, False),
-            pytest.param("MG", 1, MammogramType.SVIEW, False),
-        ],
-    )
-    def test_is_sfm(self, record, modality, nf, mtype, exp):
-        record = replace(
-            record,
-            Modality=modality,
-            mammogram_type=mtype,
-            NumberOfFrames=nf,
-        )
-        assert record.is_sfm == exp
-
-    @pytest.mark.parametrize(
-        "view_pos,exp",
-        [
-            pytest.param(ViewPosition.MLO, True),
-            pytest.param(ViewPosition.CC, True),
-            *[pytest.param(x, False) for x in ViewPosition if x not in (ViewPosition.MLO, ViewPosition.CC)],
-        ],
-    )
-    def test_is_standard_mammo_view(self, record, view_pos, exp):
-        record = replace(record, view_position=view_pos)
-        assert record.is_standard_mammo_view == exp
-
-    def test_is_complete_mammo_case(self, record):
-        # should be incomplete until after this loop
-        records: List[FileRecord] = []
-        for (laterality, view_pos) in STANDARD_MAMMO_VIEWS:
-            assert not FileRecord.is_complete_mammo_case(records)
-            rec = replace(record, laterality=laterality, view_position=view_pos)
-            records.append(rec)
-        assert FileRecord.is_complete_mammo_case(records)
+    def test_is_volume(self, rows, columns, nf, exp, record_factory):
+        rec = record_factory(Rows=rows, Columns=columns, NumberOfFrames=nf)
+        assert rec.is_volume == exp
 
     @pytest.mark.parametrize(
         "code,exp",
@@ -299,14 +369,103 @@ class TestFileRecord:
             pytest.param("magnification", True),
         ],
     )
-    def test_is_magnified(self, record, code, exp):
+    def test_is_magnified(self, code, exp, record_factory):
+        rec = record_factory(view_modifier_code=code)
+        assert rec.is_magnified == exp
+
+
+class TestMammogramFileRecord(TestDicomFileRecord):
+    @pytest.fixture
+    def record_factory(self, tmp_path, dicom_file):
+        def func(
+            filename: PathLike = Path("foo.dcm"),
+            Rows: Optional[int] = 128,
+            Columns: Optional[int] = 128,
+            NumberOfFrames: Optional[int] = None,
+            Modality: Optional[str] = "MG",
+            view_modifier_code: Optional[str] = "medio-lateral oblique",
+            laterality: Optional[Laterality] = Laterality.LEFT,
+            view_position: Optional[ViewPosition] = ViewPosition.MLO,
+            mammogram_type: Optional[MammogramType] = MammogramType.FFDM,
+            **kwargs,
+        ):
+            filename = Path(tmp_path, filename)
+            filename.parent.mkdir(exist_ok=True, parents=True)
+            shutil.copy(dicom_file, filename)
+            kwargs.setdefault("modality", Modality)
+            record = MammogramFileRecord.from_file(filename, **kwargs)
+
+            if view_modifier_code is not None:
+                vc = make_view_modifier_code(view_modifier_code)
+                view_modifier_code_seq = Sequence([vc])
+            else:
+                view_modifier_code_seq = None
+
+            if laterality is not None:
+                record = record.replace(laterality=laterality)
+            if view_position is not None:
+                record = record.replace(view_position=view_position)
+            if mammogram_type is not None:
+                record = record.replace(mammogram_type=mammogram_type)
+
+            record = record.replace(
+                Rows=Rows,
+                Columns=Columns,
+                NumberOfFrames=NumberOfFrames,
+                Modality=kwargs.get("modality", Modality),
+                ViewModifierCodeSequence=view_modifier_code_seq,
+            )
+            return record
+
+        return func
+
+    @pytest.mark.parametrize(
+        "dtype,attr",
+        [
+            pytest.param(Laterality, "laterality"),
+            pytest.param(ViewPosition, "view_position"),
+            pytest.param(MammogramType, "mammogram_type"),
+        ],
+    )
+    def test_from_file_assigns_mammogram_attrs(self, mocker, dtype, attr, record_factory):
+        m = mocker.patch.object(dtype, "from_dicom", spec_set=dtype)
+        rec = record_factory(**{attr: None})
+        m.assert_called_once()
+        assert getattr(rec, attr) == m()
+
+    @pytest.mark.parametrize(
+        "modality",
+        [
+            "MG",
+            pytest.param("CT", marks=pytest.mark.xfail(raises=DicomValueError)),
+            pytest.param("US", marks=pytest.mark.xfail(raises=DicomValueError)),
+        ],
+    )
+    def test_modality_override(self, modality, record_factory):
+        rec = record_factory(modality=modality)
+        assert rec.Modality == modality
+
+    @pytest.mark.parametrize(
+        "paddle,code,view_pos,exp",
+        [
+            pytest.param("SPOT", None, None, True),
+            pytest.param("SPOT COMPRESSION", None, None, True),
+            pytest.param(None, None, None, False),
+            pytest.param(None, "spot compression", None, True),
+            pytest.param(None, None, "CCSpot", True),
+        ],
+    )
+    def test_is_spot_compression(self, paddle, code, view_pos, exp, record_factory):
+        record = record_factory()
         seq = Sequence([make_view_modifier_code(code)]) if code is not None else None
         record = replace(
             record,
             Modality="MG",
+            PaddleDescription=paddle,
             ViewModifierCodeSequence=seq,
+            ViewPosition=view_pos,
         )
-        assert record.is_magnified == exp
+        assert record.is_spot_compression == exp
 
     @pytest.mark.parametrize(
         "code,exp",
@@ -316,7 +475,8 @@ class TestFileRecord:
             pytest.param("", False),
         ],
     )
-    def test_is_implant_displaced(self, record, code, exp):
+    def test_is_implant_displaced(self, code, exp, record_factory):
+        record = record_factory()
         seq = Sequence([make_view_modifier_code(code)]) if code is not None else None
         record = replace(
             record,
@@ -326,27 +486,37 @@ class TestFileRecord:
         assert record.is_implant_displaced == exp
 
     @pytest.mark.parametrize(
-        "study_date,exp",
+        "view_pos,exp",
         [
-            pytest.param("20200101", 2020),
-            pytest.param("00010101", 1),
-            pytest.param("", None),
-            pytest.param("fooo", None),
-            pytest.param("10", None),
+            pytest.param(ViewPosition.MLO, True),
+            pytest.param(ViewPosition.CC, True),
+            *[pytest.param(x, False) for x in ViewPosition if x not in (ViewPosition.MLO, ViewPosition.CC)],
         ],
     )
-    def test_year(self, record, study_date, exp):
-        record = replace(
-            record,
-            StudyDate=study_date,
-        )
-        assert record.year == exp
+    def test_is_standard_mammo_view(self, view_pos, exp, record_factory):
+        record = record_factory(view_position=view_pos)
+        assert record.is_standard_mammo_view == exp
+
+    @pytest.mark.parametrize("secondary_capture", [False, True])
+    def test_is_complete_mammo_case(self, secondary_capture, record_factory):
+        record = record_factory()
+        if secondary_capture:
+            record = record.replace(SOPClassUID=SecondaryCaptureImageStorage)
+        # should be incomplete until after this loop
+        records: List[MammogramFileRecord] = []
+        for (laterality, view_pos) in STANDARD_MAMMO_VIEWS:
+            assert not MammogramFileRecord.is_complete_mammo_case(records)
+            rec = replace(record, laterality=laterality, view_position=view_pos)
+            records.append(rec)
+
+        actual = MammogramFileRecord.is_complete_mammo_case(records)
+        expected = not secondary_capture
+        assert actual == expected
 
     @pytest.mark.parametrize(
-        "modality,mtype,spot,mag,id,laterality,view_pos,uid,exp",
+        "mtype,spot,mag,id,laterality,view_pos,uid,exp",
         [
             pytest.param(
-                "MG",
                 MammogramType.FFDM,
                 False,
                 False,
@@ -357,7 +527,6 @@ class TestFileRecord:
                 "ffdm_lmlo_1.dcm",
             ),
             pytest.param(
-                "MG",
                 MammogramType.FFDM,
                 False,
                 False,
@@ -368,19 +537,7 @@ class TestFileRecord:
                 "ffdm_rcc_2.dcm",
             ),
             pytest.param(
-                "US",
-                None,
-                False,
-                False,
-                False,
-                None,
-                None,
-                "1",
-                "us_1.dcm",
-            ),
-            pytest.param(
-                "MG",
-                MammogramType.SVIEW,
+                MammogramType.SYNTH,
                 True,
                 True,
                 True,
@@ -389,9 +546,19 @@ class TestFileRecord:
                 "1",
                 "synth_spot_mag_id_rxccl_1.dcm",
             ),
+            pytest.param(
+                MammogramType.FFDM,
+                False,
+                False,
+                False,
+                Laterality.UNKNOWN,
+                ViewPosition.UNKNOWN,
+                "2",
+                "ffdm_2.dcm",
+            ),
         ],
     )
-    def test_standardized_filename(self, record, modality, mtype, spot, mag, id, laterality, view_pos, uid, exp):
+    def test_standardized_filename(self, mtype, spot, mag, id, laterality, view_pos, uid, exp, record_factory):
         seq = []
         if spot:
             seq.append(make_view_modifier_code("spot compression"))
@@ -400,96 +567,15 @@ class TestFileRecord:
         if id:
             seq.append(make_view_modifier_code("implant displaced"))
         seq = Sequence(seq)
-        record = replace(
-            record,
-            Modality=modality,
+        record = record_factory(
+            mammogram_type=mtype,
+            laterality=laterality,
+            view_position=view_pos,
+        )
+        record = record.replace(
             mammogram_type=mtype,
             ViewModifierCodeSequence=seq,
             laterality=laterality,
             view_position=view_pos,
         )
         assert record.standardized_filename(uid) == Path(exp)
-
-    @pytest.mark.parametrize(
-        "series,sop,exp",
-        [
-            pytest.param("1.2", None, True),
-            pytest.param(None, "1.2", True),
-            pytest.param(None, None, False),
-        ],
-    )
-    def test_has_image_uid(self, record, series, sop, exp):
-        record = replace(record, SeriesInstanceUID=series, SOPInstanceUID=sop)
-        assert record.has_image_uid == exp
-
-    @pytest.mark.parametrize(
-        "series,sop,prefer_sop,exp",
-        [
-            pytest.param("1.2", None, True, "1.2"),
-            pytest.param("1.2", None, False, "1.2"),
-            pytest.param(None, "1.2", True, "1.2"),
-            pytest.param(None, "1.2", False, "1.2"),
-            pytest.param("1.2", "2.3", True, "2.3"),
-            pytest.param("1.2", "2.3", False, "1.2"),
-            pytest.param(None, None, True, None, marks=pytest.mark.xfail(raises=AttributeError)),
-            pytest.param(None, None, False, None, marks=pytest.mark.xfail(raises=AttributeError)),
-        ],
-    )
-    def test_get_image_uid(self, record, series, sop, prefer_sop, exp):
-        record = replace(record, SeriesInstanceUID=series, SOPInstanceUID=sop)
-        uid = record.get_image_uid(prefer_sop=prefer_sop)
-        assert uid == exp
-
-
-@pytest.fixture
-def dicom_files(tmp_path, dicom_file):
-    paths = []
-    for i in range(3):
-        for j in range(3):
-            dest = Path(tmp_path, f"subdir_{i}", f"file_{j}.dcm")
-            dest.parent.mkdir(exist_ok=True, parents=True)
-            shutil.copy(dicom_file, str(dest))
-            paths.append(dest)
-    return paths
-
-
-@pytest.mark.parametrize("use_bar", [True, False])
-@pytest.mark.parametrize("threads", [False, True])
-@pytest.mark.parametrize("jobs", [None, 1, 2])
-def test_record_iterator(dicom_files, use_bar, threads, jobs):
-    records = record_iterator(dicom_files, jobs, use_bar, threads)
-    assert set(rec.path for rec in records) == set(dicom_files)
-
-
-class TestRecordCollection:
-    @pytest.mark.parametrize("use_bar", [True, False])
-    @pytest.mark.parametrize("threads", [False, True])
-    @pytest.mark.parametrize("jobs", [None, 1, 2])
-    def test_from_files(self, dicom_files, use_bar, threads, jobs):
-        col = RecordCollection.from_files(dicom_files, jobs, use_bar, threads)
-        assert set(col.path_lookup.keys()) == set(dicom_files)
-        assert all(isinstance(v, FileRecord) for v in col.path_lookup.values())
-        assert set(v.path for v in col.path_lookup.values()) == set(dicom_files)
-
-    @pytest.mark.parametrize("use_bar", [True, False])
-    @pytest.mark.parametrize("threads", [False, True])
-    @pytest.mark.parametrize("jobs", [None, 1, 2])
-    def test_from_dir(self, tmp_path, dicom_files, use_bar, threads, jobs):
-        col = RecordCollection.from_dir(tmp_path, "*.dcm", jobs, use_bar, threads)
-        assert set(col.path_lookup.keys()) == set(dicom_files)
-        assert all(isinstance(v, FileRecord) for v in col.path_lookup.values())
-        assert set(v.path for v in col.path_lookup.values()) == set(dicom_files)
-
-    @pytest.fixture
-    def collection(self, dicom_files):
-        return RecordCollection.from_files(dicom_files)
-
-    def test_len(self, collection, dicom_files):
-        assert len(collection) == len(dicom_files)
-
-    def test_study_lookup(self, collection, dicom_files):
-        lookup = collection.study_lookup
-        assert len(lookup) == 1
-        records = lookup["1.3.6.1.4.1.5962.1.2.1.20040119072730.12322"]
-        assert len(records) == len(dicom_files)
-        assert all(isinstance(r, FileRecord) for r in records)

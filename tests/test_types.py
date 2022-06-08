@@ -8,6 +8,7 @@ from typing import Any, Dict, cast
 import pytest
 from pydicom import DataElement
 
+from dicom_utils import DicomFactory
 from dicom_utils.tags import Tag
 from dicom_utils.types import ImageType, Laterality, MammogramType, PhotometricInterpretation, ViewPosition
 
@@ -103,27 +104,27 @@ def get_simple_image_type_test_cases():
     # ['DERIVED', 'PRIMARY', 'TOMO', 'GENERATED_2D', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMO", extras=["GENERATED_2D", "", "", "", "150000"]))
-    _ = pytest.param(d, MammogramType.SVIEW, id="sview-1")
+    _ = pytest.param(d, MammogramType.SYNTH, id="sview-1")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY', 'TOMOSYNTHESIS', 'GENERATED_2D', '', '', '', '', '150000']
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", flavor="TOMOSYNTHESIS", extras=["GENERATED_2D", "", "", "", "150000"]))
-    _ = pytest.param(d, MammogramType.SVIEW, id="sview-2")
+    _ = pytest.param(d, MammogramType.SYNTH, id="sview-2")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY']
     # Data in SeriesDescription
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", series_description="L CC C-View"))
-    _ = pytest.param(d, MammogramType.SVIEW, id="sview-3")
+    _ = pytest.param(d, MammogramType.SYNTH, id="sview-3")
     cases.append(_)
 
     # ['DERIVED', 'PRIMARY']
     # Data in SeriesDescription
     d = deepcopy(default)
     d.update(dict(pixels="DERIVED", series_description="R MLO S-View"))
-    _ = pytest.param(d, MammogramType.SVIEW, id="sview-4")
+    _ = pytest.param(d, MammogramType.SYNTH, id="sview-4")
     cases.append(_)
 
     # TOMO
@@ -151,10 +152,10 @@ class TestMammogramType:
         [
             ("ffdm", MammogramType.FFDM),
             ("2d", MammogramType.FFDM),
-            ("synth", MammogramType.SVIEW),
-            ("s view", MammogramType.SVIEW),
-            ("s-view", MammogramType.SVIEW),
-            ("c-view", MammogramType.SVIEW),
+            ("synth", MammogramType.SYNTH),
+            ("s view", MammogramType.SYNTH),
+            ("s-view", MammogramType.SYNTH),
+            ("c-view", MammogramType.SYNTH),
             ("", MammogramType.UNKNOWN),
             ("unknown", MammogramType.UNKNOWN),
             ("tomo", MammogramType.TOMO),
@@ -297,6 +298,25 @@ class TestLaterality:
         orient = Laterality.from_tags(tags)
         assert orient == expected
 
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (["A", "FL"], Laterality.RIGHT),
+            (["A", "FR"], Laterality.LEFT),
+            (["P", "FL"], Laterality.RIGHT),
+            (["P", "FR"], Laterality.LEFT),
+            (["A", "L"], Laterality.RIGHT),
+            (["A", "R"], Laterality.LEFT),
+            (["P", "L"], Laterality.RIGHT),
+            (["P", "R"], Laterality.LEFT),
+            (["P"], Laterality.UNKNOWN),
+            ([], Laterality.UNKNOWN),
+        ],
+    )
+    def test_from_patient_orientation(self, value, expected):
+        orient = Laterality.from_patient_orientation(value)
+        assert orient == expected
+
     def test_bool(self):
         expr = Laterality.UNKNOWN or Laterality.RIGHT or Laterality.UNKNOWN
         assert expr == Laterality.RIGHT
@@ -353,6 +373,7 @@ class TestViewPosition:
             ("oblique lateral-medial", ViewPosition.LMO),
             ("cranio-caudal exaggerated laterally", ViewPosition.XCCL),
             ("cranio-caudal exaggerated medially", ViewPosition.XCCM),
+            ("axillary tail", ViewPosition.AT),
             ("???", ViewPosition.UNKNOWN),
             ("foo", ViewPosition.UNKNOWN),
             ("", ViewPosition.UNKNOWN),
@@ -397,6 +418,7 @@ class TestViewPosition:
             ("oblique lateral-medial", ViewPosition.LMO),
             ("cranio-caudal exaggerated laterally", ViewPosition.XCCL),
             ("cranio-caudal exaggerated medially", ViewPosition.XCCM),
+            ("axillary tail", ViewPosition.AT),
             ("???", ViewPosition.UNKNOWN),
             ("", ViewPosition.UNKNOWN),
             (None, ViewPosition.UNKNOWN),
@@ -412,11 +434,47 @@ class TestViewPosition:
         orient = ViewPosition.from_view_code_sequence_tag(cast(DataElement, view_code_sequence))
         assert orient == expected
 
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (["A", "FL"], ViewPosition.MLO),
+            (["A", "FR"], ViewPosition.MLO),
+            (["P", "FL"], ViewPosition.MLO),
+            (["P", "FR"], ViewPosition.MLO),
+            (["A", "L"], ViewPosition.CC),
+            (["A", "R"], ViewPosition.CC),
+            (["P", "L"], ViewPosition.CC),
+            (["P", "R"], ViewPosition.CC),
+            (["P"], ViewPosition.UNKNOWN),
+            ([], ViewPosition.UNKNOWN),
+        ],
+    )
+    def test_from_patient_orientation(self, value, expected):
+        orient = ViewPosition.from_patient_orientation(value)
+        assert orient == expected
+
     def test_bool(self):
         expr = ViewPosition.UNKNOWN or ViewPosition.CC or ViewPosition.UNKNOWN
         assert expr == ViewPosition.CC
 
-    def test_from_dicom(self, dicom_object):
-        # trivial test since this wraps from_tags
-        x = ViewPosition.from_dicom(dicom_object)
-        assert x == ViewPosition.UNKNOWN
+    @pytest.mark.parametrize(
+        "view_pos,code,modifier_code,exp",
+        [
+            pytest.param("MLO", None, None, ViewPosition.MLO),
+            pytest.param(None, "cranio-caudal", None, ViewPosition.CC),
+            pytest.param(None, "medio-lateral oblique", "axillary tail", ViewPosition.AT),
+        ],
+    )
+    def test_from_dicom(self, view_pos, code, modifier_code, exp):
+        factory = DicomFactory(Modality="MG")
+        overrides = {}
+        if view_pos is not None:
+            overrides["ViewPosition"] = view_pos
+        if code is not None:
+            overrides["ViewCodeSequence"] = DicomFactory.code_sequence(code)
+        if modifier_code is not None:
+            overrides["ViewModifierCodeSequence"] = DicomFactory.code_sequence(modifier_code)
+
+        dcm = factory(**overrides)
+        x = ViewPosition.from_dicom(dcm)
+        assert x == exp

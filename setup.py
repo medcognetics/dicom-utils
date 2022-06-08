@@ -99,6 +99,7 @@ def install(version):
                 "dicomstrip = dicom_utils.cli.strip:entrypoint",
                 "dicomphi = dicom_utils.cli.dicomphi:entrypoint",
                 "dicomcheck = dicom_utils.cli.validate:entrypoint",
+                "dicomorg = dicom_utils.cli.organize:entrypoint",
             ],
         },
     )
