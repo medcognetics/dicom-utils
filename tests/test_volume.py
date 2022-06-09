@@ -4,7 +4,7 @@
 import numpy as np
 import pytest
 
-from dicom_utils import KeepVolume, SliceAtLocation, UniformSample
+from dicom_utils import KeepVolume, ReduceVolume, SliceAtLocation, UniformSample
 
 
 class TestKeepVolume:
@@ -106,3 +106,15 @@ class TestUniformSample:
         assert dcm.NumberOfFrames == N, "the input dicom object was modified"
         assert type(result) == type(dcm)
         assert (sampler(dcm.pixel_array) == result.pixel_array).all()
+
+
+class TestReduceVolume:
+    def test_dicom(self, dicom_object_3d, transfer_syntax):
+        N = 8
+        dcm = dicom_object_3d(N, syntax=transfer_syntax)
+        sampler = ReduceVolume()
+        result = sampler(dcm)
+        expected = np.max(dcm.pixel_array, axis=0)
+        assert type(result) == type(dcm)
+        assert result.NumberOfFrames == 1
+        assert (result.pixel_array == expected).all()

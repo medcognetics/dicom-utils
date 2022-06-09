@@ -3,6 +3,7 @@
 from copy import deepcopy
 from pathlib import Path
 
+import numpy as np
 import pydicom
 import pytest
 from pydicom.data import get_testdata_file
@@ -15,6 +16,12 @@ from pydicom.uid import (
     ImplicitVRLittleEndian,
     RLELossless,
 )
+
+
+def get_rand_bytes(num: int) -> bytes:
+    rand_bytes = np.random.default_rng().bytes(num)
+    assert isinstance(rand_bytes, bytes)
+    return rand_bytes
 
 
 @pytest.fixture
@@ -57,17 +64,15 @@ def dicom_object_3d(dicom_object):
 
     def func(num_frames, syntax=ExplicitVRLittleEndian):
         file_meta.TransferSyntaxUID = syntax
-        old_data = dcm.PixelData
+        old_data_len = len(dcm.PixelData)
         dcm.NumberOfFrames = num_frames
 
         if syntax.is_compressed:
-            new_data = encapsulate([old_data for _ in range(num_frames)], has_bot=False)
+            new_data = encapsulate([get_rand_bytes(old_data_len) for _ in range(num_frames)], has_bot=False)
             dcm.PixelData = new_data
             dcm.compress(syntax)
-
         else:
-            new_data = b"".join(old_data for _ in range(num_frames))
-            dcm.PixelData = new_data
+            dcm.PixelData = get_rand_bytes(old_data_len * num_frames)
 
         dcm.file_meta = file_meta
         return dcm
