@@ -56,7 +56,7 @@ class TestReadDicomImage:
     def test_stop_before_pixels(self, dicom_object, shape_override):
         np.random.seed(42)
         array1 = read_dicom_image(dicom_object)
-        array2 = read_dicom_image(dicom_object, stop_before_pixels=True, shape=shape_override)
+        array2 = read_dicom_image(dicom_object, stop_before_pixels=True, override_shape=shape_override)
         assert isinstance(array1, np.ndarray)
         assert isinstance(array2, np.ndarray)
 

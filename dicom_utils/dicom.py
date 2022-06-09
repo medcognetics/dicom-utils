@@ -165,7 +165,7 @@ def dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], strict_interp: bool) -> nda
 def read_dicom_image(
     dcm: Dicom,
     stop_before_pixels: bool = False,
-    shape: Optional[Tuple[int, ...]] = None,
+    override_shape: Optional[Tuple[int, ...]] = None,
     strict_interp: bool = False,
     volume_handler: VolumeHandler = KeepVolume(),
     as_uint8: bool = False,
@@ -192,24 +192,24 @@ def read_dicom_image(
     """
     # some dicoms dont have any image data - raise NoImageError
     for necessary_field in ["Rows", "PhotometricInterpretation"]:
-        if shape is None and not hasattr(dcm, necessary_field):
+        if override_shape is None and not hasattr(dcm, necessary_field):
             raise NoImageError()
     pm = PhotometricInterpretation.from_dicom(dcm)
 
     C = pm.num_channels
-    if shape is None:
+    if override_shape is None:
         # If NumberOfFrames is 1 or not defined, we treat the DICOM image as a single channel 2D image (i.e. 1xHxW).
         # If NumberOfFrames is greater than 1, we treat the DICOM image as a single channel 3D image (i.e. 1xDxHxW).
         D, H, W = [int(v) for v in [dcm.get("NumberOfFrames", 1), dcm.Rows, dcm.Columns]]
         dims = (C, D, H, W) if D > 1 else (C, H, W)
     else:
-        dims = (C,) + shape
+        dims = (C,) + override_shape
 
     assert dims[0] in (1, 3), "channel dim == 1 or 3"
     assert 3 <= len(dims) <= 4, str(dims)
 
     # return random pixel data in correct shape when stop_before_pixels=True
-    if stop_before_pixels:
+    if stop_before_pixels or override_shape:
         return np.random.randint(0, 2**10, dims)
 
     # validation of compressed data

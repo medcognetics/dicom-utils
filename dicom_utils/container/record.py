@@ -29,7 +29,31 @@ from typing import (
 import pydicom
 from pydicom import Dataset, Sequence
 from pydicom.uid import SecondaryCaptureImageStorage
-from registry import Registry
+
+
+try:
+    from registry import Registry as _Registry
+except:
+
+    class _Registry:
+        def __init__(self, *args, **kwargs):
+            ...
+
+        def __call__(self, *args, **kwargs):
+            Exception("'registry' must be properly installed")
+            return lambda x: x
+
+        def available_keys(self):
+            return []
+
+        def get(self, *args, **kwargs):
+            ...
+
+        def get_with_metadata(self, *args, **kwargs):
+            ...
+
+
+Registry = _Registry
 
 from ..dicom import Dicom
 from ..tags import Tag
