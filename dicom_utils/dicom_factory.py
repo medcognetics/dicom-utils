@@ -17,8 +17,8 @@ from numpy.random import default_rng
 from pydicom import DataElement, Dataset, FileDataset, Sequence
 from pydicom.data import get_testdata_file
 from pydicom.valuerep import VR
-from registry import Registry
 
+from .container.record import Registry
 from .tags import Tag
 
 

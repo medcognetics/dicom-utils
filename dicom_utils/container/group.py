@@ -4,7 +4,7 @@
 
 from functools import partial
 from pathlib import Path
-from typing import Callable, Hashable, Optional, ParamSpec, TypeVar
+from typing import Callable, Hashable, Optional, TypeVar
 
 from registry import Registry
 
@@ -14,7 +14,6 @@ from .helpers import StudyUID
 from .record import FileRecord
 
 
-P = ParamSpec("P")
 H = TypeVar("H", bound=Hashable)
 
 
