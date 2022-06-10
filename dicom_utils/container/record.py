@@ -658,6 +658,7 @@ class MammogramFileRecord(DicomImageFileRecord):
         return result
 
 
+@dataclass
 class RecordHelper(ABC):
     r"""A :class:`RecordHelper` implements logic that is run during :class:`FileRecord`
     creation and populates fields using custom logic.
@@ -675,6 +676,7 @@ class RecordHelper(ABC):
 
 
 @HELPER_REGISTRY(name="patient-id-from-path")
+@dataclass
 class PatientIDFromPath(RecordHelper):
     r"""Helper that extracts a PatientID from the filepath.
     PatientID will be extracted as ``rec.path.parents[helper.level].name``.
@@ -694,6 +696,7 @@ class PatientIDFromPath(RecordHelper):
 
 
 @HELPER_REGISTRY(name="study-date-from-path")
+@dataclass
 class StudyDateFromPath(RecordHelper):
     r"""Helper that extracts StudyDate from the filepath.
     Study year will be extracted as ``int(rec.path.parents[helper.level].name)``, and
@@ -715,6 +718,7 @@ class StudyDateFromPath(RecordHelper):
 
 
 @HELPER_REGISTRY(name="patient-orientation")
+@dataclass
 class ParsePatientOrientation(RecordHelper):
     def __call__(self, path: PathLike, rec: R) -> R:
         if isinstance(rec, MammogramFileRecord):
@@ -736,6 +740,7 @@ for i in range(LEVELS_TO_REGISTER := 3):
     HELPER_REGISTRY(partial(StudyDateFromPath, level=i + 1), name=f"study-date-from-path-{i+1}")
 
 
+@dataclass
 class DirectoryHelper(RecordHelper):
     def glob(self, path: PathLike, files_only: bool = True) -> Iterator[Path]:
         path = Path(path)
@@ -746,6 +751,7 @@ class DirectoryHelper(RecordHelper):
 
 
 @HELPER_REGISTRY(name="spot-compression")
+@dataclass
 class SpotCompressionHelper(DirectoryHelper):
     def __init__(self, size_delta: int = int(1e6)):
         self.size_delta = size_delta

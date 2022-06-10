@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from functools import reduce
+from functools import partial, reduce
 from os import PathLike
 from pathlib import Path
 from typing import Callable, Dict, Generic, Hashable, Iterable, Iterator, Optional, Tuple, Type, TypeVar, Union, cast
@@ -127,8 +127,9 @@ class Input:
             An iterable of names for :class:`RecordHelper` subclasses registered in ``HELPER_REGISTRY``.
             By default no helpers will be used.
 
-        prefix:
-            A prefix to use when naming each case.
+        filters:
+            An iterable of names for :class:`RecordFilter` subclasses registered in ``FILTER_REGISTRY``.
+            By default no filters will be used.
 
     """
 
@@ -139,7 +140,8 @@ class Input:
         groups: Iterable[str] = ["patient-id", "study-date", "study-uid"],
         helpers: Iterable[str] = [],
         namers: Iterable[str] = ["patient-id", "study-date", "study-uid"],
-        require_dicom: bool = True,
+        filters: Iterable[str] = [],
+        require_dicom: bool = False,
         **kwargs,
     ):
         if records is None:
@@ -153,9 +155,12 @@ class Input:
 
         # scan sources and build a RecordCollection with every valid file found
         sources = [Path(sources)] if isinstance(sources, PathLike) else [Path(p) for p in sources]
+        scan_source = partial(
+            RecordCollection.from_dir, record_types=self.records, helpers=helpers, filters=filters, **kwargs
+        )
         collection = reduce(
             lambda c1, c2: c1.union(c2),
-            (RecordCollection.from_dir(s, record_types=self.records, helpers=helpers, **kwargs) for s in sources),
+            (scan_source(s) for s in sources),
         )
 
         # apply groupers to generate a dict of key -> group pairs

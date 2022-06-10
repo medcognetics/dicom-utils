@@ -3,18 +3,22 @@
 import shutil
 from os import PathLike
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import pydicom
 import pytest
 
 from dicom_utils.container import (
+    FILTER_REGISTRY,
+    HELPER_REGISTRY,
     DicomFileRecord,
     DicomImageFileRecord,
     FileRecord,
     MammogramFileRecord,
     RecordCollection,
     RecordCreator,
+    RecordFilter,
+    RecordHelper,
     record_iterator,
 )
 
@@ -78,13 +82,38 @@ class TestRecordCreator:
         assert rec.path == f
 
 
-@pytest.mark.parametrize("use_bar", [True, False])
-@pytest.mark.parametrize("threads", [False, True])
-@pytest.mark.parametrize("jobs", [None, 1, 2])
-def test_record_iterator(dicom_files, use_bar, threads, jobs):
-    records = list(record_iterator(dicom_files, jobs, use_bar, threads))
-    assert all(isinstance(r, DicomFileRecord) for r in records)
-    assert set(rec.path for rec in records) == set(dicom_files)
+class TestRecordIterator:
+    @pytest.mark.parametrize("use_bar", [True, False])
+    @pytest.mark.parametrize("threads", [False, True])
+    @pytest.mark.parametrize("jobs", [None, 1, 2])
+    def test_default(self, dicom_files, use_bar, threads, jobs):
+        records = list(record_iterator(dicom_files, jobs, use_bar, threads))
+        assert all(isinstance(r, DicomFileRecord) for r in records)
+        assert set(rec.path for rec in records) == set(dicom_files)
+
+    def test_helpers(self, dicom_files):
+        @HELPER_REGISTRY(name="dummy-pid")
+        class PatientIDHelper(RecordHelper):
+            def __call__(self, _, rec):
+                return rec.replace(PatientID="TEST")
+
+        records = list(record_iterator(dicom_files, helpers=["dummy-pid"], threads=True))
+        assert all(isinstance(r, DicomFileRecord) for r in records)
+        assert all(cast(DicomFileRecord, r).PatientID == "TEST" for r in records)
+
+    def test_filters(self, dicom_files):
+        @FILTER_REGISTRY(name="dummy-filter")
+        class DummyFilter(RecordFilter):
+            def path_is_valid(self, path: Path) -> bool:
+                return str(path).endswith("0.dcm")
+
+            def record_is_valid(self, rec: FileRecord) -> bool:
+                return str(rec.path.parent).endswith("0")
+
+        records = list(record_iterator(dicom_files, filters=["dummy-filter"], threads=True))
+        assert all(isinstance(r, DicomFileRecord) for r in records)
+        assert all(str(r.path).endswith("0.dcm") for r in records), "path_is_valid filter failed"
+        assert all(str(r.path.parent).endswith("0") for r in records), "record_is_valid filter failed"
 
 
 class TestRecordCollection:
