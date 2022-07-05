@@ -273,6 +273,7 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
     PatientName: Optional[str] = None
     PatientID: Optional[str] = None
     ManufacturerModelName: Optional[str] = None
+    PresentationIntentType: Optional[str] = None
 
     def __iter__(self) -> Iterator[Tuple[Tag, Any]]:
         for f in fields(self):
@@ -291,6 +292,10 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
     def same_study_as(self, other: "DicomFileRecord") -> bool:
         r"""Checks if this record is part of the same study as record ``other``."""
         return bool(self.StudyInstanceUID) and self.StudyInstanceUID == other.StudyInstanceUID
+
+    @cached_property
+    def is_for_processing(self) -> bool:
+        return (self.PresentationIntentType or "").lower() == "for processing"
 
     @property
     def is_compressed(self) -> bool:
@@ -432,6 +437,8 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
         ]
         if self.is_secondary_capture:
             parts.insert(1, "secondary")
+        if self.is_for_processing:
+            parts.insert(1, "proc")
         path = Path("_".join(p for p in parts if p))
         return path
 
@@ -490,6 +497,10 @@ class DicomImageFileRecord(DicomFileRecord):
             for modifier in iterate_view_modifier_codes(self.ViewModifierCodeSequence):
                 yield modifier
 
+    @cached_property
+    def view_modifier_code_meanings(self) -> Set[str]:
+        return {get_value(modifier, Tag.CodeMeaning, "").strip().lower() for modifier in self.view_modifier_codes}
+
     @classmethod
     def from_dicom(cls: Type[R], path: PathLike, dcm: Dicom, modality: Optional[str] = None) -> R:
         r"""Creates a :class:`MammogramFileRecord` from a DICOM file.
@@ -510,6 +521,7 @@ class DicomImageFileRecord(DicomFileRecord):
     def to_dict(self) -> Dict[str, Any]:
         result = super().to_dict()
         result["magnified"] = self.is_magnified
+        result["view_modifier_code_meanings"] = list(self.view_modifier_code_meanings)
         return result
 
 
@@ -539,26 +551,48 @@ class MammogramFileRecord(DicomImageFileRecord):
             return True
         if "spot" in (self.ViewPosition or "").lower():
             return True
-        for modifier in self.view_modifier_codes:
-            meaning = get_value(modifier, Tag.CodeMeaning, "").strip().lower()
-            if meaning == "spot compression":
-                return True
-        return False
+        return "spot compression" in self.view_modifier_code_meanings
 
     @cached_property
     def is_implant_displaced(self) -> bool:
-        for modifier in self.view_modifier_codes:
-            meaning = get_value(modifier, Tag.CodeMeaning, "").strip().lower()
-            if meaning == "implant displaced":
-                return True
-        return False
+        return "implant displaced" in self.view_modifier_code_meanings
+
+    @cached_property
+    def is_tangential(self) -> bool:
+        if "tan" in (self.ViewPosition or "").lower():
+            return True
+        return "tangential" in self.view_modifier_code_meanings
+
+    @cached_property
+    def is_nipple_in_profile(self) -> bool:
+        if "np" in (self.ViewPosition or "").lower():
+            return True
+        return "nipple in profile" in self.view_modifier_code_meanings
+
+    @cached_property
+    def is_infra_mammary_fold(self) -> bool:
+        if "imf" in (self.ViewPosition or "").lower():
+            return True
+        return "infra-mammary fold" in self.view_modifier_code_meanings
+
+    @cached_property
+    def is_anterior_compression(self) -> bool:
+        if "ac" in (self.ViewPosition or "").lower():
+            return True
+        return "anterior compression" in self.view_modifier_code_meanings
 
     @property
     def is_standard_mammo_view(self) -> bool:
         r"""Checks if this record corresponds to a standard mammography view.
         Standard mammography views are the MLO and CC views.
         """
-        return self.view_position in {ViewPosition.MLO, ViewPosition.CC}
+        return (
+            (self.view_position in {ViewPosition.MLO, ViewPosition.CC})
+            and not self.is_spot_compression
+            and not self.is_magnified
+            and not self.is_secondary_capture
+            and not self.is_for_processing
+        )
 
     @classmethod
     def is_complete_mammo_case(cls, records: Iterable["MammogramFileRecord"]) -> bool:
@@ -588,6 +622,7 @@ class MammogramFileRecord(DicomImageFileRecord):
             filetype = self.Modality.lower()
 
         # modifiers
+        # TODO make this a loop/lookup
         modifiers: List[str] = []
         if self.is_spot_compression:
             modifiers.append("spot")
@@ -595,11 +630,19 @@ class MammogramFileRecord(DicomImageFileRecord):
             modifiers.append("mag")
         if self.is_implant_displaced:
             modifiers.append("id")
+        if self.is_tangential:
+            modifiers.append("tan")
+        if self.is_nipple_in_profile:
+            modifiers.append("np")
+        if self.is_infra_mammary_fold:
+            modifiers.append("imf")
+        if self.is_anterior_compression:
+            modifiers.append("ac")
 
         view = f"{self.laterality.short_str}{self.view_position.short_str}"
 
         path = super().standardized_filename(file_id)
-        parts = [filetype, *modifiers, view] + str(path).split("_")[1:]
+        parts = [filetype, view, *modifiers] + str(path).split("_")[1:]
         pattern = "_".join(p for p in parts if p)
         return Path(pattern).with_suffix(".dcm")
 

@@ -544,7 +544,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.RIGHT,
                 ViewPosition.XCCL,
                 "1",
-                "synth_spot_mag_id_rxccl_1.dcm",
+                "synth_rxccl_spot_mag_id_1.dcm",
             ),
             pytest.param(
                 MammogramType.FFDM,

@@ -104,7 +104,7 @@ class SymlinkFileOutput(Output):
         return result
 
 
-@OUTPUT_REGISTRY(name="longitudinal", subdir="cases", derived=True)
+# @OUTPUT_REGISTRY(name="longitudinal", subdir="cases", derived=True)
 class LongitudinalPointerOutput(Output):
     def __call__(self, inp: Union[Input, Dict[str, RecordCollection]]) -> Dict[str, RecordCollection]:
         assert isinstance(inp, dict)
@@ -204,7 +204,7 @@ class FileListOutput(Output):
             if self.by_case:
                 f.write(f"{name}\n")
             else:
-                files = [Path(*rec.path.parts[-2:]) for rec in collection]
+                files = [Path(*rec.path.parts[-4:]) for rec in collection]
                 for p in files:
                     f.write(f"{str(p)}\n")
 
@@ -232,8 +232,15 @@ def is_mammogram_case(c: RecordCollection) -> bool:
     return any(isinstance(rec, MammogramFileRecord) for rec in c)
 
 
-def is_mammogram_record(rec: FileRecord, mtype: Optional[MammogramType] = None) -> bool:
-    return isinstance(rec, MammogramFileRecord) and (mtype is None or rec.mammogram_type == mtype)
+def is_mammogram_record(
+    rec: FileRecord, mtype: Optional[MammogramType] = None, secondary: bool = False, proc: bool = False
+) -> bool:
+    return (
+        isinstance(rec, MammogramFileRecord)
+        and (mtype is None or rec.mammogram_type == mtype)
+        and (secondary or not rec.is_secondary_capture)
+        and (proc or not rec.is_for_processing)
+    )
 
 
 def is_2d_mammogram(rec: FileRecord) -> bool:
@@ -242,6 +249,20 @@ def is_2d_mammogram(rec: FileRecord) -> bool:
 
 def is_spot_mag(rec: FileRecord) -> bool:
     return isinstance(rec, MammogramFileRecord) and (rec.is_spot_compression or rec.is_magnified)
+
+
+def is_standard_ffdm(
+    rec: FileRecord,
+    secondary: bool = False,
+    proc: bool = False,
+) -> bool:
+    return (
+        isinstance(rec, MammogramFileRecord)
+        and (rec.mammogram_type == MammogramType.FFDM)
+        and (rec.is_standard_mammo_view)
+        and (secondary or not rec.is_secondary_capture)
+        and (proc or not rec.is_for_processing)
+    )
 
 
 # register primary output groups
@@ -291,3 +312,18 @@ for name, collection_filter, record_filter in SECONDARY_OUTPUT_GROUPS:
             subdir=f"file_lists/{by_case_str}",
             derived=True,
         )
+
+for by_case in (False, True):
+    by_case_str = "by_case" if by_case else "by_file"
+    OUTPUT_REGISTRY(
+        partial(
+            FileListOutput,
+            filename=Path("ffdm_complete.txt"),
+            collection_filter=is_complete_case,
+            record_filter=is_standard_ffdm,
+            by_case=by_case,
+        ),
+        name=f"filelist-standard_ffdm-{by_case_str}",
+        subdir=f"file_lists/{by_case_str}",
+        derived=True,
+    )

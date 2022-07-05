@@ -135,6 +135,16 @@ class TestRecordCollection:
         assert all(isinstance(v, FileRecord) for v in col)
         assert set(v.path for v in col) == set(dicom_files)
 
+    @pytest.mark.parametrize("use_bar", [True, False])
+    @pytest.mark.parametrize("threads", [False, True])
+    @pytest.mark.parametrize("jobs", [None, 1, 2])
+    def test_create(self, tmp_path, dicom_files, use_bar, threads, jobs):
+        files = [tmp_path] + dicom_files
+        col = RecordCollection.create(files, "*.dcm", jobs, use_bar, threads)
+        assert set(x.path for x in col) == set(dicom_files)
+        assert all(isinstance(v, FileRecord) for v in col)
+        assert set(v.path for v in col) == set(dicom_files)
+
     @pytest.fixture
     def collection(self, dicom_files):
         return RecordCollection.from_files(dicom_files)
