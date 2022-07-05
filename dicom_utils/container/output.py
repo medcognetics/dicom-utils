@@ -104,7 +104,9 @@ class SymlinkFileOutput(Output):
         return result
 
 
-# @OUTPUT_REGISTRY(name="longitudinal", subdir="cases", derived=True)
+# This is how we originally handled longitudinal references, but the approach worked poorly.
+# Now longitudinal data is caputed using PatientID/StudyDate/Study/... file structure.
+# This class remains for reproducibility and will be removed in a future version
 class LongitudinalPointerOutput(Output):
     def __call__(self, inp: Union[Input, Dict[str, RecordCollection]]) -> Dict[str, RecordCollection]:
         assert isinstance(inp, dict)
@@ -204,7 +206,7 @@ class FileListOutput(Output):
             if self.by_case:
                 f.write(f"{name}\n")
             else:
-                files = [Path(*rec.path.parts[-4:]) for rec in collection]
+                files = [self.path_to_filelist_entry(rec.path) for rec in collection]
                 for p in files:
                     f.write(f"{str(p)}\n")
 
@@ -217,8 +219,15 @@ class FileListOutput(Output):
 
         return result
 
+    @classmethod
+    def path_to_filelist_entry(cls, path: Path) -> Path:
+        # For file structure PatientID/StudyDate/Study/file we want
+        # to select 4 levels from the end to trim leading directories
+        START_OF_PATH = -4
+        return Path(*path.parts[START_OF_PATH:])
+
     def write(self, name: str) -> RecordCollection:
-        ...
+        pass
 
 
 def is_complete_case(c: RecordCollection) -> bool:
