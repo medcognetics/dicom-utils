@@ -227,7 +227,7 @@ class FileListOutput(Output):
         return Path(*path.parts[START_OF_PATH:])
 
     def write(self, name: str) -> RecordCollection:
-        pass
+        return RecordCollection()
 
 
 def is_complete_case(c: RecordCollection) -> bool:
