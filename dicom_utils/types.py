@@ -381,6 +381,7 @@ LMO_STRINGS: Final = {pattern for s in LM_STRINGS for pattern in (f"{s} oblique"
 XCCL_STRINGS: Final = {s + " exaggerated laterally" for s in CC_STRINGS}
 XCCM_STRINGS: Final = {s + " exaggerated medially" for s in CC_STRINGS}
 AT_STRINGS: Final = {"axillary tail"}
+CV_STRINGS: Final = {"cleavage view", "valley-view"}
 
 
 class ViewPosition(EnumMixin):
@@ -394,6 +395,7 @@ class ViewPosition(EnumMixin):
     XCCL = auto()
     XCCM = auto()
     AT = auto()
+    CV = auto()
 
     @staticmethod
     def get_required_tags() -> List[Tag]:

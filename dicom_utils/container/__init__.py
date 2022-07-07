@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from .collection import RecordCollection, RecordCreator, record_iterator
+from .collection import FILTER_REGISTRY, RecordCollection, RecordCreator, RecordFilter, record_iterator
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID, TransferSyntaxUID
 from .record import (
     HELPER_REGISTRY,
@@ -33,4 +33,6 @@ __all__ = [
     "RECORD_REGISTRY",
     "HELPER_REGISTRY",
     "RecordHelper",
+    "FILTER_REGISTRY",
+    "RecordFilter",
 ]

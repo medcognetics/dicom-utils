@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from functools import reduce
+from functools import partial, reduce
 from os import PathLike
 from pathlib import Path
 from typing import Callable, Dict, Generic, Hashable, Iterable, Iterator, Optional, Tuple, Type, TypeVar, Union, cast
@@ -66,10 +66,12 @@ class PatientIDNamer(CaseRenamer[Optional[str]]):
 
     def __call__(self, key: Optional[str], collection: RecordCollection, index: int, total: int) -> str:
         pids = {pid for rec in collection if isinstance(rec, SupportsPatientID) and (pid := rec.PatientID) is not None}
-        if len(pids) != 1:
+        if len(pids) > 1:
             raise ValueError("Expected 1 PatientID, but found {len(pids)}")
-        pid = next(iter(pids))
-        return f"{self.prefix}{pid}"
+        elif len(pids) == 1:
+            pid = next(iter(pids))
+            return f"{self.prefix}{pid}"
+        return ""
 
 
 @NAME_REGISTRY(name="study-date")
@@ -85,10 +87,12 @@ class StudyDateNamer(CaseRenamer):
             if isinstance(rec, SupportsStudyDate)
             and (date := (rec.StudyYear if self.year_only else rec.StudyDate)) is not None
         }
-        if len(dates) != 1:
+        if len(dates) > 1:
             raise ValueError("Expected 1 StudyDate, but found {len(dates)}")
-        date = next(iter(dates))
-        return f"{self.prefix}{date}"
+        elif len(dates) == 1:
+            date = next(iter(dates))
+            return f"{self.prefix}{date}"
+        return ""
 
 
 @NAME_REGISTRY(name="study-uid")
@@ -100,10 +104,12 @@ class StudyIDNamer(CaseRenamer[Optional[str]]):
         uids = {
             uid for rec in collection if isinstance(rec, SupportsStudyUID) and (uid := rec.StudyInstanceUID) is not None
         }
-        if len(uids) != 1:
+        if len(uids) > 1:
             raise ValueError("Expected 1 StudyInstanceUID, but found {len(pids)}")
-        uid = next(iter(uids))
-        return f"{self.prefix}{uid}"
+        elif len(uids) == 1:
+            uid = next(iter(uids))
+            return f"{self.prefix}{uid}"
+        return ""
 
 
 class Input:
@@ -127,8 +133,9 @@ class Input:
             An iterable of names for :class:`RecordHelper` subclasses registered in ``HELPER_REGISTRY``.
             By default no helpers will be used.
 
-        prefix:
-            A prefix to use when naming each case.
+        filters:
+            An iterable of names for :class:`RecordFilter` subclasses registered in ``FILTER_REGISTRY``.
+            By default no filters will be used.
 
     """
 
@@ -139,7 +146,8 @@ class Input:
         groups: Iterable[str] = ["patient-id", "study-date", "study-uid"],
         helpers: Iterable[str] = [],
         namers: Iterable[str] = ["patient-id", "study-date", "study-uid"],
-        require_dicom: bool = True,
+        filters: Iterable[str] = [],
+        require_dicom: bool = False,
         **kwargs,
     ):
         if records is None:
@@ -153,9 +161,12 @@ class Input:
 
         # scan sources and build a RecordCollection with every valid file found
         sources = [Path(sources)] if isinstance(sources, PathLike) else [Path(p) for p in sources]
+        scan_source = partial(
+            RecordCollection.from_dir, record_types=self.records, helpers=helpers, filters=filters, **kwargs
+        )
         collection = reduce(
             lambda c1, c2: c1.union(c2),
-            (RecordCollection.from_dir(s, record_types=self.records, helpers=helpers, **kwargs) for s in sources),
+            (scan_source(s) for s in sources),
         )
 
         # apply groupers to generate a dict of key -> group pairs
@@ -166,7 +177,7 @@ class Input:
         }
 
         self.cases: Dict[Tuple[str, ...], RecordCollection] = {}
-        for i, group_key in enumerate(sorted(grouped_collections.keys())):
+        for i, group_key in enumerate(sorted(grouped_collections.keys(), key=self.sort_key)):
             group = grouped_collections[group_key]
             group_key = (group_key,) if not isinstance(group_key, tuple) else group_key
             key = tuple(namer(k, group, i + 1, len(grouped_collections)) for namer, k in zip(self.namers, group_key))
@@ -180,3 +191,7 @@ class Input:
         r"""Iterates over pairs of named groups and the :class:`RecordCollection` containing that group."""
         for k, v in self.cases.items():
             yield k, v
+
+    @staticmethod
+    def sort_key(key: Tuple[Hashable, ...]) -> Tuple[str, ...]:
+        return tuple(str(x) for x in key)

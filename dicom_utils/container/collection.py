@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import json
+import logging
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
 from typing import (
@@ -13,15 +15,16 @@ from typing import (
     Iterator,
     List,
     Optional,
-    Sequence,
     Set,
     Tuple,
     Type,
     TypeVar,
+    Union,
     cast,
     overload,
 )
 
+from registry import Registry
 from tqdm import tqdm
 
 from ..dicom import Dicom
@@ -29,6 +32,40 @@ from ..dicom import Dicom
 # Type checking fails when dataclass attr name matches a type alias.
 # Import types under a different alias
 from .record import HELPER_REGISTRY, RECORD_REGISTRY, DicomFileRecord, FileRecord, RecordHelper
+
+
+logger = logging.getLogger(__name__)
+
+FILTER_REGISTRY = Registry("filters")
+
+
+@dataclass
+class RecordFilter:
+    r""":class:`RecordFilter` defines a filter function that can be used to filter :class`FileRecord`s during
+    the record discovery phase.
+
+    The following filter hooks are available:
+        * :func:`path_is_valid` - Checks a path before any :class:`FileRecord` creation is attempted.
+        * :func:`record_is_valid` - Checks the created :class:`FileRecord`
+
+    If either of the filter hooks return ``False``, the record will not be included in the iterator of
+    discovered :class:`FileRecord`s.
+    """
+
+    def __call__(self, target: Union[Path, FileRecord]) -> bool:
+        if isinstance(target, Path):
+            valid = self.path_is_valid(target)
+        elif isinstance(target, FileRecord):
+            valid = self.record_is_valid(target)
+        else:
+            raise TypeError(type(target))
+        return valid
+
+    def path_is_valid(self, path: Path) -> bool:
+        return True
+
+    def record_is_valid(self, rec: FileRecord) -> bool:
+        return True
 
 
 class RecordCreator:
@@ -72,6 +109,7 @@ class RecordCreator:
                     )
                 else:
                     result = dtype.from_file(path)
+                logger.debug(f"Created {dtype.__name__} for {path}")
                 break
             except Exception:
                 pass
@@ -115,15 +153,23 @@ class RecordCreator:
     def filter_dicom_types(cls, types: Iterable[Type[FileRecord]]) -> List[Type[DicomFileRecord]]:
         return [t for t in types if issubclass(t, DicomFileRecord)]
 
+    @classmethod
+    def precheck_file(cls, path: PathLike, filter_funcs: Iterable[Callable[..., bool]]) -> Optional[Path]:
+        path = Path(path)
+        if path.is_file() and all(f(path) for f in filter_funcs):
+            return path
+        return None
+
 
 def record_iterator(
-    files: Sequence[PathLike],
+    files: Iterable[PathLike],
     jobs: Optional[int] = None,
     use_bar: bool = True,
     threads: bool = False,
     record_types: Optional[Iterable[str]] = None,
     helpers: Iterable[str] = [],
     ignore_exceptions: bool = False,
+    filters: Iterable[str] = [],
     **kwargs,
 ) -> Iterator[FileRecord]:
     r"""Produces :class:`FileRecord` instances by iterating over an input list of files. If a
@@ -152,31 +198,78 @@ def record_iterator(
             If ``False``, any exceptions raised during record creation will not be suppressed. By default,
             exceptions are silently ignored and records will not be produced for failing files.
 
+        filters:
+            Iterable of registered names for :class:`RecordFilter`s to use when filtering potential records
+
     Keyword Args:
         Forwarded to :class:`RecordCreator`
 
     Returns:
         Iterator of :class:`FileRecord`s
     """
-    files = list(Path(p) for p in files if Path(p).is_file())
+    # build the RecordCreator which determines what FileRecord subclass to use for each file
+    filter_funcs: List[Callable[..., bool]] = [FILTER_REGISTRY.get(f)() for f in filters]
     creator = RecordCreator(record_types, helpers, **kwargs)
-    bar = tqdm(desc="Scanning files", total=len(files), unit="file", disable=(not use_bar))
+    logger.debug("Staring record_iterator")
+    logger.debug(f"Functions: {creator.functions}")
+    logger.debug(f"Helpers: {creator.helpers}")
+    logger.debug(f"Filters: {filter_funcs}")
 
+    # build a list of files to check
+    # a record creation attempt will only be made on valid files that pass all filters
     Pool = ThreadPoolExecutor if threads else ProcessPoolExecutor
+    bar = tqdm(desc="Scanning sources", disable=(not use_bar))
     with Pool(jobs) as p:
-        futures = [p.submit(creator, path) for path in files]
-        for f in futures:
+        futures = []
+        for path in files:
+            f = p.submit(creator.precheck_file, path, filter_funcs)
             f.add_done_callback(lambda _: bar.update(1))
+            futures.append(f)
+        files = [path for f in futures if (path := f.result()) is not None]
+    bar.close()
+
+    # create and yield records
+    bar = tqdm(desc="Building records", total=len(files), unit="file", disable=(not use_bar))
+    with Pool(jobs) as p:
+        futures = []
+        for path in files:
+            f = p.submit(creator, path)
+            f.add_done_callback(lambda _: bar.update(1))
+            futures.append(f)
+
         for f in futures:
             if f.exception() and not ignore_exceptions:
                 raise cast(Exception, f.exception())
-            elif record := f.result():
+            elif (record := f.result()) and all(f(record) for f in filter_funcs):
                 yield record
     bar.close()
 
 
 T = TypeVar("T", bound=Hashable)
 C = TypeVar("C", bound="RecordCollection")
+
+
+def search_dir(path: PathLike, pattern: str) -> Iterable[Path]:
+    path = Path(path)
+    if not path.is_dir():
+        raise NotADirectoryError(path)
+    return path.rglob(pattern)
+
+
+def iterate_filepaths(
+    paths: Iterable[PathLike],
+    pattern: str,
+    raise_errors: bool = True,
+) -> Iterator[Path]:
+    for path in paths:
+        path = Path(path)
+        if path.is_file():
+            yield path
+        elif path.is_dir():
+            for p in search_dir(path, pattern):
+                yield p
+        elif raise_errors:
+            raise FileNotFoundError(path)
 
 
 class RecordCollection:
@@ -285,13 +378,13 @@ class RecordCollection:
         jobs: Optional[int] = None,
         use_bar: bool = True,
         threads: bool = False,
-        ignore_patterns: Sequence[str] = [],
         record_types: Optional[Iterable[str]] = None,
         helpers: Iterable[str] = [],
+        filters: Iterable[str] = [],
         **kwargs,
     ) -> C:
         r"""Create a :class:`RecordCollection` from files in a directory matching a wildcard.
-        If a :class:`FileRecord` cannot be from_filed for a file, that file is silently excluded
+        If a :class:`FileRecord` cannot be created for a file, that file is silently excluded
         from the collection.
 
         Args:
@@ -310,36 +403,41 @@ class RecordCollection:
             threads:
                 If ``True``, use a :class:`ThreadPoolExecutor`. Otherwise, use a :class:`ProcessPoolExecutor`
 
-            ignore_patterns:
-                Strings indicating files that should be ignored. Matching is a simple ``str(pattern) in str(filepath)``.
+            record_types:
+                List of registered names for :class:`FileRecord` types to try
+
+            helpers:
+                Iterable of registered names for :class:`RecordHelper`s to use when creating records
+
+            filters:
+                Iterable of registered names for :class:`RecordFilter`s to use when filtering potential records
 
         Keyword Args:
             Forwarded to :func:`record_iterator`
         """
-        path = Path(path)
-        if not path.is_dir():
-            raise NotADirectoryError(path)
-        files = [p for p in path.rglob(pattern) if not any(ignore in str(p) for ignore in ignore_patterns)]
-        return cls.from_files(files, jobs, use_bar, threads, record_types, helpers, **kwargs)
+        return cls.from_files(
+            search_dir(path, pattern), jobs, use_bar, threads, record_types, helpers, filters, **kwargs
+        )
 
     @classmethod
     def from_files(
         cls: Type[C],
-        files: Sequence[PathLike],
+        files: Iterable[PathLike],
         jobs: Optional[int] = None,
         use_bar: bool = True,
         threads: bool = False,
         record_types: Optional[Iterable[str]] = None,
         helpers: Iterable[str] = [],
+        filters: Iterable[str] = [],
         **kwargs,
     ) -> C:
         r"""Create a :class:`RecordCollection` from a list of files.
-        If a :class:`FileRecord` cannot be from_filed for a file, that file is silently excluded
+        If a :class:`FileRecord` cannot be created for a file, that file is silently excluded
         from the collection.
 
         Args:
             files:
-                List of files to from_file records from
+                List of files to create records from
 
             jobs:
                 Number of parallel jobs to use
@@ -350,11 +448,67 @@ class RecordCollection:
             threads:
                 If ``True``, use a :class:`ThreadPoolExecutor`. Otherwise, use a :class:`ProcessPoolExecutor`
 
-            ignore_patterns:
-                Strings indicating files that should be ignored. Matching is a simple ``str(pattern) in str(filepath)``.
+            record_types:
+                List of registered names for :class:`FileRecord` types to try
+
+            helpers:
+                Iterable of registered names for :class:`RecordHelper`s to use when creating records
+
+            filters:
+                Iterable of registered names for :class:`RecordFilter`s to use when filtering potential records
 
         Keyword Args:
             Forwarded to :func:`record_iterator`
         """
-        collection = cls(record_iterator(files, jobs, use_bar, threads, record_types, helpers, **kwargs))
+        collection = cls(
+            record_iterator(files, jobs, use_bar, threads, record_types, helpers, filters=filters, **kwargs)
+        )
         return collection
+
+    @classmethod
+    def create(
+        cls: Type[C],
+        paths: Iterable[PathLike],
+        pattern: str = "*",
+        jobs: Optional[int] = None,
+        use_bar: bool = True,
+        threads: bool = False,
+        record_types: Optional[Iterable[str]] = None,
+        helpers: Iterable[str] = [],
+        filters: Iterable[str] = [],
+        **kwargs,
+    ) -> C:
+        r"""Create a :class:`RecordCollection` from a list of paths, either files or directories.
+        If a :class:`FileRecord` cannot be created for a file, that file is silently excluded
+        from the collection.
+
+        Args:
+            paths:
+                List of paths to create records from
+
+            pattern:
+                Glob pattern for matching files
+
+            jobs:
+                Number of parallel jobs to use
+
+            use_bar:
+                If ``False``, don't show a tqdm progress bar
+
+            threads:
+                If ``True``, use a :class:`ThreadPoolExecutor`. Otherwise, use a :class:`ProcessPoolExecutor`
+
+            record_types:
+                List of registered names for :class:`FileRecord` types to try
+
+            helpers:
+                Iterable of registered names for :class:`RecordHelper`s to use when creating records
+
+            filters:
+                Iterable of registered names for :class:`RecordFilter`s to use when filtering potential records
+
+        Keyword Args:
+            Forwarded to :func:`record_iterator`
+        """
+        paths = iterate_filepaths(paths, pattern)
+        return cls.from_files(paths, jobs, use_bar, threads, record_types, helpers, filters=filters, **kwargs)
