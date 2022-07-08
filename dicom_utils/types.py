@@ -7,6 +7,7 @@ from typing import Any, Dict, Final, Iterable, Iterator, List, NamedTuple, Optio
 
 from pydicom import DataElement
 from pydicom.dataset import Dataset
+from pydicom.multival import MultiValue
 from pydicom.sequence import Sequence
 
 from .tags import Tag
@@ -515,6 +516,42 @@ class MammogramView(NamedTuple):
         return [*Laterality.get_required_tags(), *ViewPosition.get_required_tags()]
 
 
+@dataclass(frozen=True)
+class PixelSpacing:
+    r"""Represents detector pixel spacing in mm."""
+    row: float
+    col: float
+
+    @classmethod
+    def from_str(cls, string: str) -> "PixelSpacing":
+        # value will be of from [row, col] in mm
+        values = string.strip("[]").split(", ")
+        try:
+            values = tuple(float(x) for x in values)
+            row, col = values
+        except ValueError:
+            raise ValueError(f"Failed to parse PixelSpacing from {string}")
+        return cls(row, col)
+
+    @classmethod
+    def from_dicom(cls, dcm: Dicom) -> "PixelSpacing":
+        for tag in cls.get_required_tags():
+            try:
+                spacing = get_value(dcm, tag, None)
+                if isinstance(spacing, str):
+                    return cls.from_str(spacing)
+                elif isinstance(spacing, MultiValue):
+                    row, col = tuple(float(x) for x in spacing)
+                    return cls(row, col)
+            except ValueError:
+                pass
+        raise RuntimeError("Failed to create PixelSpacing from DICOM")
+
+    @staticmethod
+    def get_required_tags() -> List[Tag]:
+        return [Tag.ImagerPixelSpacing, Tag.PixelSpacing]
+
+
 __all__ = [
     "Dicom",
     "ImageType",
@@ -523,4 +560,5 @@ __all__ = [
     "Laterality",
     "ViewPosition",
     "MammogramView",
+    "PixelSpacing",
 ]

@@ -93,7 +93,9 @@ class BaseFactory(ABC):
     @classmethod
     def suggest_vr(cls, tag: Tag, value: Any) -> VR:
         name = tag.name
-        if isinstance(value, typing.Sequence) and not isinstance(value, str):
+        if name.endswith("PixelSpacing"):
+            return VR("DS")
+        elif isinstance(value, typing.Sequence) and not isinstance(value, str):
             return VR("SQ")
         elif isinstance(value, int):
             return VR("UL")
