@@ -19,6 +19,7 @@ from pydicom.data import get_testdata_file
 from pydicom.valuerep import VR
 
 from .container.record import Registry
+from .dicom import set_pixels
 from .tags import Tag
 
 
@@ -179,6 +180,7 @@ class DicomFactory(BaseFactory):
         self.rng if seed is None else default_rng(seed)
         dcm = deepcopy(self.dicom)
 
+        # set overrides
         overrides = {**self.overrides, **kwargs}
         for tag_name, value in overrides.items():
             tag = getattr(Tag, tag_name)
@@ -189,6 +191,23 @@ class DicomFactory(BaseFactory):
             else:
                 elem = self.data_element(tag, value)
                 dcm[tag] = elem
+
+        # Rows/Columns may have been changed without changing PixelData. This will cause
+        # an error when reading `dcm.pixel_array`. Try reading pixel_array and if it fails
+        # update pixels with new data of the correct shape
+        try:
+            dcm.pixel_array
+        except ValueError:
+            arr = self.pixel_array(
+                dcm.Rows,
+                dcm.Columns,
+                dcm.NumberOfFrames,
+                dcm.BitsStored,
+                dcm.BitsAllocated,
+                dcm.PhotometricInterpretation,
+                seed=self.seed,
+            )
+            dcm = set_pixels(dcm, arr, dcm.file_meta.TransferSyntaxUID)
 
         # if requested, delete any tags not in the proto
         if not self.allow_nonproto_tags:

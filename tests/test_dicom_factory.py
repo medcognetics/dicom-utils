@@ -71,26 +71,32 @@ class TestDicomFactory:
         factory = FACTORY_REGISTRY.get("ffdm")()
         dcm = factory()
         assert MammogramType.from_dicom(dcm) == MammogramType.FFDM
+        assert dcm.pixel_array.any()
 
     def test_tomo_factory(self):
         factory = FACTORY_REGISTRY.get("tomo")()
         dcm = factory()
         assert MammogramType.from_dicom(dcm) == MammogramType.TOMO
+        assert dcm.pixel_array.any()
 
     def test_synth_factory(self):
         factory = FACTORY_REGISTRY.get("synth")()
         dcm = factory()
         assert MammogramType.from_dicom(dcm) == MammogramType.SYNTH
+        assert dcm.pixel_array.any()
 
     def test_ultrasound_factory(self):
         factory = FACTORY_REGISTRY.get("ultrasound")()
         dcm = factory()
         assert dcm.Modality == "US"
+        assert dcm.pixel_array.any()
 
     def test_complete_mammography_case_factory(self):
         factory = FACTORY_REGISTRY.get("mammo-case")()
         dicoms = factory()
         assert len(dicoms) == 12
+        for dcm in dicoms:
+            assert dcm.pixel_array.any()
 
     @pytest.mark.parametrize("allow", [True, False])
     def test_nonproto_tag(self, allow):

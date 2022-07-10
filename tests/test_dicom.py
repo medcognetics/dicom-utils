@@ -7,9 +7,10 @@ import time
 import numpy as np
 import pydicom
 import pytest
+from numpy.random import default_rng
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
-from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted
+from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted, set_pixels
 
 
 class TestReadDicomImage:
@@ -119,3 +120,29 @@ class TestReadDicomImage:
 def test_deprecated_is_inverted(dicom_object):
     with pytest.warns(DeprecationWarning):
         assert not is_inverted(dicom_object.PhotometricInterpretation)
+
+
+@pytest.mark.parametrize(
+    "rows,cols,num_frames,bits",
+    [
+        pytest.param(32, 32, 1, 16),
+        pytest.param(32, 64, 1, 16),
+        pytest.param(32, 64, 3, 16),
+    ],
+)
+def test_set_pixels(dicom_object, rows, cols, num_frames, bits, transfer_syntax):
+    dicom_object.Rows = rows
+    dicom_object.Columns = cols
+    dicom_object.NumberOfFrames = num_frames
+
+    low = 0
+    high = bits
+    channels = 1 if dicom_object.PhotometricInterpretation.startswith("MONOCHROME") else 3
+    size = tuple(x for x in (channels, num_frames, rows, cols) if x > 1)
+    rng = default_rng(seed=42)
+    arr = rng.integers(low, high, size, dtype=np.uint16)
+
+    output = set_pixels(dicom_object, arr, transfer_syntax)
+    arr_out = output.pixel_array
+    assert isinstance(arr_out, np.ndarray)
+    assert output.file_meta.TransferSyntaxUID == transfer_syntax
