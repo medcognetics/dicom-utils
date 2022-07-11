@@ -10,6 +10,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generic,
     Hashable,
     Iterable,
     Iterator,
@@ -272,11 +273,14 @@ def iterate_filepaths(
             raise FileNotFoundError(path)
 
 
-class RecordCollection:
+R = TypeVar("R", bound=FileRecord)
+
+
+class RecordCollection(Generic[R]):
     r"""Data stucture for organizing :class:`FileRecord` instances, indexed by various attriburtes."""
 
-    def __init__(self, records: Iterable[FileRecord] = set()):
-        self.records: Set[FileRecord] = set(records)
+    def __init__(self, records: Iterable[R] = set()):
+        self.records: Set[R] = set(records)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(length={len(self)})"
@@ -285,14 +289,14 @@ class RecordCollection:
         r"""Returns the total number of contained records"""
         return len(self.records)
 
-    def __iter__(self) -> Iterator[FileRecord]:
+    def __iter__(self) -> Iterator[R]:
         for rec in self.records:
             yield rec
 
     def __contains__(self, x: Any) -> bool:
         return x in self.records
 
-    def add(self, rec: FileRecord) -> None:
+    def add(self, rec: R) -> None:
         return self.records.add(rec)
 
     def union(self: C, other: C) -> C:
@@ -304,11 +308,11 @@ class RecordCollection:
     def difference(self: C, other: C) -> C:
         return self.__class__(self.records.difference(other.records))
 
-    def apply(self: C, func: Callable[[FileRecord], FileRecord]) -> C:
+    def apply(self: C, func: Callable[[R], R]) -> C:
         records = {func(rec) for rec in self.records}
         return self.__class__(records)
 
-    def filter(self: C, func: Callable[[FileRecord], bool]) -> C:
+    def filter(self: C, func: Callable[[R], bool]) -> C:
         records = {rec for rec in self.records if func(rec)}
         return self.__class__(records)
 
@@ -316,14 +320,14 @@ class RecordCollection:
         return any(isinstance(rec, dtype) for rec in self)
 
     @overload
-    def group_by(self: C, funcs: Callable[[FileRecord], T]) -> Dict[T, C]:
+    def group_by(self: C, funcs: Callable[[R], T]) -> Dict[T, C]:
         ...
 
     @overload
-    def group_by(self: C, *funcs: Callable[[FileRecord], T]) -> Dict[Tuple[T, ...], C]:
+    def group_by(self: C, *funcs: Callable[[R], T]) -> Dict[Tuple[T, ...], C]:
         ...
 
-    def group_by(self: C, *funcs: Callable[[FileRecord], Hashable]) -> Dict[Hashable, C]:
+    def group_by(self: C, *funcs: Callable[[R], Hashable]) -> Dict[Hashable, C]:
         result: Dict[Hashable, C] = {}
         for record in self.records:
             key = tuple(f(record) for f in funcs)
@@ -344,7 +348,7 @@ class RecordCollection:
                 return proto
         return None
 
-    def standardized_filenames(self) -> Iterator[Tuple[Path, FileRecord]]:
+    def standardized_filenames(self) -> Iterator[Tuple[Path, R]]:
         counter: Dict[str, int] = {}
         for rec in self:
             path = rec.standardized_filename("id")
@@ -354,7 +358,7 @@ class RecordCollection:
             yield path, rec
             counter[prefix] = count + 1
 
-    def prune_duplicates(self: C, func: Callable[[FileRecord], T]) -> C:
+    def prune_duplicates(self: C, func: Callable[[R], T]) -> C:
         groups = self.group_by(func)
         return self.__class__({next(iter(g)) for g in groups.values()})
 
