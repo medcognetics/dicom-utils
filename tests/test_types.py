@@ -7,10 +7,18 @@ from typing import Any, Dict, cast
 
 import pytest
 from pydicom import DataElement
+from pydicom.multival import MultiValue
 
 from dicom_utils import DicomFactory
 from dicom_utils.tags import Tag
-from dicom_utils.types import ImageType, Laterality, MammogramType, PhotometricInterpretation, ViewPosition
+from dicom_utils.types import (
+    ImageType,
+    Laterality,
+    MammogramType,
+    PhotometricInterpretation,
+    PixelSpacing,
+    ViewPosition,
+)
 
 
 @dataclass
@@ -478,3 +486,36 @@ class TestViewPosition:
         dcm = factory(**overrides)
         x = ViewPosition.from_dicom(dcm)
         assert x == exp
+
+
+class TestPixelSpacing:
+    @pytest.mark.parametrize(
+        "string,exp",
+        [
+            pytest.param("[0.01, 0.01]", PixelSpacing(0.01, 0.01)),
+            pytest.param("[0.001, 0.01]", PixelSpacing(0.001, 0.01)),
+            pytest.param("[1.0e-002, 2.0e-002]", PixelSpacing(0.01, 0.02)),
+            pytest.param("[0.001-0.01]", PixelSpacing(0.001, 0.01)),
+            pytest.param("[0.001;0.01]", PixelSpacing(0.001, 0.01)),
+            pytest.param("[100, 100]", PixelSpacing(100, 100)),
+            pytest.param("[001e002, 001e002]", PixelSpacing(100, 100)),
+            pytest.param("", None, marks=pytest.mark.xfail(raises=ValueError)),
+            pytest.param("[foo, bar]", None, marks=pytest.mark.xfail(raises=ValueError)),
+        ],
+    )
+    def test_from_str(self, string, exp):
+        actual = PixelSpacing.from_str(string)
+        assert actual == exp
+
+    @pytest.mark.parametrize(
+        "tag,value,exp",
+        [
+            pytest.param(Tag.PixelSpacing, MultiValue(str, [0.01, 0.02]), PixelSpacing(0.01, 0.02)),
+            pytest.param(Tag.ImagerPixelSpacing, MultiValue(str, [0.01, 0.02]), PixelSpacing(0.01, 0.02)),
+        ],
+    )
+    def test_from_dicom_pixel_spacing(self, tag, value, exp):
+        factory = DicomFactory(**{tag.name: value})
+        dcm = factory()
+        actual = PixelSpacing.from_dicom(dcm)
+        assert actual == exp
