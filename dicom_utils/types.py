@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import re
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Dict, Final, Iterable, Iterator, List, NamedTuple, Optional, TypeVar, cast
@@ -516,6 +517,12 @@ class MammogramView(NamedTuple):
         return [*Laterality.get_required_tags(), *ViewPosition.get_required_tags()]
 
 
+# Matches floats, incluidng exponential notation
+FLOAT_PATTERN = r"\d+\.?\d*(?:[e\-\d]+)?"
+
+PIXEL_SPACING_RE = re.compile(rf"({FLOAT_PATTERN})[^\d.]+({FLOAT_PATTERN})")
+
+
 @dataclass(frozen=True)
 class PixelSpacing:
     r"""Represents detector pixel spacing in mm."""
@@ -525,13 +532,15 @@ class PixelSpacing:
     @classmethod
     def from_str(cls, string: str) -> "PixelSpacing":
         # value will be of from [row, col] in mm
-        values = string.strip("[]").split(", ")
-        try:
-            values = tuple(float(x) for x in values)
-            row, col = values
-        except ValueError:
-            raise ValueError(f"Failed to parse PixelSpacing from {string}")
-        return cls(row, col)
+        match = PIXEL_SPACING_RE.search(string)
+        if match:
+            try:
+                values = tuple(float(x) for x in match.groups())
+                row, col = values
+                return cls(row, col)
+            except ValueError:
+                pass
+        raise ValueError(f"Failed to parse PixelSpacing from {string}")
 
     @classmethod
     def from_dicom(cls, dcm: Dicom) -> "PixelSpacing":

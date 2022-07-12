@@ -495,7 +495,12 @@ class TestPixelSpacing:
             pytest.param("[0.01, 0.01]", PixelSpacing(0.01, 0.01)),
             pytest.param("[0.001, 0.01]", PixelSpacing(0.001, 0.01)),
             pytest.param("[1.0e-002, 2.0e-002]", PixelSpacing(0.01, 0.02)),
+            pytest.param("[0.001-0.01]", PixelSpacing(0.001, 0.01)),
+            pytest.param("[0.001;0.01]", PixelSpacing(0.001, 0.01)),
+            pytest.param("[100, 100]", PixelSpacing(100, 100)),
+            pytest.param("[001e002, 001e002]", PixelSpacing(100, 100)),
             pytest.param("", None, marks=pytest.mark.xfail(raises=ValueError)),
+            pytest.param("[foo, bar]", None, marks=pytest.mark.xfail(raises=ValueError)),
         ],
     )
     def test_from_str(self, string, exp):
