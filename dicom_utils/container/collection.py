@@ -128,7 +128,7 @@ class RecordCreator:
 
         # exclude candidates by file extension if `path` has an extension
         for name in self.functions:
-            entry = RECORD_REGISTRY.get_with_metadata(name)
+            entry = RECORD_REGISTRY.get(name)
             dtype = entry.fn
             assert isinstance(dtype, type)
             assert issubclass(dtype, FileRecord)
