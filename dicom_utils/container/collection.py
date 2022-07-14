@@ -209,7 +209,7 @@ def record_iterator(
         Iterator of :class:`FileRecord`s
     """
     # build the RecordCreator which determines what FileRecord subclass to use for each file
-    filter_funcs: List[Callable[..., bool]] = [FILTER_REGISTRY.get(f)() for f in filters]
+    filter_funcs: List[Callable[..., bool]] = [FILTER_REGISTRY.get(f).instantiate_with_metadata() for f in filters]
     creator = RecordCreator(record_types, helpers, **kwargs)
     logger.debug("Staring record_iterator")
     logger.debug(f"Functions: {creator.functions}")

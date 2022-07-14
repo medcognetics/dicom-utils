@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from functools import partial, reduce
 from os import PathLike
 from pathlib import Path
 from typing import Callable, Dict, Generic, Hashable, Iterable, Iterator, Optional, Tuple, Type, TypeVar, Union, cast
@@ -156,17 +155,16 @@ class Input:
             self.records = records
         self.groups = [GROUP_REGISTRY.get(g) for g in groups]
         self.namers = [NAME_REGISTRY.get(n)() for n in namers]
+        if not groups:
+            # Is there a use case for Input where a grouping operation wouldn't be used?
+            raise ValueError("`groups` cannot be empty")
         if len(self.namers) != len(self.groups):
             raise ValueError("Number of namers {namers} should match number of groups {groups}")
 
         # scan sources and build a RecordCollection with every valid file found
-        sources = [Path(sources)] if isinstance(sources, PathLike) else [Path(p) for p in sources]
-        scan_source = partial(
-            RecordCollection.from_dir, record_types=self.records, helpers=helpers, filters=filters, **kwargs
-        )
-        collection = reduce(
-            lambda c1, c2: c1.union(c2),
-            (scan_source(s) for s in sources),
+        sources = [Path(sources)] if isinstance(sources, PathLike) else (Path(p) for p in sources)
+        collection = RecordCollection.create(
+            sources, record_types=self.records, helpers=helpers, filters=filters, **kwargs
         )
 
         # apply groupers to generate a dict of key -> group pairs
@@ -176,6 +174,7 @@ class Input:
             if not require_dicom or grouped.contains_record_type(DicomFileRecord)
         }
 
+        # apply namers to generate a dict of (group name) -> group pairs
         self.cases: Dict[Tuple[str, ...], RecordCollection] = {}
         for i, group_key in enumerate(sorted(grouped_collections.keys(), key=self.sort_key)):
             group = grouped_collections[group_key]
@@ -193,5 +192,7 @@ class Input:
             yield k, v
 
     @staticmethod
-    def sort_key(key: Tuple[Hashable, ...]) -> Tuple[str, ...]:
+    def sort_key(key: Optional[Tuple[Hashable, ...]]) -> Tuple[str, ...]:
+        if key is None:
+            return ("None",)
         return tuple(str(x) for x in key)
