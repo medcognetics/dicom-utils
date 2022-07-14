@@ -28,7 +28,7 @@ C = TypeVar("C", bound="ConcatFactory")
 U = TypeVar("U")
 Proto = Union[PathLike, FileDataset, str]
 DEFAULT_PROTO = "CT_small.dcm"
-FACTORY_REGISTRY = Registry("factories", bind_metadata=True)
+FACTORY_REGISTRY = Registry("factories")
 
 
 def args_from_dicom(func: Callable[..., U], dicom: FileDataset) -> Callable[..., U]:

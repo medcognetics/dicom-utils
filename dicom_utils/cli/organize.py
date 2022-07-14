@@ -29,7 +29,7 @@ def organize(
     opt: List[Output] = []
     derived_opt: List[Output] = []
     for o in outputs:
-        reg = OUTPUT_REGISTRY.get_with_metadata(o)
+        reg = OUTPUT_REGISTRY.get(o)
         subdir = Path(dest, str(reg.metadata.get("subdir", "")))
         fn = reg.fn
         derived = reg.metadata.get("derived", False)
