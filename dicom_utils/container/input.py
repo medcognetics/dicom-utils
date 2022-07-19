@@ -162,7 +162,7 @@ class Input:
             raise ValueError("Number of namers {namers} should match number of groups {groups}")
 
         # scan sources and build a RecordCollection with every valid file found
-        sources = [Path(sources)] if isinstance(sources, PathLike) else (Path(p) for p in sources)
+        sources = (Path(p) for p in ([sources] if isinstance(sources, PathLike) else sources))
         collection = RecordCollection.create(
             sources, record_types=self.records, helpers=helpers, filters=filters, **kwargs
         )
