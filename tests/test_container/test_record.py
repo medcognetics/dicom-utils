@@ -20,9 +20,11 @@ from dicom_utils.container.record import (
     DicomFileRecord,
     DicomImageFileRecord,
     MammogramFileRecord,
+    ModalityHelper,
 )
+from dicom_utils.dicom_factory import DicomFactory
 from dicom_utils.tags import Tag
-from dicom_utils.types import DicomValueError, Laterality, MammogramType, ViewPosition, get_value
+from dicom_utils.types import Laterality, MammogramType, ViewPosition, get_value
 
 
 class TestFileRecord:
@@ -195,8 +197,9 @@ class TestDicomFileRecord(TestFileRecord):
 
     def test_from_file_only_reads_once(self, mocker, record_factory):
         spy = mocker.spy(pydicom, "dcmread")
+        proto = record_factory()
         spy.reset_mock()
-        record_factory()
+        proto.__class__.from_file(proto.path)
         spy.assert_called_once()
 
     @pytest.mark.parametrize(
@@ -258,11 +261,6 @@ class TestDicomFileRecord(TestFileRecord):
         assert isinstance(stream, pydicom.FileDataset)
         spy.assert_called_once()
         assert spy.mock_calls[0].kwargs["stop_before_pixels"]
-
-    @pytest.mark.parametrize("modality", ["CT", "MG", "US"])
-    def test_modality_override(self, modality, record_factory):
-        rec = record_factory(modality=modality)
-        assert rec.Modality == modality
 
     @pytest.mark.parametrize(
         "study_date,exp",
@@ -391,8 +389,9 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         ):
             filename = Path(tmp_path, filename)
             filename.parent.mkdir(exist_ok=True, parents=True)
-            shutil.copy(dicom_file, filename)
-            kwargs.setdefault("modality", Modality)
+            with pydicom.dcmread(dicom_file) as dcm:
+                dcm.Modality = "MG"
+                dcm.save_as(filename)
             record = MammogramFileRecord.from_file(filename, **kwargs)
 
             if view_modifier_code is not None:
@@ -432,18 +431,6 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         rec = record_factory(**{attr: None})
         m.assert_called_once()
         assert getattr(rec, attr) == m()
-
-    @pytest.mark.parametrize(
-        "modality",
-        [
-            "MG",
-            pytest.param("CT", marks=pytest.mark.xfail(raises=DicomValueError)),
-            pytest.param("US", marks=pytest.mark.xfail(raises=DicomValueError)),
-        ],
-    )
-    def test_modality_override(self, modality, record_factory):
-        rec = record_factory(modality=modality)
-        assert rec.Modality == modality
 
     @pytest.mark.parametrize(
         "paddle,code,view_pos,exp",
@@ -579,3 +566,25 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             view_position=view_pos,
         )
         assert record.standardized_filename(uid) == Path(exp)
+
+    @pytest.mark.parametrize(
+        "body_part,study,series,force,exp",
+        [
+            pytest.param("BREAST", "", "", False, "MG"),
+            pytest.param("", "MAMMO SCREEN", "", False, "MG"),
+            pytest.param("", "", "MAMMO SCREEN", False, "MG"),
+            pytest.param("", "", "", True, "MG"),
+        ],
+    )
+    def test_modality_helper(self, tmp_path, body_part, series, study, force, exp):
+        dcm = DicomFactory()(
+            Modality="CT",
+            SeriesDescription=series,
+            StudyDescription=study,
+            BodyPartExamined=body_part,
+        )
+        path = Path(tmp_path, "test.dcm")
+        dcm.save_as(path)
+        helpers = [ModalityHelper(force=force)]
+        rec = MammogramFileRecord.from_file(path, helpers=helpers)
+        assert rec.Modality == exp

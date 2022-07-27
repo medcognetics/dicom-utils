@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property, partial
 from io import BytesIO, IOBase
@@ -78,6 +78,7 @@ STANDARD_MAMMO_VIEWS: Final[Set[MammogramView]] = {
 
 
 R = TypeVar("R", bound="FileRecord")
+T = TypeVar("T")
 
 RECORD_REGISTRY = Registry("records")
 HELPER_REGISTRY = Registry("helpers")
@@ -125,8 +126,7 @@ class FileRecord:
         if not path.is_file():
             raise FileNotFoundError(path)
         result = cls(path)
-        for helper in helpers:
-            result = helper(path, result)
+        result = apply_helpers(path, result, helpers)
         return result
 
     def relative_to(self: R, target: Union[PathLike, "FileRecord"]) -> R:
@@ -167,7 +167,13 @@ class FileRecord:
         return path
 
     @classmethod
-    def read(cls, target: Union[PathLike, "FileRecord"], *args, **kwargs) -> IOBase:
+    def read(
+        cls,
+        target: Union[PathLike, "FileRecord"],
+        *args,
+        helpers: Iterable["RecordHelper"] = [],
+        **kwargs,
+    ) -> IOBase:
         r"""Reads a DICOM file with optimized defaults for :class:`DicomFileRecord` creation.
 
         Args:
@@ -179,7 +185,9 @@ class FileRecord:
         path = Path(target.path if isinstance(target, FileRecord) else target)
         if not path.is_file():
             raise FileNotFoundError(path)
-        return open(path, *args, **kwargs)
+        result = open(path, *args, **kwargs)
+        result = apply_read_helpers(result, cls, helpers)
+        return result
 
     def to_symlink(self: R, symlink_path: PathLike, overwrite: bool = False) -> R:
         r"""Create a symbolic link to the file referenced by this :class:`FileRecord`.
@@ -349,8 +357,8 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
     def from_file(
         cls,
         path: PathLike,
-        modality: Optional[str] = None,
         helpers: Iterable["RecordHelper"] = [],
+        overrides: Dict[str, Any] = {},
         **kwargs,
     ) -> "DicomFileRecord":
         r"""Creates a :class:`DicomFileRecord` from a DICOM file.
@@ -365,27 +373,24 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
         path = Path(path)
         if not path.is_file():
             raise FileNotFoundError(path)
-        with cls.read(path, **kwargs) as dcm:
-            result = cls.from_dicom(path, dcm, modality)
-        for helper in helpers:
-            result = helper(path, result)
+        with cls.read(path, helpers=helpers, **kwargs) as dcm:
+            result = cls.from_dicom(path, dcm, **overrides)
+        result = apply_helpers(path, result, helpers)
         return result
 
     @classmethod
-    def from_dicom(cls, path: PathLike, dcm: Dicom, modality: Optional[str] = None) -> "DicomFileRecord":
+    def from_dicom(cls, path: PathLike, dcm: Dicom, **overrides) -> "DicomFileRecord":
         r"""Creates a :class:`DicomFileRecord` from a DICOM file.
 
         Args:
             path: Path to DICOM file (needed to set ``path`` attribute)
             dcm: Dicom file object
-            modality: Optional modality override
         """
         path = Path(path)
         if not path.is_file():
             raise FileNotFoundError(path)
         values = {tag.name: get_value(dcm, tag, None, try_file_meta=True) for tag in cls.get_required_tags()}
-        if modality is not None:
-            values["Modality"] = modality
+        values.update(overrides)
 
         # pop any values that arent part of the DicomFileRecord constructor, such as intermediate tags
         keyword_values = set(f.name for f in fields(cls))
@@ -415,7 +420,7 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
         return result
 
     @classmethod
-    def read(cls, path: PathLike, *args, **kwargs) -> Dicom:
+    def read(cls, path: PathLike, *args, helpers: Iterable["RecordHelper"] = [], **kwargs) -> Dicom:
         r"""Reads a DICOM file with optimized defaults for :class:`DicomFileRecord` creation.
 
         Args:
@@ -427,7 +432,9 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
         kwargs.setdefault("stop_before_pixels", True)
         kwargs.setdefault("specific_tags", cls.get_required_tags())
         stream = cast(BytesIO, FileRecord.read(path, "rb"))
-        return pydicom.dcmread(stream, *args, **kwargs)
+        result = pydicom.dcmread(stream, *args, **kwargs)
+        result = apply_read_helpers(result, cls, helpers)
+        return result
 
     def standardized_filename(self, file_id: Optional[str] = None) -> Path:
         path = super().standardized_filename(file_id)
@@ -502,7 +509,12 @@ class DicomImageFileRecord(DicomFileRecord):
         return {get_value(modifier, Tag.CodeMeaning, "").strip().lower() for modifier in self.view_modifier_codes}
 
     @classmethod
-    def from_dicom(cls: Type[R], path: PathLike, dcm: Dicom, modality: Optional[str] = None) -> R:
+    def from_dicom(
+        cls: Type[R],
+        path: PathLike,
+        dcm: Dicom,
+        **overrides,
+    ) -> R:
         r"""Creates a :class:`MammogramFileRecord` from a DICOM file.
 
         Args:
@@ -516,7 +528,7 @@ class DicomImageFileRecord(DicomFileRecord):
                 raise DicomKeyError(tag)
             elif not value:
                 raise DicomValueError(tag)
-        return cast(R, super().from_dicom(path, dcm, modality))
+        return cast(R, super().from_dicom(path, dcm, **overrides))
 
     def to_dict(self) -> Dict[str, Any]:
         result = super().to_dict()
@@ -657,7 +669,11 @@ class MammogramFileRecord(DicomImageFileRecord):
 
     @classmethod
     def from_dicom(
-        cls, path: PathLike, dcm: Dicom, modality: Optional[str] = None, is_sfm: bool = False
+        cls,
+        path: PathLike,
+        dcm: Dicom,
+        is_sfm: bool = False,
+        **overrides,
     ) -> "MammogramFileRecord":
         r"""Creates a :class:`MammogramFileRecord` from a DICOM file.
 
@@ -667,7 +683,10 @@ class MammogramFileRecord(DicomImageFileRecord):
             modality: Optional modality override
             is_sfm: Manual indicator if the mammogram is SFM instead of FFDM
         """
-        modality = modality or get_value(dcm, Tag.Modality, None)
+        result = super().from_dicom(path, dcm, **overrides)
+        assert isinstance(result, cls)
+
+        modality = result.Modality
         if modality is None:
             raise DicomKeyError(Tag.Modality)
         elif modality != "MG":
@@ -675,8 +694,6 @@ class MammogramFileRecord(DicomImageFileRecord):
                 f"Modality {modality} is invalid for mammograms. If you are certain {path} is a mammogram, pass "
                 "`modality`='MG' to `from_dicom`."
             )
-        result = super().from_dicom(path, dcm, modality)
-        assert isinstance(result, cls)
 
         laterality = Laterality.from_dicom(dcm)
         view_position = ViewPosition.from_dicom(dcm)
@@ -707,7 +724,6 @@ class RecordHelper(ABC):
     creation and populates fields using custom logic.
     """
 
-    @abstractmethod
     def __call__(self, path: PathLike, rec: R) -> R:
         r"""Applies postprocessing logic to a :class:`FileRecord`.
 
@@ -715,7 +731,34 @@ class RecordHelper(ABC):
             path:
                 Path of the
         """
-        ...
+        return rec
+
+    def on_read(self, f: T, record_type: Type[FileRecord]) -> T:
+        r"""Applies preprocessing logic to the object returned by :func:`FileRecord.read`.
+
+        Args:
+            f:
+                Object returned by :func:`FileRecord.read`
+
+            record_type:
+                Type of :class:`FileRecord` performing the read
+
+        Returns:
+            Augmented ``f``
+        """
+        return f
+
+
+def apply_helpers(path: PathLike, rec: R, helpers: Iterable[RecordHelper]) -> R:
+    for h in helpers:
+        rec = h(path, rec)
+    return rec
+
+
+def apply_read_helpers(obj: T, record_type: Type[FileRecord], helpers: Iterable[RecordHelper]) -> T:
+    for h in helpers:
+        obj = h.on_read(obj, record_type)
+    return obj
 
 
 @HELPER_REGISTRY(name="patient-id-from-path")
@@ -812,3 +855,25 @@ class SpotCompressionHelper(DirectoryHelper):
 
     def file_sizes(self, path: PathLike) -> Dict[Path, int]:
         return {p: p.stat().st_size for p in self.glob(path)}
+
+
+@HELPER_REGISTRY(name="modality")
+@dataclass
+class ModalityHelper(RecordHelper):
+    r"""Helper to correc the modality of DICOM object. Some mammograms have a modality other than MG,
+    which results in a record other than :class:`MammogramFileRecord` being used.
+    """
+    force: bool = False
+
+    def on_read(self, f: T, record_type: Type[FileRecord]) -> T:
+        if isinstance(f, Dicom) and (self.force or self._maybe_mammogram(f)):
+            f.Modality = "MG"
+        return cast(T, f)
+
+    def _maybe_mammogram(self, dcm: Dicom) -> bool:
+        if get_value(dcm, Tag.Modality, "").strip().lower() == "mg":
+            return True
+        body_part = get_value(dcm, Tag.BodyPartExamined, "").strip().lower()
+        study_desc = get_value(dcm, Tag.StudyDescription, "").strip().lower()
+        series_desc = get_value(dcm, Tag.SeriesDescription, "").strip().lower()
+        return (body_part == "breast") or ("mammo" in study_desc + series_desc)

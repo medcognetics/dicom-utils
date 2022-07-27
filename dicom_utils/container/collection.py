@@ -86,12 +86,10 @@ class RecordCreator:
     def __init__(
         self,
         functions: Optional[Iterable[str]] = None,
-        helpers: Optional[Iterable[str]] = [],
-        modality: Optional[str] = None,
+        helpers: Iterable[str] = [],
     ):
         self.functions = RECORD_REGISTRY.available_keys() if functions is None else functions
         self.helpers = [cast(Type[RecordHelper], HELPER_REGISTRY.get(h))() for h in helpers]
-        self.modality = modality
 
     def __call__(self, path: Path) -> FileRecord:
         result = FileRecord.from_file(path)
@@ -102,11 +100,10 @@ class RecordCreator:
                 # As such, open `dcm` once with all tags present and reuse it
                 if issubclass(dtype, DicomFileRecord):
                     if dcm is None:
-                        dcm = dtype.read(path, specific_tags=None)
+                        dcm = dtype.read(path, specific_tags=None, helpers=self.helpers)
                     result = dtype.from_dicom(
                         path,
                         dcm,
-                        modality=self.modality,
                     )
                 else:
                     result = dtype.from_file(path)
