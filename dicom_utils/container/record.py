@@ -860,7 +860,7 @@ class SpotCompressionHelper(DirectoryHelper):
 @HELPER_REGISTRY(name="modality")
 @dataclass
 class ModalityHelper(RecordHelper):
-    r"""Helper to correc the modality of DICOM object. Some mammograms have a modality other than MG,
+    r"""Helper to correct the modality of DICOM object. Some mammograms have a modality other than MG,
     which results in a record other than :class:`MammogramFileRecord` being used.
     """
     force: bool = False
