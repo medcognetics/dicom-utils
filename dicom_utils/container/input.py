@@ -186,6 +186,9 @@ class Input:
     def group_fn(self) -> Callable[[FileRecord], Hashable]:
         return cast(Callable[[FileRecord], Hashable], self.groups[0])
 
+    def __len__(self) -> int:
+        return len(self.cases)
+
     def __iter__(self) -> Iterator[Tuple[Tuple[str, ...], RecordCollection]]:
         r"""Iterates over pairs of named groups and the :class:`RecordCollection` containing that group."""
         for k, v in self.cases.items():

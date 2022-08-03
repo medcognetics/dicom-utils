@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import itertools
 import json
 import logging
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from dataclasses import dataclass
+import time
+from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
+from dataclasses import dataclass, field
+from functools import partial
 from os import PathLike
 from pathlib import Path
 from typing import (
@@ -25,7 +28,7 @@ from typing import (
     overload,
 )
 
-from registry import Registry
+from registry import RegisteredFunction, Registry
 from tqdm import tqdm
 
 from ..dicom import Dicom
@@ -88,12 +91,14 @@ class RecordCreator:
         functions: Optional[Iterable[str]] = None,
         helpers: Iterable[str] = [],
     ):
-        self.functions = RECORD_REGISTRY.available_keys() if functions is None else functions
+        functions = RECORD_REGISTRY.available_keys() if functions is None else functions
+        self.functions = [RECORD_REGISTRY.get(name) for name in functions]
         self.helpers = [cast(Type[RecordHelper], HELPER_REGISTRY.get(h))() for h in helpers]
 
     def __call__(self, path: Path) -> FileRecord:
         result = FileRecord.from_file(path)
         dcm: Optional[Dicom] = None
+
         for dtype in self.iterate_types_to_try(path):
             try:
                 # NOTE: we want to avoid repeatedly opening a DICOM file for each invalid subclass.
@@ -124,16 +129,15 @@ class RecordCreator:
         candidates: List[Type[FileRecord]] = []
 
         # exclude candidates by file extension if `path` has an extension
-        for name in self.functions:
-            entry = RECORD_REGISTRY.get(name)
-            dtype = entry.fn
-            assert isinstance(dtype, type)
-            assert issubclass(dtype, FileRecord)
-            suffixes = set(entry.metadata.get("suffixes", []))
+        for fn in self.functions:
+            assert isinstance(fn, RegisteredFunction)
+            assert isinstance(fn.fn, type)
+            assert issubclass(fn.fn, FileRecord)
+            suffixes = set(fn.metadata.get("suffixes", []))
             path_suffix = path.suffix.lower()
             valid_candidate = not path_suffix or not suffixes or path_suffix in suffixes
             if valid_candidate:
-                candidates.append(dtype)
+                candidates.append(fn.fn)
 
         dicom_candidates = set(self.filter_dicom_types(candidates))
         non_dicom_candidates = set(candidates) - dicom_candidates
@@ -215,36 +219,159 @@ def record_iterator(
 
     # build a list of files to check
     # a record creation attempt will only be made on valid files that pass all filters
-    Pool = ThreadPoolExecutor if threads else ProcessPoolExecutor
-    bar = tqdm(desc="Scanning sources", disable=(not use_bar))
-    with Pool(jobs) as p:
-        futures = []
-        for path in files:
-            f = p.submit(creator.precheck_file, path, filter_funcs)
-            f.add_done_callback(lambda _: bar.update(1))
-            futures.append(f)
-        files = [path for f in futures if (path := f.result()) is not None]
-    bar.close()
+
+    func = partial(creator.precheck_file, filter_funcs=filter_funcs)
+    with ConcurrentMapper(threads, jobs, ignore_exceptions, chunksize=128) as mapper:
+        mapper.create_bar(desc="Scanning sources", disable=(not use_bar))
+        file_set = {Path(path) for path in mapper(func, files) if path is not None}
 
     # create and yield records
-    bar = tqdm(desc="Building records", total=len(files), unit="file", disable=(not use_bar))
-    with Pool(jobs) as p:
-        futures = []
-        for path in files:
-            f = p.submit(creator, path)
-            f.add_done_callback(lambda _: bar.update(1))
-            futures.append(f)
-
-        for f in futures:
-            if f.exception() and not ignore_exceptions:
-                raise cast(Exception, f.exception())
-            elif (record := f.result()) and all(f(record) for f in filter_funcs):
+    with ConcurrentMapper(threads, jobs, ignore_exceptions, chunksize=32) as mapper:
+        mapper.create_bar(desc="Building records", total=len(file_set), unit="file", disable=(not use_bar))
+        for record in mapper(creator, file_set):
+            if all(f(record) for f in filter_funcs):
                 yield record
-    bar.close()
 
 
+A = TypeVar("A")
 T = TypeVar("T", bound=Hashable)
 C = TypeVar("C", bound="RecordCollection")
+PoolExecutor = Union[ProcessPoolExecutor, ThreadPoolExecutor]
+
+
+@dataclass
+class ConcurrentMapper:
+    threads: bool = False
+    jobs: Optional[int] = None
+    ignore_exceptions: bool = False
+    chunksize: int = 1
+    timeout: Optional[float] = None
+
+    _pool: Optional[PoolExecutor] = field(init=False, repr=False, default=None)
+    _bar: Optional[tqdm] = field(init=False, repr=False, default=None)
+
+    def __post_init__(self):
+        if self.chunksize < 1:
+            raise ValueError("chunksize must be >= 1.")
+
+    def __enter__(self) -> "ConcurrentMapper":
+        self._pool = self.pool_type(self.jobs)
+        return self
+
+    def create_bar(self, *args, **kwargs):
+        self._bar = tqdm(*args, **kwargs)
+
+    def close_bar(self):
+        if self._bar is not None:
+            self._bar.close()
+        self._bar = None
+
+    def __call__(self, fn: Callable[..., A], iterable: Iterable, *args, **kwargs) -> Iterator[A]:
+        if self._pool is None:
+            raise RuntimeError("Pool not initialized. Please use `with ConcurrentMapper() as mapper` to init a pool.")
+
+        chunks = self._get_chunks(iterable, chunksize=self.chunksize)
+        results = self._map(
+            partial(self._process_chunk, fn),
+            chunks,
+            *args,
+            **kwargs,
+        )
+
+        return self._chain_from_iterable_of_lists(results, self._bar)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        assert self._pool is not None
+        self._pool.shutdown(wait=True)
+        self.close_bar()
+
+    @property
+    def pool_type(self) -> Type[PoolExecutor]:
+        return ThreadPoolExecutor if self.threads else ProcessPoolExecutor
+
+    @classmethod
+    def _update_bar(cls, bar: Optional[tqdm], future: Future) -> None:
+        if bar is not None:
+            result = future.result()
+            bar.update(len(result))
+
+    def _map(self, fn: Callable[..., A], iterable: Iterable, *args, **kwargs) -> Iterator[A]:
+        if self.timeout is not None:
+            end_time = self.timeout + time.monotonic()
+
+        assert self._pool is not None
+        fs: List[Future] = []
+        for i in iterable:
+            f = self._pool.submit(fn, i, *args, **kwargs)
+            if self._bar is not None:
+                f.add_done_callback(lambda _f: self._update_bar(self._bar, _f))
+            fs.append(f)
+
+        # Yield must be hidden in closure so that the futures are submitted
+        # before the first iterator value is required.
+        def result_iterator():
+            try:
+                # reverse to keep finishing order
+                fs.reverse()
+                while fs:
+                    future = fs.pop()
+                    try:
+                        # Careful not to keep a reference to the popped future
+                        if self.timeout is None:
+                            yield self._result_or_cancel(future)
+                        else:
+                            yield self._result_or_cancel(future, end_time - time.monotonic())
+                    except Exception as ex:
+                        if self.ignore_exceptions:
+                            logger.info(f"Ignored exception {ex} for {future}")
+                        else:
+                            raise
+            finally:
+                for future in fs:
+                    future.cancel()
+
+        return cast(Iterator, result_iterator())
+
+    def _result_or_cancel(self, fut: Future[T], timeout: Optional[float] = None) -> T:
+        try:
+            try:
+                return fut.result(timeout)
+            finally:
+                fut.cancel()
+        finally:
+            # Break a reference cycle with the exception in self._exception
+            del fut
+
+    @classmethod
+    def _get_chunks(cls, iterable: Iterable[T], chunksize: int) -> Iterator[Iterable[T]]:
+        """Iterates over zip()ed iterables in chunks."""
+        it = iter(iterable)
+        while True:
+            chunk = tuple(itertools.islice(it, chunksize))
+            if not chunk:
+                return
+            yield chunk
+
+    @classmethod
+    def _process_chunk(cls, fn, chunk, *args, **kwargs):
+        """Processes a chunk of an iterable passed to map.
+        Runs the function passed to map() on a chunk of the
+        iterable passed to map.
+        This function is run in a separate process.
+        """
+        return [fn(c, *args, **kwargs) for c in chunk]
+
+    @classmethod
+    def _chain_from_iterable_of_lists(cls, iterable: Iterable[List[A]], bar: Optional[tqdm] = None) -> Iterator[A]:
+        """
+        Specialized implementation of itertools.chain.from_iterable.
+        Each item in *iterable* should be a list.  This function is
+        careful not to keep references to yielded objects.
+        """
+        for element in iterable:
+            element.reverse()
+            while element:
+                yield element.pop()
 
 
 def search_dir(path: PathLike, pattern: str) -> Iterable[Path]:

@@ -11,6 +11,7 @@ import pytest
 from dicom_utils.container import (
     FILTER_REGISTRY,
     HELPER_REGISTRY,
+    ConcurrentMapper,
     DicomFileRecord,
     DicomImageFileRecord,
     FileRecord,
@@ -33,6 +34,35 @@ def dicom_files(tmp_path, dicom_file):
             shutil.copy(dicom_file, str(dest))
             paths.append(dest)
     return paths
+
+
+class TestConcurrentMapper:
+    @pytest.mark.parametrize("jobs", [1, 4, None])
+    @pytest.mark.parametrize("threads", [True, False])
+    @pytest.mark.parametrize("length", [10, 1000])
+    @pytest.mark.parametrize("chunksize", [1, 32])
+    @pytest.mark.parametrize("inp_type", [list, set, iter])
+    def test_map_list(self, threads, jobs, length, chunksize, inp_type):
+        inp = list(range(length))
+        exp = [str(x) for x in inp]
+        inp = inp_type(inp)
+        with ConcurrentMapper(threads=threads, jobs=jobs, chunksize=chunksize) as mapper:
+            mapper.create_bar(desc="Processing", total=length)
+            result = list(mapper(str, inp))
+        assert result == exp
+
+    @pytest.mark.parametrize("threads", [True, False])
+    def test_forward_args(self, threads):
+        inp = list(range(10))
+        exp = [x + 2 for x in inp]
+        with ConcurrentMapper(threads=threads, jobs=2, chunksize=2) as mapper:
+            mapper.create_bar(desc="Processing", total=len(inp))
+            result = list(mapper(TestConcurrentMapper._add, inp, y=2))
+        assert result == exp
+
+    @staticmethod
+    def _add(x: int, y: int):
+        return x + y
 
 
 class TestRecordCreator:
@@ -87,7 +117,7 @@ class TestRecordIterator:
     @pytest.mark.parametrize("threads", [False, True])
     @pytest.mark.parametrize("jobs", [None, 1, 2])
     def test_default(self, dicom_files, use_bar, threads, jobs):
-        records = list(record_iterator(dicom_files, jobs, use_bar, threads))
+        records = list(record_iterator(dicom_files, jobs, use_bar, threads, ignore_exceptions=False))
         assert all(isinstance(r, DicomFileRecord) for r in records)
         assert set(rec.path for rec in records) == set(dicom_files)
 

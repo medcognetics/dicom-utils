@@ -1,7 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from .collection import FILTER_REGISTRY, RecordCollection, RecordCreator, RecordFilter, record_iterator
+from .collection import (
+    FILTER_REGISTRY,
+    ConcurrentMapper,
+    RecordCollection,
+    RecordCreator,
+    RecordFilter,
+    record_iterator,
+)
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID, TransferSyntaxUID
 from .record import (
     HELPER_REGISTRY,
@@ -35,4 +42,5 @@ __all__ = [
     "RecordHelper",
     "FILTER_REGISTRY",
     "RecordFilter",
+    "ConcurrentMapper",
 ]
