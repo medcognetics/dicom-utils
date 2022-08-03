@@ -241,11 +241,45 @@ PoolExecutor = Union[ProcessPoolExecutor, ThreadPoolExecutor]
 
 @dataclass
 class ConcurrentMapper:
+    r"""Helper for mapping a function over an iterable using multiprocessing with tqdm support.
+
+    Args:
+        threads:
+            If ``True``, use :class:`ThreadPoolExecutor`, otherwise use :class:`ProcessPoolExecutor`
+
+        jobs:
+            Number of worker threads/processes to use
+
+        ignore_exceptions:
+            If ``True``, ignore exceptions that are raised when mapping over an iterable.
+
+        chunksize:
+            Chunk size for jobs that are submitted to the pool. See :class:`ProcessPoolExecutor` documentation
+            for more info.
+
+        timeout:
+            Timeout in seconds for tasks
+
+        exception_callback:
+            Optional callback to be called if a worker encounters an exception
+
+    Examples::
+
+        >>> iterable = list(range(5))
+        >>> func = lambda x, y: x+y
+        >>> with ConcurrentMapper() as mapper:
+        >>>     mapper.create_bar(desc="Processing", total=len(iterable))
+        >>>     result = mapper(func, iterable, y=1)
+        >>> print(result)
+        [1, 2, 3, 4, 5]
+    """
     threads: bool = False
     jobs: Optional[int] = None
     ignore_exceptions: bool = False
     chunksize: int = 1
     timeout: Optional[float] = None
+    exception_callback: Optional[Callable[[Future], Any]] = None
+    preserve_order: bool = True
 
     _pool: Optional[PoolExecutor] = field(init=False, repr=False, default=None)
     _bar: Optional[tqdm] = field(init=False, repr=False, default=None)
@@ -258,7 +292,8 @@ class ConcurrentMapper:
         self._pool = self.pool_type(self.jobs)
         return self
 
-    def create_bar(self, *args, **kwargs):
+    def create_bar(self, *args, **kwargs) -> None:
+        r"""Create a tqdm progress bar. Args are forwarded to the tqdm bar."""
         self._bar = tqdm(*args, **kwargs)
 
     def close_bar(self):
@@ -277,13 +312,19 @@ class ConcurrentMapper:
             *args,
             **kwargs,
         )
-
-        return self._chain_from_iterable_of_lists(results, self._bar)
+        return self._chain_from_iterable_of_lists(results)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         assert self._pool is not None
         self._pool.shutdown(wait=True)
         self.close_bar()
+
+    def _force_kill_processes(self) -> None:
+        r"""Without this method, KeyboardInterrupt doesn't seem to kill worker processes"""
+        if isinstance(self._pool, ProcessPoolExecutor):
+            for pid, proc in self._pool._processes.items():  # type: ignore
+                logger.debug(f"Terminating PID {pid}")
+                proc.terminate()
 
     @property
     def pool_type(self) -> Type[PoolExecutor]:
@@ -301,11 +342,13 @@ class ConcurrentMapper:
 
         assert self._pool is not None
         fs: List[Future] = []
+        logger.debug("Submitting tasks")
         for i in iterable:
             f = self._pool.submit(fn, i, *args, **kwargs)
             if self._bar is not None:
                 f.add_done_callback(lambda _f: self._update_bar(self._bar, _f))
             fs.append(f)
+        logger.debug(f"Submitted {len(fs)} tasks")
 
         # Yield must be hidden in closure so that the futures are submitted
         # before the first iterator value is required.
@@ -321,7 +364,13 @@ class ConcurrentMapper:
                             yield self._result_or_cancel(future)
                         else:
                             yield self._result_or_cancel(future, end_time - time.monotonic())
+                    except (KeyboardInterrupt, SystemExit) as ex:
+                        logger.debug(f"Caught {type(ex)}, terminating processes")
+                        self._force_kill_processes()
+                        raise
                     except Exception as ex:
+                        if self.exception_callback is not None:
+                            self.exception_callback(future)
                         if self.ignore_exceptions:
                             logger.info(f"Ignored exception {ex} for {future}")
                         else:
@@ -332,7 +381,7 @@ class ConcurrentMapper:
 
         return cast(Iterator, result_iterator())
 
-    def _result_or_cancel(self, fut: Future[T], timeout: Optional[float] = None) -> T:
+    def _result_or_cancel(self, fut: Future, timeout: Optional[float] = None):
         try:
             try:
                 return fut.result(timeout)
@@ -362,7 +411,7 @@ class ConcurrentMapper:
         return [fn(c, *args, **kwargs) for c in chunk]
 
     @classmethod
-    def _chain_from_iterable_of_lists(cls, iterable: Iterable[List[A]], bar: Optional[tqdm] = None) -> Iterator[A]:
+    def _chain_from_iterable_of_lists(cls, iterable: Iterable[List[A]]) -> Iterator[A]:
         """
         Specialized implementation of itertools.chain.from_iterable.
         Each item in *iterable* should be a list.  This function is

@@ -56,13 +56,60 @@ class TestConcurrentMapper:
         inp = list(range(10))
         exp = [x + 2 for x in inp]
         with ConcurrentMapper(threads=threads, jobs=2, chunksize=2) as mapper:
-            mapper.create_bar(desc="Processing", total=len(inp))
             result = list(mapper(TestConcurrentMapper._add, inp, y=2))
         assert result == exp
 
     @staticmethod
     def _add(x: int, y: int):
+        # NOTE: these must be pickleable methods
         return x + y
+
+    @pytest.mark.parametrize(
+        "ignore",
+        [
+            pytest.param(False, marks=pytest.mark.xfail(raises=ValueError)),
+            True,
+        ],
+    )
+    def test_ignore_exceptions(self, ignore):
+        inp = list(range(1000))
+        with ConcurrentMapper(jobs=2, chunksize=2, ignore_exceptions=ignore) as mapper:
+            list(mapper(TestConcurrentMapper._raise, inp))
+
+    @staticmethod
+    def _raise(x):
+        raise ValueError()
+
+    @pytest.mark.parametrize("ignore", [False, True])
+    def test_exception_callback(self, mocker, ignore):
+        inp = list(range(1000))
+        spy = mocker.spy(TestConcurrentMapper, "_callback")
+        with ConcurrentMapper(jobs=2, chunksize=2, ignore_exceptions=ignore, exception_callback=spy) as mapper:
+            try:
+                list(mapper(TestConcurrentMapper._raise, inp))
+            except ValueError:
+                pass
+            spy.assert_called()
+
+    @staticmethod
+    def _callback(f):
+        pass
+
+    @pytest.mark.parametrize("ex_type", [KeyboardInterrupt, SystemExit])
+    def test_interrupt(self, ex_type):
+        inp = list(range(4))
+        with ConcurrentMapper(jobs=4, chunksize=2) as mapper:
+            try:
+                list(mapper(TestConcurrentMapper._loop, inp, ex_type=ex_type))
+            except ex_type:
+                pass
+
+    @staticmethod
+    def _loop(x, ex_type):
+        if x == 0:
+            raise ex_type()
+        while True:
+            pass
 
 
 class TestRecordCreator:
