@@ -87,7 +87,7 @@ class TestRecordIterator:
     @pytest.mark.parametrize("threads", [False, True])
     @pytest.mark.parametrize("jobs", [None, 1, 2])
     def test_default(self, dicom_files, use_bar, threads, jobs):
-        records = list(record_iterator(dicom_files, jobs, use_bar, threads))
+        records = list(record_iterator(dicom_files, jobs, use_bar, threads, ignore_exceptions=False))
         assert all(isinstance(r, DicomFileRecord) for r in records)
         assert set(rec.path for rec in records) == set(dicom_files)
 

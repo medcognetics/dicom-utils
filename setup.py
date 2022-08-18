@@ -77,6 +77,7 @@ def install(version):
         install_requires=[
             "dicom-anonymizer @ git+https://github.com/medcognetics/dicom-anonymizer.git@v1.0.7-fork",
             "registry @ git+https://github.com/TidalPaladin/callable-registry.git#f46de0",
+            "tqdm_multiprocessing @ git+https://github.com/TidalPaladin/tqdm-multiprocessing.git#6119929",
             "colorama",
             "matplotlib",
             "pydicom",

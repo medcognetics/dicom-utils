@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from os import PathLike
 from pathlib import Path
 from typing import (
@@ -25,8 +25,8 @@ from typing import (
     overload,
 )
 
-from registry import Registry
-from tqdm import tqdm
+from registry import RegisteredFunction, Registry
+from tqdm_multiprocessing import ConcurrentMapper
 
 from ..dicom import Dicom
 
@@ -88,12 +88,14 @@ class RecordCreator:
         functions: Optional[Iterable[str]] = None,
         helpers: Iterable[str] = [],
     ):
-        self.functions = RECORD_REGISTRY.available_keys() if functions is None else functions
+        functions = RECORD_REGISTRY.available_keys() if functions is None else functions
+        self.functions = [RECORD_REGISTRY.get(name) for name in functions]
         self.helpers = [cast(Type[RecordHelper], HELPER_REGISTRY.get(h))() for h in helpers]
 
     def __call__(self, path: Path) -> FileRecord:
         result = FileRecord.from_file(path)
         dcm: Optional[Dicom] = None
+
         for dtype in self.iterate_types_to_try(path):
             try:
                 # NOTE: we want to avoid repeatedly opening a DICOM file for each invalid subclass.
@@ -124,16 +126,15 @@ class RecordCreator:
         candidates: List[Type[FileRecord]] = []
 
         # exclude candidates by file extension if `path` has an extension
-        for name in self.functions:
-            entry = RECORD_REGISTRY.get(name)
-            dtype = entry.fn
-            assert isinstance(dtype, type)
-            assert issubclass(dtype, FileRecord)
-            suffixes = set(entry.metadata.get("suffixes", []))
+        for fn in self.functions:
+            assert isinstance(fn, RegisteredFunction)
+            assert isinstance(fn.fn, type)
+            assert issubclass(fn.fn, FileRecord)
+            suffixes = set(fn.metadata.get("suffixes", []))
             path_suffix = path.suffix.lower()
             valid_candidate = not path_suffix or not suffixes or path_suffix in suffixes
             if valid_candidate:
-                candidates.append(dtype)
+                candidates.append(fn.fn)
 
         dicom_candidates = set(self.filter_dicom_types(candidates))
         non_dicom_candidates = set(candidates) - dicom_candidates
@@ -215,34 +216,21 @@ def record_iterator(
 
     # build a list of files to check
     # a record creation attempt will only be made on valid files that pass all filters
-    Pool = ThreadPoolExecutor if threads else ProcessPoolExecutor
-    bar = tqdm(desc="Scanning sources", disable=(not use_bar))
-    with Pool(jobs) as p:
-        futures = []
-        for path in files:
-            f = p.submit(creator.precheck_file, path, filter_funcs)
-            f.add_done_callback(lambda _: bar.update(1))
-            futures.append(f)
-        files = [path for f in futures if (path := f.result()) is not None]
-    bar.close()
+
+    func = partial(creator.precheck_file, filter_funcs=filter_funcs)
+    with ConcurrentMapper(threads, jobs, ignore_exceptions, chunksize=128) as mapper:
+        mapper.create_bar(desc="Scanning sources", disable=(not use_bar))
+        file_set = {Path(path) for path in mapper(func, files) if path is not None}
 
     # create and yield records
-    bar = tqdm(desc="Building records", total=len(files), unit="file", disable=(not use_bar))
-    with Pool(jobs) as p:
-        futures = []
-        for path in files:
-            f = p.submit(creator, path)
-            f.add_done_callback(lambda _: bar.update(1))
-            futures.append(f)
-
-        for f in futures:
-            if f.exception() and not ignore_exceptions:
-                raise cast(Exception, f.exception())
-            elif (record := f.result()) and all(f(record) for f in filter_funcs):
+    with ConcurrentMapper(threads, jobs, ignore_exceptions, chunksize=32) as mapper:
+        mapper.create_bar(desc="Building records", total=len(file_set), unit="file", disable=(not use_bar))
+        for record in mapper(creator, file_set):
+            if all(f(record) for f in filter_funcs):
                 yield record
-    bar.close()
 
 
+A = TypeVar("A")
 T = TypeVar("T", bound=Hashable)
 C = TypeVar("C", bound="RecordCollection")
 

@@ -3,7 +3,7 @@
 
 import json
 import re
-from abc import ABC, abstractmethod
+from abc import ABC, abstractclassmethod
 from functools import partial
 from os import PathLike
 from pathlib import Path
@@ -11,6 +11,7 @@ from typing import Callable, Dict, Final, Hashable, Iterable, List, Optional, Se
 
 from registry import Registry
 from tqdm import tqdm
+from tqdm_multiprocessing import ConcurrentMapper
 
 from ..types import MammogramType
 from .collection import RecordCollection
@@ -44,41 +45,71 @@ class Output(ABC):
         record_filter: Optional[Callable[[FileRecord], bool]] = None,
         collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
         use_bar: bool = True,
+        threads: bool = False,
+        jobs: Optional[int] = None,
     ):
         self.path = Path(path)
         self.path.mkdir(exist_ok=True, parents=True)
         self.record_filter = record_filter
         self.collection_filter = collection_filter
         self.use_bar = use_bar
+        self.threads = threads
+        self.jobs = jobs
 
     def __call__(self, inp: Union[Input, Dict[Tuple[str, ...], RecordCollection]]) -> Dict[str, RecordCollection]:
         result: Dict[str, RecordCollection] = {}
-        bar = self.tqdm(inp if isinstance(inp, Input) else inp.items())
-        for key, collection in bar:
-            name = str(Path(*key))
-            if self.collection_filter is not None and not self.collection_filter(collection):
-                continue
-            if self.record_filter is not None:
-                collection = collection.filter(self.record_filter)
-            dest = Path(self.path, name)
-            dest.mkdir(exist_ok=True, parents=True)
-            written = self.write(collection, dest)
-            result[name] = written
-            if isinstance(inp, Input):
-                key = inp.group_fn(next(iter(collection)))
-                self.write_metadata(name, key, collection, dest)
+        iterable = inp if isinstance(inp, Input) else inp.items()
+        with ConcurrentMapper(self.threads, self.jobs, chunksize=8) as mapper:
+            mapper.create_bar(total=len(iterable), desc=f"Writing {self.__class__.__name__}")
+            it = mapper(
+                self._process,
+                iterable,
+                path=self.path,
+                record_filter=self.record_filter,
+                collection_filter=self.collection_filter,
+                group_fn=inp.group_fn if isinstance(inp, Input) else None,
+            )
+            for item in it:
+                if item is not None:
+                    name, written = item
+                    result[name] = written
         return result
+
+    @classmethod
+    def _process(
+        cls,
+        kc,
+        path: Path,
+        record_filter: Optional[Callable[[FileRecord], bool]] = None,
+        collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
+        group_fn: Optional[Callable] = None,
+    ):
+        key, collection = kc
+        name = str(Path(*key))
+        if collection_filter is not None and not collection_filter(collection):
+            return
+        if record_filter is not None:
+            collection = collection.filter(record_filter)
+        dest = Path(path, name)
+        dest.mkdir(exist_ok=True, parents=True)
+        # pyright fails to recognize this is an abstract classmethod
+        written = cls.write(collection, dest)  # type: ignore
+        if group_fn is not None:
+            key = group_fn(next(iter(collection)))
+            cls.write_metadata(name, key, collection, dest)
+        return name, written
 
     @property
     def tqdm(self) -> Callable:
         return partial(tqdm, leave=False, disable=not self.use_bar)
 
-    @abstractmethod
-    def write(self, collection: RecordCollection, dest: Path) -> RecordCollection:
+    @abstractclassmethod
+    def write(cls, collection: RecordCollection, dest: Path) -> RecordCollection:
         ...
 
+    @classmethod
     def write_metadata(
-        self,
+        cls,
         name: str,
         key: Hashable,
         collection: RecordCollection,
@@ -90,11 +121,12 @@ class Output(ABC):
         metadata["group"] = key
         metadata["name"] = name
         with open(path, "w") as f:
-            json.dump(metadata, f, sort_keys=True, indent=indent, default=lambda o: str(o))
+            json.dump(metadata, f, sort_keys=True, indent=indent, default=str)
 
 
 class SymlinkFileOutput(Output):
-    def write(self, collection: RecordCollection, dest: Path) -> RecordCollection:
+    @classmethod
+    def write(cls, collection: RecordCollection, dest: Path) -> RecordCollection:
         assert dest.is_dir()
         result = RecordCollection()
         for name, rec in collection.standardized_filenames():
