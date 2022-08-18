@@ -11,9 +11,10 @@ from typing import Callable, Dict, Final, Hashable, Iterable, List, Optional, Se
 
 from registry import Registry
 from tqdm import tqdm
+from tqdm_multiprocessing import ConcurrentMapper
 
 from ..types import MammogramType
-from .collection import ConcurrentMapper, RecordCollection
+from .collection import RecordCollection
 from .input import Input
 from .record import FileRecord, MammogramFileRecord
 
