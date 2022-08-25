@@ -4,7 +4,7 @@
 import re
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, Dict, Final, Iterable, Iterator, List, NamedTuple, Optional, TypeVar, cast
+from typing import Any, Dict, Final, Iterable, Iterator, List, NamedTuple, Optional, TypeVar, Union, cast
 
 from pydicom import DataElement
 from pydicom.dataset import Dataset
@@ -341,13 +341,18 @@ class Laterality(EnumMixin):
             return cls.UNKNOWN
 
     @classmethod
-    def from_patient_orientation(cls, value: List[str]) -> "Laterality":
+    def from_patient_orientation(cls, value: Union[str, List[str]]) -> "Laterality":
+        if isinstance(value, str):
+            return cls.from_str(value)
+
         for item in value:
             parts = set(str(item))
             if "L" in parts:
                 return cls.RIGHT
             elif "R" in parts:
                 return cls.LEFT
+            elif result := cls.from_str(item):
+                return result
         return cls.UNKNOWN
 
     @classmethod
@@ -458,12 +463,17 @@ class ViewPosition(EnumMixin):
         return cls.UNKNOWN
 
     @classmethod
-    def from_patient_orientation(cls, value: List[str]) -> "ViewPosition":
+    def from_patient_orientation(cls, value: Union[str, List[str]]) -> "ViewPosition":
+        if isinstance(value, str):
+            return cls.from_str(value)
+
         for item in value:
             if item in ("FL", "FR"):
                 return cls.MLO
             elif item in ("R", "L"):
                 return cls.CC
+            elif result := cls.from_str(item):
+                return result
         return cls.UNKNOWN
 
     @classmethod
