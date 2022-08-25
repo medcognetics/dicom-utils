@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import importlib
+import inspect
+import json
+import logging
 from abc import ABC
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property, partial
 from io import BytesIO, IOBase
 from os import PathLike
-from pathlib import Path
+from pathlib import Path, PosixPath
 from statistics import mode
 from typing import (
     Any,
@@ -16,19 +20,20 @@ from typing import (
     Iterator,
     List,
     Optional,
-    Protocol,
     Set,
     Tuple,
     Type,
     TypeVar,
     Union,
     cast,
-    runtime_checkable,
 )
 
 import pydicom
 from pydicom import Dataset, Sequence
 from pydicom.uid import SecondaryCaptureImageStorage
+
+
+logger = logging.getLogger(__name__)
 
 
 try:
@@ -67,6 +72,7 @@ from ..types import PhotometricInterpretation as PI
 from ..types import ViewPosition, get_value, iterate_view_modifier_codes
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
+from .protocols import SupportsManufacturer, SupportsPatientID, SupportsStudyDate, SupportsStudyUID, SupportsUID
 
 
 STANDARD_MAMMO_VIEWS: Final[Set[MammogramView]] = {
@@ -82,6 +88,43 @@ T = TypeVar("T")
 
 RECORD_REGISTRY = Registry("records")
 HELPER_REGISTRY = Registry("helpers")
+SEP: Final[str] = "_"
+DEFAULT_FILE_ID: Final = 1
+FILE_ID_IDX: Final = -1
+
+
+class StandardizedFilename(PosixPath):
+    def __new__(cls, *args, **kwargs):
+        self = super().__new__(cls, *args, **kwargs)
+        if SEP not in self.name:
+            parts = self.tokenize() + [str(DEFAULT_FILE_ID)]
+            self = StandardizedFilename(SEP.join(parts)).with_suffix(self.suffix)
+        return self
+
+    @property
+    def prefix(self) -> str:
+        return SEP.join(self.tokenize()[:FILE_ID_IDX])
+
+    @property
+    def file_id(self) -> str:
+        return self.tokenize()[FILE_ID_IDX]
+
+    def with_file_id(self, val: Any) -> "StandardizedFilename":
+        parts = self.tokenize()[:FILE_ID_IDX]
+        parts.append(str(val))
+        return StandardizedFilename(SEP.join(parts)).with_suffix(self.suffix)
+
+    def with_prefix(self, *val: str) -> "StandardizedFilename":
+        parts = list(val) + [self.file_id]
+        return StandardizedFilename(SEP.join(parts)).with_file_id(self.file_id).with_suffix(self.suffix)
+
+    def add_modifier(self, val: Any) -> "StandardizedFilename":
+        parts = self.tokenize()
+        parts.insert(-1, str(val))
+        return StandardizedFilename(SEP.join(parts)).with_suffix(self.suffix)
+
+    def tokenize(self) -> List[str]:
+        return str(self.with_suffix("")).split(SEP)
 
 
 @RECORD_REGISTRY(name="file")
@@ -104,6 +147,14 @@ class FileRecord:
 
     def replace(self: R, **kwargs) -> R:
         return replace(self, **kwargs)
+
+    @property
+    def is_symlink(self) -> bool:
+        return self.path.is_symlink()
+
+    @property
+    def exists(self) -> bool:
+        return self.path.is_file()
 
     @property
     def file_size(self) -> int:
@@ -160,11 +211,10 @@ class FileRecord:
             if value != f.default:
                 yield f.name, value
 
-    def standardized_filename(self, file_id: Any = None) -> Path:
-        file_id = str(file_id) if file_id is not None else str(self.get_uid() if self.has_uid else "")
-        parts = [p for p in (self.path.stem, file_id) if p]
-        path = Path(f"{'_'.join(parts)}{self.path.suffix}")
-        return path
+    def standardized_filename(self, file_id: Any = None) -> StandardizedFilename:
+        file_id = str(file_id) if file_id is not None else str(self.get_uid() if self.has_uid else "1")
+        file_id = file_id.replace(".", "-")
+        return StandardizedFilename(self.path.name).with_file_id(file_id)
 
     @classmethod
     def read(
@@ -219,38 +269,47 @@ class FileRecord:
     def to_dict(self, file_id: Any = None) -> Dict[str, Any]:
         result: Dict[str, Any] = {}
         result["record_type"] = self.__class__.__name__
+        module = inspect.getmodule(self.__class__).__name__
+        if module == "__main__":
+            import warnings
+
+            warnings.warn("TODO")
+        result["record_type_import"] = module
         result["path"] = str(self.path)
         result["resolved_path"] = str(self.path.resolve())
         return result
 
+    @staticmethod
+    def from_dict(target: Union[Path, Dict[str, Any]]) -> "FileRecord":
+        if isinstance(target, Path):
+            with open(target) as f:
+                target = json.load(f)
+        elif not isinstance(target, dict):
+            raise TypeError(f"`target` should be a Path or dict, got {type(target)}")
 
-@runtime_checkable
-class SupportsStudyUID(Protocol):
-    StudyInstanceUID: Optional[StudyUID] = None
+        assert isinstance(target, dict)
+        import_path = target["record_type_import"]
+        class_name = target["record_type"]
+        try:
+            # get the class to be instantiated
+            mod = importlib.import_module(import_path)
+            cls: Type[FileRecord] = getattr(mod, class_name)
 
+            # find dataclass attributes that exist in the dict
+            kwargs: Dict[str, Any] = {}
+            dest_fields = set(f.name for f in fields(cls))
+            for k, v in target.items():
+                if k in dest_fields:
+                    kwargs[k] = v
+            record_path = kwargs.pop("path")
+            rec = cls(record_path, **kwargs)
+            return rec
 
-@runtime_checkable
-class SupportsPatientID(Protocol):
-    PatientID: Optional[str] = None
-
-
-@runtime_checkable
-class SupportsStudyDate(Protocol):
-    StudyDate: Optional[str] = None
-
-    @property
-    def StudyYear(self) -> Optional[int]:
-        r"""Extracts a year from ``StudyDate``.
-
-        Returns:
-            First 4 digits of ``StudyDate`` as an int, or None if a year could not be parsed
-        """
-        if self.StudyDate and len(self.StudyDate) > 4:
-            try:
-                return int(self.StudyDate[:4])
-            except Exception:
-                pass
-        return None
+        except Exception as ex:
+            logger.warn("Failed to create FileRecord from dict")
+            logger.warn("Exception info", exc_info=ex)
+            record_path = Path(target["path"])
+            return FileRecord(record_path)
 
 
 # NOTE: record contents should follow this naming scheme:
@@ -260,9 +319,11 @@ class SupportsStudyDate(Protocol):
 #     name should differ from tag name. E.g. attribute `view_position` has advanced parsing
 #     logic that reads over multiple tags
 # TODO: find a way to functools.partial this dataclass decorator that works with type checker
+
+
 @RECORD_REGISTRY(name="dicom", suffixes=[".dcm"])
 @dataclass(frozen=True, order=False, eq=False)
-class DicomFileRecord(FileRecord, SupportsStudyDate):
+class DicomFileRecord(FileRecord, SupportsStudyUID, SupportsStudyDate, SupportsManufacturer, SupportsUID):
     r"""Data structure for storing critical information about a DICOM file.
     File IO operations on DICOMs can be expensive, so this class collects all
     required information in a single pass to avoid repeated file opening.
@@ -280,8 +341,26 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
     StudyDescription: Optional[str] = None
     PatientName: Optional[str] = None
     PatientID: Optional[str] = None
+    StudyID: Optional[str] = None
+    Manufacturer: Optional[str] = None
     ManufacturerModelName: Optional[str] = None
+    ManufacturerModelNumber: Optional[str] = None
     PresentationIntentType: Optional[str] = None
+    PatientAge: Optional[str] = None
+    BodyPartThickness: Optional[str] = None
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, type(self)):
+            return False
+
+        if self.SOPInstanceUID and other.SOPInstanceUID:
+            return self.same_uid_as(other)
+        return self.path == other.path
+
+    def __hash__(self) -> int:
+        if self.has_uid:
+            return hash(self.get_uid(prefer_sop=True))
+        return hash(self.path)
 
     def __iter__(self) -> Iterator[Tuple[Tag, Any]]:
         for f in fields(self):
@@ -289,17 +368,6 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
             value = getattr(self, name)
             if (tag := getattr(Tag, f.name, None)) is not None and value is not None:
                 yield tag, value
-
-    def same_patient_as(self, other: "DicomFileRecord") -> bool:
-        r"""Checks if this record references the same patient as record ``other``."""
-        if self.PatientID:
-            return self.PatientID == other.PatientID
-        else:
-            return bool(self.PatientName) and self.PatientName == other.PatientName
-
-    def same_study_as(self, other: "DicomFileRecord") -> bool:
-        r"""Checks if this record is part of the same study as record ``other``."""
-        return bool(self.StudyInstanceUID) and self.StudyInstanceUID == other.StudyInstanceUID
 
     @cached_property
     def is_for_processing(self) -> bool:
@@ -379,7 +447,13 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
         return result
 
     @classmethod
-    def from_dicom(cls, path: PathLike, dcm: Dicom, **overrides) -> "DicomFileRecord":
+    def from_dicom(
+        cls,
+        path: PathLike,
+        dcm: Dicom,
+        helpers: Iterable["RecordHelper"] = [],
+        **overrides,
+    ) -> "DicomFileRecord":
         r"""Creates a :class:`DicomFileRecord` from a DICOM file.
 
         Args:
@@ -396,10 +470,12 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
         keyword_values = set(f.name for f in fields(cls))
         values = {k: v for k, v in values.items() if k in keyword_values}
 
-        return cls(
+        rec = cls(
             path.absolute(),
             **values,
         )
+        rec = apply_helpers(path.absolute(), rec, helpers)
+        return rec
 
     @property
     def has_uid(self) -> bool:
@@ -436,17 +512,13 @@ class DicomFileRecord(FileRecord, SupportsStudyDate):
         result = apply_read_helpers(result, cls, helpers)
         return result
 
-    def standardized_filename(self, file_id: Optional[str] = None) -> Path:
+    def standardized_filename(self, file_id: Optional[str] = None) -> StandardizedFilename:
         path = super().standardized_filename(file_id)
-        parts = [
-            self.Modality.lower() if self.Modality else "unknown",
-            *str(path).split("_")[1:],
-        ]
+        path = path.with_prefix(self.Modality.lower() if self.Modality else "unknown")
         if self.is_secondary_capture:
-            parts.insert(1, "secondary")
+            path = path.add_modifier("secondary")
         if self.is_for_processing:
-            parts.insert(1, "proc")
-        path = Path("_".join(p for p in parts if p))
+            path = path.add_modifier("proc")
         return path
 
     @classmethod
@@ -513,6 +585,7 @@ class DicomImageFileRecord(DicomFileRecord):
         cls: Type[R],
         path: PathLike,
         dcm: Dicom,
+        helpers: Iterable["RecordHelper"] = [],
         **overrides,
     ) -> R:
         r"""Creates a :class:`MammogramFileRecord` from a DICOM file.
@@ -528,7 +601,9 @@ class DicomImageFileRecord(DicomFileRecord):
                 raise DicomKeyError(tag)
             elif not value:
                 raise DicomValueError(tag)
-        return cast(R, super().from_dicom(path, dcm, **overrides))
+        rec = cast(R, super().from_dicom(path, dcm, **overrides))
+        rec = apply_helpers(rec.path, rec, helpers)
+        return rec
 
     def to_dict(self) -> Dict[str, Any]:
         result = super().to_dict()
@@ -548,6 +623,16 @@ class MammogramFileRecord(DicomImageFileRecord):
     view_position: Optional[ViewPosition] = None
     laterality: Optional[Laterality] = None
     PaddleDescription: Optional[str] = None
+    BreastImplantPresent: Optional[str] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if isinstance(self.mammogram_type, str):
+            object.__setattr__(self, "mammogram_type", MammogramType.from_str(self.mammogram_type))
+        if isinstance(self.view_position, str):
+            object.__setattr__(self, "view_position", ViewPosition.from_str(self.view_position))
+        if isinstance(self.laterality, str):
+            object.__setattr__(self, "laterality", Laterality.from_str(self.laterality))
 
     @property
     def mammogram_view(self) -> MammogramView:
@@ -606,20 +691,44 @@ class MammogramFileRecord(DicomImageFileRecord):
             and not self.is_for_processing
         )
 
+    @property
+    def has_implant(self) -> bool:
+        return self.BreastImplantPresent == "YES"
+
     @classmethod
     def is_complete_mammo_case(cls, records: Iterable["MammogramFileRecord"]) -> bool:
         study_uid: Optional[StudyUID] = None
         needed_views: Dict[MammogramView, Optional[MammogramFileRecord]] = {k: None for k in STANDARD_MAMMO_VIEWS}
         for rec in records:
             # don't consider secondary captures
-            if rec.is_secondary_capture:
+            if not isinstance(rec, MammogramFileRecord) or rec.is_secondary_capture:
                 continue
             key = rec.mammogram_view
             if key in needed_views:
                 needed_views[key] = rec
         return all(needed_views.values())
 
-    def standardized_filename(self, file_id: Optional[str] = None) -> Path:
+    @classmethod
+    def collection_laterality(cls, records: Iterable["MammogramFileRecord"]) -> Laterality:
+        left = right = False
+        for rec in records:
+            if not isinstance(rec, MammogramFileRecord) or rec.is_secondary_capture:
+                continue
+            if rec.laterality == Laterality.LEFT:
+                left = True
+            elif rec.laterality == Laterality.RIGHT:
+                right = True
+
+        if left and right:
+            return Laterality.BILATERAL
+        elif left:
+            return Laterality.LEFT
+        elif right:
+            return Laterality.RIGHT
+        else:
+            return Laterality.NONE
+
+    def standardized_filename(self, file_id: Optional[str] = None) -> StandardizedFilename:
         r"""Returns a standardized filename for the DICOM represented by this :class:`DicomFileRecord`.
         File name will be of the form ``{file_type}_{modifiers}_{view}_{file_id}.dcm``.
 
@@ -653,10 +762,10 @@ class MammogramFileRecord(DicomImageFileRecord):
 
         view = f"{self.laterality.short_str}{self.view_position.short_str}"
 
-        path = super().standardized_filename(file_id)
-        parts = [filetype, view, *modifiers] + str(path).split("_")[1:]
-        pattern = "_".join(p for p in parts if p)
-        return Path(pattern).with_suffix(".dcm")
+        prefix = [filetype, view, *modifiers]
+        prefix = [p for p in prefix if p]
+        path = super().standardized_filename(file_id).with_prefix(*prefix)
+        return path.with_suffix(".dcm")
 
     @classmethod
     def get_required_tags(cls) -> Set[Tag]:
@@ -673,6 +782,7 @@ class MammogramFileRecord(DicomImageFileRecord):
         path: PathLike,
         dcm: Dicom,
         is_sfm: bool = False,
+        helpers: Iterable["RecordHelper"] = [],
         **overrides,
     ) -> "MammogramFileRecord":
         r"""Creates a :class:`MammogramFileRecord` from a DICOM file.
@@ -705,6 +815,7 @@ class MammogramFileRecord(DicomImageFileRecord):
             view_position=view_position,
             mammogram_type=mammogram_type,
         )
+        result = apply_helpers(result.path, result, helpers)
         return result
 
     def to_dict(self) -> Dict[str, Any]:
@@ -751,12 +862,18 @@ class RecordHelper(ABC):
 
 def apply_helpers(path: PathLike, rec: R, helpers: Iterable[RecordHelper]) -> R:
     for h in helpers:
+        if not isinstance(h, RecordHelper):
+            raise TypeError(f"type {type(h)} is not a `RecordHelper`")
+        logger.debug(f"Applying helper {type(h)} to {path}")
         rec = h(path, rec)
     return rec
 
 
 def apply_read_helpers(obj: T, record_type: Type[FileRecord], helpers: Iterable[RecordHelper]) -> T:
     for h in helpers:
+        if not isinstance(h, RecordHelper):
+            raise TypeError(f"type {type(h)} is not a `RecordHelper`")
+        logger.debug(f"Applying read helper {type(obj)}")
         obj = h.on_read(obj, record_type)
     return obj
 
@@ -775,7 +892,7 @@ class PatientIDFromPath(RecordHelper):
         self.level = int(level)
 
     def __call__(self, path: PathLike, rec: R) -> R:
-        if isinstance(rec, DicomFileRecord):
+        if isinstance(rec, SupportsPatientID):
             name = Path(path).parents[self.level].name
             rec = cast(R, rec.replace(PatientID=name))
         return rec
@@ -796,7 +913,7 @@ class StudyDateFromPath(RecordHelper):
         self.level = int(level)
 
     def __call__(self, path: PathLike, rec: R) -> R:
-        if isinstance(rec, DicomFileRecord):
+        if isinstance(rec, SupportsStudyDate):
             year = Path(path).parents[self.level].name
             date = f"{year}0101"
             rec = cast(R, rec.replace(StudyDate=date))

@@ -454,6 +454,8 @@ class TestViewPosition:
             (["P", "L"], ViewPosition.CC),
             (["P", "R"], ViewPosition.CC),
             (["P"], ViewPosition.UNKNOWN),
+            ("CC", ViewPosition.CC),
+            ("MLO", ViewPosition.MLO),
             ([], ViewPosition.UNKNOWN),
         ],
     )

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
 from os import PathLike
@@ -21,7 +22,6 @@ from typing import (
     Type,
     TypeVar,
     Union,
-    cast,
     overload,
 )
 
@@ -32,12 +32,14 @@ from ..dicom import Dicom
 
 # Type checking fails when dataclass attr name matches a type alias.
 # Import types under a different alias
-from .record import HELPER_REGISTRY, RECORD_REGISTRY, DicomFileRecord, FileRecord, RecordHelper
+from .record import HELPER_REGISTRY, RECORD_REGISTRY, DicomFileRecord, FileRecord, RecordHelper, StandardizedFilename
 
 
 logger = logging.getLogger(__name__)
 
 FILTER_REGISTRY = Registry("filters")
+
+C = TypeVar("C", bound="RecordCollection")
 
 
 @dataclass
@@ -69,6 +71,32 @@ class RecordFilter:
         return True
 
 
+@dataclass
+class CollectionHelper(ABC):
+    r"""A :class:`RecordHelper` implements logic that is run during :class:`FileRecord`
+    creation and populates fields using custom logic.
+    """
+
+    @abstractmethod
+    def __call__(self, collection: C, index: int = 0) -> C:
+        r"""Applies postprocessing logic to a :class:`FileRecord`.
+
+        Args:
+            path:
+                Path of the
+        """
+        return collection
+
+
+def apply_helpers(collection: C, helpers: Iterable[CollectionHelper], index: int = 0) -> C:
+    for h in helpers:
+        if not isinstance(h, CollectionHelper):
+            raise TypeError(f"type {type(h)} is not a `CollectionHelper`")
+        logger.debug(f"Applying collection helper {type(h)}")
+        collection = h(collection, index)
+    return collection
+
+
 class RecordCreator:
     r"""RecordCreators examine candidate files and determine which :class:`FileRecord` subclass, if any,
     should be created for the candidate. A :class:`FileRecord` subclass will be chosen by trying callables
@@ -90,7 +118,17 @@ class RecordCreator:
     ):
         functions = RECORD_REGISTRY.available_keys() if functions is None else functions
         self.functions = [RECORD_REGISTRY.get(name) for name in functions]
-        self.helpers = [cast(Type[RecordHelper], HELPER_REGISTRY.get(h))() for h in helpers]
+
+        self.helpers = []
+        for h in helpers:
+            helper = HELPER_REGISTRY.get(h).instantiate_with_metadata().fn
+            if isinstance(helper, RecordHelper):
+                self.helpers.append(helper)
+            else:
+                logger.debug(
+                    f"Ignoring non-RecordHelper `{h}` of type {type(helper)} in RecordCreator. "
+                    "It may be still used elsewhere"
+                )
 
     def __call__(self, path: Path) -> FileRecord:
         result = FileRecord.from_file(path)
@@ -106,16 +144,16 @@ class RecordCreator:
                     result = dtype.from_dicom(
                         path,
                         dcm,
+                        helpers=self.helpers,
                     )
                 else:
-                    result = dtype.from_file(path)
+                    result = dtype.from_file(path, helpers=self.helpers)
                 logger.debug(f"Created {dtype.__name__} for {path}")
                 break
-            except Exception:
-                pass
+            except Exception as ex:
+                logger.debug(f"Caught exception creating {dtype} for {path}")
+                logger.debug(ex, exc_info=True)
 
-        for helper in self.helpers:
-            result = helper(path, result)
         return result
 
     def iterate_types_to_try(self, path: PathLike) -> Iterator[Type[FileRecord]]:
@@ -155,8 +193,13 @@ class RecordCreator:
     @classmethod
     def precheck_file(cls, path: PathLike, filter_funcs: Iterable[Callable[..., bool]]) -> Optional[Path]:
         path = Path(path)
-        if path.is_file() and all(f(path) for f in filter_funcs):
-            return path
+        if path.is_file():
+            for f in filter_funcs:
+                if not f(path):
+                    logger.debug(f"Filter {f} excluded {path}")
+                    break
+            else:
+                return path
         return None
 
 
@@ -209,10 +252,10 @@ def record_iterator(
     # build the RecordCreator which determines what FileRecord subclass to use for each file
     filter_funcs: List[Callable[..., bool]] = [FILTER_REGISTRY.get(f).instantiate_with_metadata() for f in filters]
     creator = RecordCreator(record_types, helpers, **kwargs)
-    logger.debug("Staring record_iterator")
-    logger.debug(f"Functions: {creator.functions}")
-    logger.debug(f"Helpers: {creator.helpers}")
-    logger.debug(f"Filters: {filter_funcs}")
+    logger.info("Staring record_iterator")
+    logger.info(f"Functions: {creator.functions}")
+    logger.info(f"Helpers: {creator.helpers}")
+    logger.info(f"Filters: {filter_funcs}")
 
     # build a list of files to check
     # a record creation attempt will only be made on valid files that pass all filters
@@ -232,7 +275,6 @@ def record_iterator(
 
 A = TypeVar("A")
 T = TypeVar("T", bound=Hashable)
-C = TypeVar("C", bound="RecordCollection")
 
 
 def search_dir(path: PathLike, pattern: str) -> Iterable[Path]:
@@ -284,6 +326,9 @@ class RecordCollection(Generic[R]):
     def add(self, rec: R) -> None:
         return self.records.add(rec)
 
+    def pop(self) -> R:
+        return self.records.pop()
+
     def union(self: C, other: C) -> C:
         return self.__class__(self.records.union(other.records))
 
@@ -331,16 +376,17 @@ class RecordCollection(Generic[R]):
         while proto.parent != proto:
             if all(p.is_relative_to(proto) for p in parents):
                 return proto
+            proto = proto.parent
         return None
 
-    def standardized_filenames(self) -> Iterator[Tuple[Path, R]]:
+    def standardized_filenames(self) -> Iterator[Tuple[StandardizedFilename, R]]:
         counter: Dict[str, int] = {}
         for rec in self:
-            path = rec.standardized_filename("id")
-            prefix = "_".join(str(path).split("_")[:-1])
+            filename = rec.standardized_filename("id")
+            prefix = filename.prefix
             count = counter.get(prefix, 1)
-            path = rec.standardized_filename(str(count))
-            yield path, rec
+            filename = filename.with_file_id(count)
+            yield filename, rec
             counter[prefix] = count + 1
 
     def prune_duplicates(self: C, func: Callable[[R], T]) -> C:

@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import shutil
 from os import PathLike
 from pathlib import Path
 from typing import Optional, cast
@@ -11,6 +10,7 @@ import pytest
 from dicom_utils.container import (
     FILTER_REGISTRY,
     HELPER_REGISTRY,
+    SOPUID,
     DicomFileRecord,
     DicomImageFileRecord,
     FileRecord,
@@ -19,18 +19,26 @@ from dicom_utils.container import (
     RecordCreator,
     RecordFilter,
     RecordHelper,
+    StandardizedFilename,
+    StudyUID,
     record_iterator,
 )
+from dicom_utils.dicom_factory import DicomFactory
 
 
 @pytest.fixture
 def dicom_files(tmp_path, dicom_file):
     paths = []
+    factory = DicomFactory(proto=dicom_file)
     for i in range(3):
         for j in range(3):
+            study_uid = f"study_{i}"
+            sop_uid = f"study_{i}_sop_{j}"
             dest = Path(tmp_path, f"subdir_{i}", f"file_{j}.dcm")
             dest.parent.mkdir(exist_ok=True, parents=True)
-            shutil.copy(dicom_file, str(dest))
+
+            dcm = factory(StudyInstanceUID=study_uid, SOPInstanceUID=sop_uid)
+            dcm.save_as(dest)
             paths.append(dest)
     return paths
 
@@ -120,7 +128,7 @@ class TestRecordCollection:
     @pytest.mark.parametrize("use_bar", [True, False])
     @pytest.mark.parametrize("threads", [False, True])
     @pytest.mark.parametrize("jobs", [None, 1, 2])
-    def test_from_files(self, dicom_files, use_bar, threads, jobs):
+    def test_from_files(self, dicom_files, use_bar, threads, jobs, caplog):
         col = RecordCollection.from_files(dicom_files, jobs, use_bar, threads)
         assert set(x.path for x in col) == set(dicom_files)
         assert all(isinstance(v, FileRecord) for v in col)
@@ -156,10 +164,17 @@ class TestRecordCollection:
         col = RecordCollection.from_dir(tmp_path, "*.dcm")
         pairs = list(col.standardized_filenames())
         names = [p[0] for p in pairs]
-        assert len(names) == 9
+        assert all(isinstance(n, StandardizedFilename) for n in names)
+        assert len(names) == len(col)
         assert len(set(names)) == len(names)
 
     def test_to_dict(self, collection, dicom_files):
         col_dict = collection.to_dict()
         assert isinstance(col_dict, dict)
         assert len(col_dict["records"]) == len(dicom_files)
+
+    def test_unique(self):
+        rec1 = DicomFileRecord(path=Path("foo.dcm"), SOPInstanceUID=SOPUID("123"), StudyInstanceUID=StudyUID("123"))
+        rec2 = DicomFileRecord(path=Path("bar.dcm"), SOPInstanceUID=SOPUID("123"), StudyInstanceUID=StudyUID("123"))
+        col = RecordCollection([rec1, rec2])
+        assert len(col) == 1

@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from dicom_utils.cli.organize import organize
-from dicom_utils.container.record import DicomFileRecord
 from dicom_utils.dicom_factory import CompleteMammographyStudyFactory, DicomFactory
 
 
@@ -28,43 +27,8 @@ class TestSymlinkPipeline:
             paths.append(outputs)
         dest = Path(tmp_path, "symlinks")
         dest.mkdir()
-        result = organize(tmp_path, dest, threads=True, use_bar=False)
-        for output, paths in result.items():
-            recs = {k: [p.relative_to(dest) for p in v] for k, v in paths.items()}
+        result = organize(tmp_path, dest, threads=False, use_bar=False, jobs=0)
+        for output, results in result.items():
+            recs = {k: [r.path.relative_to(dest) for r in v] for k, v in results.items()}
             assert len(recs) == num_cases
             assert all(v for v in recs.values())
-
-    def test_longitudinal_case_dir_structure(self, tmp_path):
-        types = ("ffdm", "tomo", "synth", "ultrasound")
-        factory = CompleteMammographyStudyFactory(
-            types=types,
-        )
-        paths = []
-        base_year = 2010
-        num_years = 3
-        for i in range(num_cases := 3):
-            case_dir = Path(tmp_path, f"Original-{i}")
-            for j in range(num_years):
-                year_dir = Path(case_dir, str(base_year + j))
-                year_dir.mkdir(parents=True)
-                study_uid = f"study-{i*num_years + j}"
-                patient_id = f"patient-{i}"
-                dicoms = factory(
-                    StudyInstanceUID=study_uid,
-                    PatientID=patient_id,
-                )
-                outputs = DicomFactory.save_dicoms(year_dir, dicoms)
-                paths.append(outputs)
-        dest = Path(tmp_path, "symlinks")
-        dest.mkdir()
-        helpers = ["study-date-from-path"]
-
-        result = organize(tmp_path, dest, helpers=helpers, threads=True, use_bar=False)
-        for output, paths in result.items():
-            recs = {k: [p.relative_to(dest) for p in v] for k, v in paths.items()}
-            assert len(recs) == num_cases * num_years
-            assert all(v for v in recs.values())
-            assert all(
-                not isinstance(r, DicomFileRecord) or (base_year <= r.year < base_year + num_years)
-                for r in recs.values()
-            )

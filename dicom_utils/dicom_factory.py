@@ -17,8 +17,8 @@ from numpy.random import default_rng
 from pydicom import DataElement, Dataset, FileDataset, Sequence
 from pydicom.data import get_testdata_file
 from pydicom.valuerep import VR
+from registry import Registry
 
-from .container.record import Registry
 from .dicom import set_pixels
 from .tags import Tag
 
@@ -72,6 +72,11 @@ class BaseFactory(ABC):
         size = tuple(x for x in (channels, NumberOfFrames, Rows, Columns) if x > 1)
         rng = default_rng(seed)
         return rng.integers(low, high, size, dtype=np.uint16)
+
+    @classmethod
+    def random_uid(cls, length: int = 6, seed: int = 42) -> str:
+        rng = default_rng(seed)
+        return "".join(str(x) for x in rng.integers(0, 10, length))
 
     @classmethod
     def pixel_array_from_dicom(
@@ -286,8 +291,8 @@ class CompleteMammographyStudyFactory(ConcatFactory):
                 "ViewPosition": view,
                 "BreastImplantPresent": "YES" if implant else "NO",
                 "ViewModifierCodeSequence": codes,
-                "SOPInstanceUID": f"sop-{i}",
-                "SeriesInstanceUID": f"series-{i}",
+                "SOPInstanceUID": f"sop-{self.random_uid(seed=seed)}-{i}",
+                "SeriesInstanceUID": f"series-{self.random_uid(seed=seed)}-{i}",
             }
             factory = cast(Type[DicomFactory], FACTORY_REGISTRY.get(mtype))(
                 proto=proto,

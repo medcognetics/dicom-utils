@@ -28,5 +28,5 @@ class TestInput:
         assert len(p) == 1
         key = p[0][0]
         assert isinstance(key, tuple)
-        assert len(key) == 3
+        assert len(key) == 2
         assert all(isinstance(k, str) for k in key)

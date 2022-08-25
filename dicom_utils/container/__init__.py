@@ -1,8 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 from .collection import FILTER_REGISTRY, RecordCollection, RecordCreator, RecordFilter, record_iterator
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID, TransferSyntaxUID
+from .protocols import (
+    SupportsGenerated,
+    SupportsManufacturer,
+    SupportsPatientID,
+    SupportsStudyDate,
+    SupportsStudyID,
+    SupportsUID,
+)
 from .record import (
     HELPER_REGISTRY,
     RECORD_REGISTRY,
@@ -11,6 +18,7 @@ from .record import (
     FileRecord,
     MammogramFileRecord,
     RecordHelper,
+    StandardizedFilename,
 )
 
 
@@ -32,4 +40,12 @@ __all__ = [
     "RecordHelper",
     "FILTER_REGISTRY",
     "RecordFilter",
+    "StandardizedFilename",
+    "SupportsGenerated",
+    "SupportsManufacturer",
+    "SupportsPatientID",
+    "SupportsStudyDate",
+    "SupportsStudyID",
+    "SupportsUID",
+    "SupportsStudyID",
 ]

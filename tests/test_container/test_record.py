@@ -21,10 +21,83 @@ from dicom_utils.container.record import (
     DicomImageFileRecord,
     MammogramFileRecord,
     ModalityHelper,
+    StandardizedFilename,
 )
 from dicom_utils.dicom_factory import DicomFactory
 from dicom_utils.tags import Tag
 from dicom_utils.types import Laterality, MammogramType, ViewPosition, get_value
+
+
+class TestStandardizedFilename:
+    @pytest.mark.parametrize(
+        "inp, exp",
+        [
+            pytest.param(Path("foo_1.txt"), StandardizedFilename("foo_1.txt")),
+            pytest.param(Path("bar_1234"), StandardizedFilename("bar_1234")),
+            pytest.param(Path("foo.txt"), StandardizedFilename("foo_1.txt")),
+        ],
+    )
+    def test_create(self, inp, exp):
+        p = StandardizedFilename(inp)
+        assert isinstance(p, StandardizedFilename)
+        assert isinstance(p, Path)
+        assert p == exp
+
+    @pytest.mark.parametrize(
+        "inp,exp",
+        [
+            pytest.param(StandardizedFilename("foo_1.txt"), "1"),
+            pytest.param(StandardizedFilename("bar_2.txt"), "2"),
+            pytest.param(StandardizedFilename("baz_3"), "3"),
+            pytest.param(StandardizedFilename("bar_1234.txt"), "1234"),
+            pytest.param(StandardizedFilename("bar_1234"), "1234"),
+        ],
+    )
+    def test_file_id(self, inp, exp):
+        assert inp.file_id == exp
+
+    @pytest.mark.parametrize(
+        "inp,id,exp",
+        [
+            pytest.param(StandardizedFilename("foo.txt"), "1", StandardizedFilename("foo_1.txt")),
+            pytest.param(StandardizedFilename("foo_2.txt"), "1", StandardizedFilename("foo_1.txt")),
+            pytest.param(StandardizedFilename("bar"), "1", StandardizedFilename("bar_1")),
+            pytest.param(StandardizedFilename("bar_123.txt"), "234", StandardizedFilename("bar_234.txt")),
+        ],
+    )
+    def test_with_file_id(self, inp, id, exp):
+        assert inp.with_file_id(id) == exp
+
+    @pytest.mark.parametrize(
+        "inp,exp",
+        [
+            pytest.param(StandardizedFilename("ffdm_1.dcm"), "ffdm"),
+            pytest.param(StandardizedFilename("ffdm_mag_spot_1.dcm"), "ffdm_mag_spot"),
+            pytest.param(StandardizedFilename("ffdm_mag_spot_1"), "ffdm_mag_spot"),
+        ],
+    )
+    def test_prefix(self, inp, exp):
+        assert inp.prefix == exp
+
+    @pytest.mark.parametrize(
+        "inp,val,exp",
+        [
+            pytest.param(StandardizedFilename("file_1.dcm"), ["ffdm"], StandardizedFilename("ffdm_1.dcm")),
+            pytest.param(StandardizedFilename("file_2.dcm"), ["ffdm", "spot"], StandardizedFilename("ffdm_spot_2.dcm")),
+        ],
+    )
+    def test_with_prefix(self, inp, val, exp):
+        assert inp.with_prefix(*val) == exp
+
+    @pytest.mark.parametrize(
+        "inp,mod,exp",
+        [
+            pytest.param(StandardizedFilename("ffdm_1.dcm"), "spot", StandardizedFilename("ffdm_spot_1.dcm")),
+            pytest.param(StandardizedFilename("ffdm_mag_2.dcm"), "spot", StandardizedFilename("ffdm_mag_spot_2.dcm")),
+        ],
+    )
+    def test_add_modifier(self, inp, mod, exp):
+        assert inp.add_modifier(mod) == exp
 
 
 class TestFileRecord:
@@ -130,6 +203,7 @@ class TestFileRecord:
     def test_standardized_filename(self, path, file_id, exp, record_factory):
         rec = record_factory(path)
         actual = rec.standardized_filename(file_id)
+        assert isinstance(actual, StandardizedFilename)
         assert actual == Path(exp)
 
     def test_read(self, record_factory):
@@ -241,7 +315,7 @@ class TestDicomFileRecord(TestFileRecord):
     @pytest.mark.parametrize(
         "path,modality,file_id,exp",
         [
-            pytest.param("foo/bar.dcm", "CT", None, "ct_1.2.345.dcm"),
+            pytest.param("foo/bar.dcm", "CT", None, "ct_1-2-345.dcm"),
             pytest.param("foo/bar.dcm", "US", "2", "us_2.dcm"),
             pytest.param("foo/bar.dcm", "MG", 1, "mg_1.dcm"),
         ],
@@ -251,6 +325,7 @@ class TestDicomFileRecord(TestFileRecord):
         sop = "1.2.345"
         rec = rec.replace(SOPInstanceUID=sop, Modality=modality)
         actual = rec.standardized_filename(file_id)
+        assert isinstance(actual, StandardizedFilename)
         assert actual == Path(exp)
 
     def test_read(self, mocker, record_factory):
@@ -284,6 +359,31 @@ class TestDicomFileRecord(TestFileRecord):
         assert rec_dict["path"] == str(rec.path.absolute())
         assert rec_dict["resolved_path"] == str(rec.path.resolve().absolute())
         assert rec_dict["Modality"] == rec.Modality
+
+    def test_hash(self, record_factory):
+        rec1 = record_factory("a.dcm")
+        rec2 = record_factory("b.dcm")
+        rec3 = record_factory("a.dcm")
+        rec1 = rec1.replace(SOPInstanceUID="123")
+        rec2 = rec2.replace(SOPInstanceUID="123")
+        assert hash(rec1) == hash(rec2)
+        assert hash(rec1) != hash(rec3)
+
+    @pytest.mark.parametrize("has_uid", [False, True])
+    def test_eq(self, record_factory, has_uid):
+        rec1 = record_factory("a.dcm")
+        rec2 = record_factory("b.dcm")
+        rec3 = record_factory("a.dcm")
+        rec1 = rec1.replace(SOPInstanceUID="123" if has_uid else None)
+        rec2 = rec2.replace(SOPInstanceUID="123" if has_uid else None)
+        rec3 = rec3.replace(SOPInstanceUID="234" if has_uid else None)
+
+        if has_uid:
+            assert rec1 == rec2
+            assert rec1 != rec3
+        else:
+            assert rec1 != rec2
+            assert rec1 == rec3
 
 
 class TestDicomImageFileRecord(TestDicomFileRecord):
@@ -565,7 +665,9 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             laterality=laterality,
             view_position=view_pos,
         )
-        assert record.standardized_filename(uid) == Path(exp)
+        actual = record.standardized_filename(uid)
+        assert isinstance(actual, StandardizedFilename)
+        assert actual == Path(exp)
 
     @pytest.mark.parametrize(
         "body_part,study,series,force,exp",
