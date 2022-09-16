@@ -13,22 +13,29 @@ class TestSymlinkPipeline:
     @pytest.mark.parametrize("spot", [False, True])
     def test_case_dir_structure(self, tmp_path, implants, spot):
         types = ("ffdm", "tomo", "synth", "ultrasound")
-        factory = CompleteMammographyStudyFactory(
-            types=types,
-            spot_compression=spot,
-            implants=implants,
-        )
         paths = []
+        seen_sop_uids = []
         for i in range(num_cases := 3):
+            factory = CompleteMammographyStudyFactory(
+                types=types,
+                spot_compression=spot,
+                implants=implants,
+                seed=i,
+            )
             case_dir = Path(tmp_path, f"Original-{i}")
             case_dir.mkdir(parents=True)
             dicoms = factory(StudyInstanceUID=f"study-{i}")
             outputs = DicomFactory.save_dicoms(case_dir, dicoms)
             paths.append(outputs)
+            seen_sop_uids = seen_sop_uids + [d.SOPInstanceUID for d in dicoms]
+
+        # non-deterministic test failures will happen if the UIDs aren't unique
+        assert len(seen_sop_uids) == len(set(seen_sop_uids))
+
         dest = Path(tmp_path, "symlinks")
         dest.mkdir()
-        result = organize(tmp_path, dest, threads=False, use_bar=False, jobs=0)
-        for output, results in result.items():
+        result = organize(tmp_path, dest, threads=False, use_bar=False, jobs=4)
+        for _, results in result.items():
             recs = {k: [r.path.relative_to(dest) for r in v] for k, v in results.items()}
             assert len(recs) == num_cases
             assert all(v for v in recs.values())
