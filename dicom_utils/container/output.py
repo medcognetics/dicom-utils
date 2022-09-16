@@ -3,25 +3,53 @@
 
 import json
 import re
-from abc import ABC, abstractclassmethod
-from functools import partial
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
-from typing import Callable, Dict, Final, Hashable, Iterable, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Callable, Dict, Final, Iterable, Iterator, List, Optional, Set, Tuple, TypeVar, Union, cast
 
 from registry import Registry
-from tqdm import tqdm
 from tqdm_multiprocessing import ConcurrentMapper
 
 from ..types import MammogramType
 from .collection import RecordCollection
 from .input import Input
+from .protocols import SupportsGenerated
 from .record import FileRecord, MammogramFileRecord
 
 
 YEAR_RE: Final = re.compile(r"\d{4}")
 
 OUTPUT_REGISTRY = Registry("output", bound=Callable[..., "Output"])
+
+R = TypeVar("R", bound=FileRecord)
+
+# For file structure cases/PatientID/Study/file we want
+# to select 4 levels from the end to trim leading directories
+FILELIST_OFFSET: Final[int] = 4
+
+# For file structure cases/PatientID/Study we want
+# to select 3 levels from the end to trim leading directories
+CASELIST_OFFSET: Final[int] = 3
+
+
+@dataclass
+class WriteResult:
+    key: Tuple[str, ...]
+    path: Path
+    collection: RecordCollection
+    name: str
+    metadata: Any = field(repr=False, default=None)
+
+    def __hash__(self) -> int:
+        return hash(self.key)
+
+
+def iterate_symlinks(collection: RecordCollection[R], dest: Path) -> Iterator[Tuple[Path, R]]:
+    for pathname, rec in collection.standardized_filenames():
+        filepath = Path(dest, pathname)
+        yield filepath, rec
 
 
 class Output(ABC):
@@ -41,49 +69,62 @@ class Output(ABC):
 
     def __init__(
         self,
-        path: PathLike,
+        root: PathLike,
+        output_subdir: PathLike = Path("."),
         record_filter: Optional[Callable[[FileRecord], bool]] = None,
         collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
         use_bar: bool = True,
         threads: bool = False,
         jobs: Optional[int] = None,
+        chunksize: int = 8,
     ):
-        self.path = Path(path)
+        self.root = Path(root)
+        if not self.root.is_dir():
+            raise NotADirectoryError(root)
+        self.output_subdir = Path(output_subdir)
         self.path.mkdir(exist_ok=True, parents=True)
         self.record_filter = record_filter
         self.collection_filter = collection_filter
         self.use_bar = use_bar
         self.threads = threads
         self.jobs = jobs
+        self.chunksize = chunksize
 
-    def __call__(self, inp: Union[Input, Dict[Tuple[str, ...], RecordCollection]]) -> Dict[str, RecordCollection]:
-        result: Dict[str, RecordCollection] = {}
+    @property
+    def path(self) -> Path:
+        return self.root / self.output_subdir
+
+    def mapper(self, **kwargs) -> ConcurrentMapper:
+        mapper = ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize)
+        kwargs.setdefault("disable", not self.use_bar)
+        kwargs.setdefault("leave", False)
+        mapper.create_bar(**kwargs)
+        return mapper
+
+    def __call__(self, inp: Union[Input, Dict[str, Iterable[WriteResult]]]) -> Dict[str, Iterable[WriteResult]]:
+        result: Dict[str, Iterable[WriteResult]] = {}
         iterable = inp if isinstance(inp, Input) else inp.items()
-        with ConcurrentMapper(self.threads, self.jobs, chunksize=8) as mapper:
-            mapper.create_bar(total=len(iterable), desc=f"Writing {self.__class__.__name__}")
+        with self.mapper(total=len(iterable), desc=f"Writing {self.__class__.__name__}") as mapper:
             it = mapper(
                 self._process,
                 iterable,
                 path=self.path,
                 record_filter=self.record_filter,
                 collection_filter=self.collection_filter,
-                group_fn=inp.group_fn if isinstance(inp, Input) else None,
             )
             for item in it:
-                if item is not None:
-                    name, written = item
-                    result[name] = written
+                if item:
+                    name = next(x.name for x in item)
+                    result[name] = item
         return result
 
-    @classmethod
     def _process(
-        cls,
+        self,
         kc,
         path: Path,
         record_filter: Optional[Callable[[FileRecord], bool]] = None,
         collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
-        group_fn: Optional[Callable] = None,
-    ):
+    ) -> Optional[Iterable[WriteResult]]:
         key, collection = kc
         name = str(Path(*key))
         if collection_filter is not None and not collection_filter(collection):
@@ -91,175 +132,140 @@ class Output(ABC):
         if record_filter is not None:
             collection = collection.filter(record_filter)
         dest = Path(path, name)
-        dest.mkdir(exist_ok=True, parents=True)
         # pyright fails to recognize this is an abstract classmethod
-        written = cls.write(collection, dest)  # type: ignore
-        if group_fn is not None:
-            key = group_fn(next(iter(collection)))
-            cls.write_metadata(name, key, collection, dest)
-        return name, written
+        written = self.write(key, name, collection, dest)  # type: ignore
+        return list(written)
 
-    @property
-    def tqdm(self) -> Callable:
-        return partial(tqdm, leave=False, disable=not self.use_bar)
-
-    @abstractclassmethod
-    def write(cls, collection: RecordCollection, dest: Path) -> RecordCollection:
+    @abstractmethod
+    def write(self, key: Tuple[str, ...], name: str, collection: RecordCollection, dest: Path) -> Iterator[WriteResult]:
         ...
-
-    @classmethod
-    def write_metadata(
-        cls,
-        name: str,
-        key: Hashable,
-        collection: RecordCollection,
-        dest: Path,
-        indent: int = 4,
-    ) -> None:
-        path = Path(dest, "record_collection.json")
-        metadata = collection.to_dict()
-        metadata["group"] = key
-        metadata["name"] = name
-        with open(path, "w") as f:
-            json.dump(metadata, f, sort_keys=True, indent=indent, default=str)
 
 
 class SymlinkFileOutput(Output):
-    @classmethod
-    def write(cls, collection: RecordCollection, dest: Path) -> RecordCollection:
-        assert dest.is_dir()
+    def write(self, key: Tuple[str, ...], name: str, collection: RecordCollection, dest: Path) -> Iterator[WriteResult]:
+        dest.mkdir(exist_ok=True, parents=True)
         result = RecordCollection()
-        for name, rec in collection.standardized_filenames():
-            filepath = Path(dest, name)
-            rec = rec.to_symlink(filepath, overwrite=True)
+        for filepath, rec in iterate_symlinks(collection, dest):
+            assert isinstance(rec, FileRecord)
+            generated = isinstance(rec, SupportsGenerated) and rec.generated
+            if rec.exists and not generated:
+                rec = rec.to_symlink(filepath, overwrite=True)
             result.add(rec)
+            yield WriteResult(key, filepath, result, name, None)
+
+
+class ManifestOutput(Output):
+    def __call__(self, inp: Union[Input, Dict[str, Iterable[WriteResult]]]) -> Dict[str, Iterable[WriteResult]]:
+        written = super().__call__(inp)
+        manifest = self.build_main_manifest(written)
+        path = Path(self.root, "manifest.json")
+        with open(path, "w") as f:
+            json.dump(manifest, f, sort_keys=True, default=str)
+        return written
+
+    @classmethod
+    def build_main_manifest(cls, values: Dict[str, Iterable[WriteResult]]) -> Dict[str, Any]:
+        result = dict()
+        for name, write_results in values.items():
+            for write_result in write_results:
+                container = result
+                for k in write_result.key:
+                    container = container.setdefault(k, {})
+                if write_result.metadata:
+                    container.update(write_result.metadata)
         return result
 
+    def write(
+        self,
+        key: Tuple[str, ...],
+        name: str,
+        collection: RecordCollection,
+        dest: Path,
+    ) -> Iterator[WriteResult]:
 
-# This is how we originally handled longitudinal references, but the approach worked poorly.
-# Now longitudinal data is caputed using PatientID/StudyDate/Study/... file structure.
-# This class remains for reproducibility and will be removed in a future version
-class LongitudinalPointerOutput(Output):
-    def __call__(self, inp: Union[Input, Dict[str, RecordCollection]]) -> Dict[str, RecordCollection]:
-        assert isinstance(inp, dict)
-        # build lookup for years and related cases
-        year_lookup = self.create_year_lookup(inp)
-        association_lookup = self.create_association_lookup(inp)
-        reverse_association_lookup = {name: group for group, names in association_lookup.items() for name in names}
+        # we want the manifest to reflect symlink paths and real paths.
+        symlink_collection = RecordCollection()
+        for symlink_path, rec in iterate_symlinks(collection, dest):
+            symlink_rec = rec.replace(path=Path(symlink_path.absolute()))
+            symlink_collection.add(symlink_rec)
+        collection = symlink_collection
 
-        result: Dict[str, RecordCollection] = {}
-        bar = self.tqdm(inp if isinstance(inp, Input) else inp.items())
-        for name, collection in bar:
-            if self.collection_filter is not None and not self.collection_filter(collection):
-                continue
-            if self.record_filter is not None:
-                collection = collection.filter(self.record_filter)
+        metadata = collection.to_dict()
+        metadata["name"] = name
 
-            dest = Path(self.path, name)
-            group = reverse_association_lookup.get(name, None)
-            if group is None:
-                continue
-            associated = {x for x in association_lookup[group] if x != name}
-
-            for a in associated:
-                year = year_lookup[a]
-                reference_year = year_lookup.get(name, year)
-                if year > reference_year:
-                    link = Path(dest, "later", a)
-                elif year < reference_year:
-                    link = Path(dest, "prior", a)
-                else:
-                    link = Path(dest, "related", a)
-
-                link.parent.mkdir(exist_ok=True)
-                source = Path(self.path, a)
-                written = self.write(source, link)
-                result[name] = written
-
-        return result
-
-    def create_year_lookup(self, inp: Dict[str, RecordCollection]) -> Dict[str, int]:
-        result: Dict[str, int] = {}
-        for name, collection in inp.items():
-            years = {year for rec in collection if (year := getattr(rec, "year", None)) is not None}
-            if years:
-                result[name] = next(iter(years))
-        return result
-
-    def create_association_lookup(self, inp: Dict[str, RecordCollection]) -> Dict[str, Set[str]]:
-        result: Dict[str, Set[str]] = {}
-        for name, collection in inp.items():
-            patient_ids = {year for rec in collection if (year := getattr(rec, "PatientID", None)) is not None}
-            if patient_ids:
-                result.setdefault(next(iter(patient_ids)), set()).add(name)
-        return result
-
-    def write(self, source: Path, dest: Path) -> RecordCollection:
-        assert source.is_dir()
-        assert dest.parent.is_dir()
-        relpath = Path(*FileRecord(source).relative_to(FileRecord(dest)).path.parts)
-        dest.unlink(missing_ok=True)
-        dest.symlink_to(relpath, target_is_directory=True)
-        return RecordCollection([FileRecord(dest)])
+        dest.mkdir(exist_ok=True, parents=True)
+        path = Path(dest, "manifest.json")
+        with open(path, "w") as f:
+            json.dump(metadata, f, indent=2, sort_keys=True, default=str)
+        yield WriteResult(key, path, collection, name=name, metadata=metadata)
 
 
-class FileListOutput(Output):
+class FileListOutput(SymlinkFileOutput):
     def __init__(
         self,
-        path: PathLike,
-        filename: PathLike,
+        root: PathLike,
+        output_subdir: PathLike = Path("."),
+        filelist_output_subdir: PathLike = Path("filelist"),
         record_filter: Optional[Callable[[FileRecord], bool]] = None,
         collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
         use_bar: bool = True,
         by_case: Optional[bool] = None,
+        min_name_len: Optional[int] = 3,
     ):
-        super().__init__(path, record_filter, collection_filter, use_bar)
-        self.filename = Path(filename)
+        super().__init__(root, output_subdir, record_filter, collection_filter, use_bar)
+        self.filelist_output_subdir = Path(filelist_output_subdir)
         self.by_case = by_case if by_case is not None else (self.record_filter is None)
+        self.min_name_len = min_name_len
 
-    def __call__(self, inp: Union[Input, Dict[str, RecordCollection]]) -> Dict[str, RecordCollection]:
-        assert isinstance(inp, dict)
-        result: Dict[str, RecordCollection] = {}
-        bar = self.tqdm(inp if isinstance(inp, Input) else inp.items())
-        dest = Path(self.path, self.filename)
+    @property
+    def filelist_path(self) -> Path:
+        return self.root / self.filelist_output_subdir
 
-        f = open(dest, "w")
-        for name, collection in bar:
-            # skip entire collection if collection_filter is True
-            if self.collection_filter is not None and not self.collection_filter(collection):
+    def write(self, key: Tuple[str, ...], name: str, collection: RecordCollection, dest: Path) -> Iterator[WriteResult]:
+        iterator = (
+            self._iterate_case_entries(collection, dest)
+            if self.by_case
+            else self._iterate_file_entries(collection, dest)
+        )
+        for entry in iterator:
+            yield WriteResult(key, dest, collection, name, metadata=entry)
+
+    def _iterate_file_entries(self, collection: RecordCollection, dest: Path) -> Iterator[str]:
+        for filepath, rec in iterate_symlinks(collection, dest):
+            yield str(self.path_to_filelist_entry(filepath))
+
+    def _iterate_case_entries(self, collection: RecordCollection, dest: Path) -> Iterator[str]:
+        seen_entries: Set[Path] = set()
+        for file_entry in self._iterate_file_entries(collection, dest):
+            entry = Path(file_entry).parent
+            if entry in seen_entries:
                 continue
+            if not self.min_name_len or len(entry.parts) >= self.min_name_len:
+                seen_entries.add(entry)
+                yield str(entry)
 
-            # filter records
-            if self.record_filter:
-                collection = collection.filter(self.record_filter)
-            if all_records_were_filtered := not collection:
-                continue
+    def __call__(self, inp: Union[Input, Dict[str, Iterable[WriteResult]]]) -> Dict[str, Iterable[WriteResult]]:
+        written = super().__call__(inp)
+        filelist = self.build_filelist(written)
+        dest = Path(self.filelist_path)
+        dest.parent.mkdir(exist_ok=True, parents=True)
+        with open(dest, "w") as f:
+            for name, entries in filelist.items():
+                for entry in entries:
+                    f.write(f"{entry}\n")
+        return written
 
-            if self.by_case:
-                f.write(f"{name}\n")
-            else:
-                files = [self.path_to_filelist_entry(rec.path) for rec in collection]
-                for p in files:
-                    f.write(f"{str(p)}\n")
-
-            result[name] = collection
-        f.close()
-
-        # remove empty file
-        if not dest.stat().st_size:
-            dest.unlink()
-
+    def build_filelist(self, values: Dict[str, Iterable[WriteResult]]) -> Dict[str, List[str]]:
+        result: Dict[str, List[str]] = {}
+        for name, write_results in values.items():
+            for write_result in write_results:
+                assert isinstance(write_result.metadata, str)
+                container = result.setdefault(name, [])
+                container.append(write_result.metadata)
         return result
 
-    @classmethod
-    def path_to_filelist_entry(cls, path: Path) -> Path:
-        # For file structure PatientID/StudyDate/Study/file we want
-        # to select 4 levels from the end to trim leading directories
-        START_OF_PATH = -4
-        return Path(*path.parts[START_OF_PATH:])
-
-    def write(self, name: str) -> RecordCollection:
-        return RecordCollection()
+    def path_to_filelist_entry(self, path: Path) -> Path:
+        return path.relative_to(self.root)
 
 
 def is_complete_case(c: RecordCollection) -> bool:
@@ -315,56 +321,54 @@ PRIMARY_OUTPUT_GROUPS = [
 ]
 for name, collection_filter in PRIMARY_OUTPUT_GROUPS:
     OUTPUT_REGISTRY(
-        partial(SymlinkFileOutput, collection_filter=collection_filter),
+        SymlinkFileOutput,
         name=f"symlink-{name}",
-        subdir=name,
+        output_subdir=name,
+        collection_filter=collection_filter,
     )
     OUTPUT_REGISTRY(
-        partial(
-            FileListOutput,
-            filename=Path(f"{name}.txt"),
-            collection_filter=collection_filter,
-        ),
+        FileListOutput,
         name=f"filelist-{name}",
-        subdir="file_lists/by_case",
-        derived=True,
+        output_subdir=name,
+        filelist_output_subdir=Path(f"file_lists/by_case/{name}.txt"),
+        collection_filter=collection_filter,
     )
+
+OUTPUT_REGISTRY(ManifestOutput, name="manifest", output_subdir="cases")
 
 # register primary output groups
 # these can use a record filter
-SECONDARY_OUTPUT_GROUPS: List[Tuple[str, Callable, Callable]] = [
-    (mtype.simple_name, is_mammogram_case, partial(is_mammogram_record, mtype=mtype))
-    for mtype in MammogramType
-    if mtype != MammogramType.UNKNOWN
-]
-SECONDARY_OUTPUT_GROUPS.append(("spot_mag", is_mammogram_case, is_spot_mag))
-for name, collection_filter, record_filter in SECONDARY_OUTPUT_GROUPS:
-    for by_case in (False, True):
-        by_case_str = "by_case" if by_case else "by_file"
-        OUTPUT_REGISTRY(
-            partial(
-                FileListOutput,
-                filename=Path(f"{name}.txt"),
-                collection_filter=collection_filter,
-                record_filter=record_filter,
-                by_case=by_case,
-            ),
-            name=f"filelist-{name}-{by_case_str}",
-            subdir=f"file_lists/{by_case_str}",
-            derived=True,
-        )
-
-for by_case in (False, True):
-    by_case_str = "by_case" if by_case else "by_file"
-    OUTPUT_REGISTRY(
-        partial(
-            FileListOutput,
-            filename=Path("ffdm_complete.txt"),
-            collection_filter=is_complete_case,
-            record_filter=is_standard_ffdm,
-            by_case=by_case,
-        ),
-        name=f"filelist-standard_ffdm-{by_case_str}",
-        subdir=f"file_lists/{by_case_str}",
-        derived=True,
-    )
+# SECONDARY_OUTPUT_GROUPS: List[Tuple[str, Callable, Callable]] = [
+#    (mtype.simple_name, is_mammogram_case, partial(is_mammogram_record, mtype=mtype))
+#    for mtype in MammogramType
+#    if mtype != MammogramType.UNKNOWN
+# ]
+# SECONDARY_OUTPUT_GROUPS.append(("spot_mag", is_mammogram_case, is_spot_mag))
+# for name, collection_filter, record_filter in SECONDARY_OUTPUT_GROUPS:
+#    for by_case in (False, True):
+#        by_case_str = "by_case" if by_case else "by_file"
+#        OUTPUT_REGISTRY(
+#            partial(
+#                FileListOutput,
+#                filename=Path(f"{name}.txt"),
+#                collection_filter=collection_filter,
+#                record_filter=record_filter,
+#                by_case=by_case,
+#            ),
+#            name=f"filelist-{name}-{by_case_str}",
+#            subdir=f"file_lists/{by_case_str}",
+#        )
+#
+# for by_case in (False, True):
+#    by_case_str = "by_case" if by_case else "by_file"
+#    OUTPUT_REGISTRY(
+#        partial(
+#            FileListOutput,
+#            filename=Path("ffdm_complete.txt"),
+#            collection_filter=is_complete_case,
+#            record_filter=is_standard_ffdm,
+#            by_case=by_case,
+#        ),
+#        name=f"filelist-standard_ffdm-{by_case_str}",
+#        subdir=f"file_lists/{by_case_str}",
+#    )

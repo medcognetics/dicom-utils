@@ -3,7 +3,7 @@
 from argparse import ArgumentParser, Namespace
 from os import PathLike
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, Iterable, Optional, Union
 
 from tqdm import tqdm
 
@@ -18,28 +18,20 @@ def organize(
     sources: Union[PathLike, Iterable[PathLike]],
     dest: PathLike,
     records: Optional[Iterable[str]] = None,
-    groups: Iterable[str] = ["patient-id", "study-date", "study-uid"],
+    groups: Iterable[str] = ["patient-id", "study-uid"],
     helpers: Iterable[str] = [],
-    namers: Iterable[str] = ["patient-id", "study-date", "study-uid"],
+    namers: Iterable[str] = ["patient-id", "study-uid"],
     outputs: Iterable[str] = ["symlink-cases"],
     use_bar: bool = True,
     **kwargs,
 ) -> Dict[Output, Dict[str, RecordCollection]]:
     inp = Input(sources, records, groups, helpers, namers, use_bar=use_bar, **kwargs)
-    opt: List[Output] = []
-    derived_opt: List[Output] = []
-    for o in outputs:
-        reg = OUTPUT_REGISTRY.get(o)
-        subdir = Path(dest, str(reg.metadata.get("subdir", "")))
-        fn = reg.fn
-        derived = reg.metadata.get("derived", False)
-        (derived_opt if derived else opt).append(fn(path=subdir))
 
     result: Dict[Output, Dict[str, RecordCollection]] = {}
-    for o in tqdm(opt, desc="Writing outputs", disable=not use_bar):
-        result[o] = o(inp)
-    for o in tqdm(derived_opt, desc="Writing derived outputs", disable=not use_bar):
-        result[o] = o(next(iter(result.values())))
+    for output_name in tqdm(outputs, desc="Writing outputs", disable=not use_bar):
+        output = OUTPUT_REGISTRY.get(output_name).instantiate_with_metadata(root=dest, use_bar=use_bar)
+        result[output_name] = output(inp)
+
     return result
 
 

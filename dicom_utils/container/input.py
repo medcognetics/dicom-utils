@@ -1,25 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
 from typing import Callable, Dict, Generic, Hashable, Iterable, Iterator, Optional, Tuple, Type, TypeVar, Union, cast
 
-from registry import Registry
+from registry import Registry, bind_relevant_kwargs
 
 from .collection import RecordCollection
-from .group import GROUP_REGISTRY
-from .record import (
-    RECORD_REGISTRY,
-    DicomFileRecord,
-    FileRecord,
-    SupportsPatientID,
-    SupportsStudyDate,
-    SupportsStudyUID,
-)
+from .group import Grouper
+from .record import RECORD_REGISTRY, SupportsPatientID, SupportsStudyDate, SupportsStudyUID
 
 
+logger = logging.getLogger(__name__)
 NAME_REGISTRY = Registry("names", bound=Type[Callable[[Hashable, RecordCollection, int, int], str]])
 K = TypeVar("K", bound=Hashable)
 
@@ -64,13 +59,13 @@ class PatientIDNamer(CaseRenamer[Optional[str]]):
     prefix: str = "Patient-"
 
     def __call__(self, key: Optional[str], collection: RecordCollection, index: int, total: int) -> str:
+        pid = self.get_patient_id(collection)
+        return f"{self.prefix}{pid}" if pid else ""
+
+    @classmethod
+    def get_patient_id(cls, collection: RecordCollection) -> Optional[str]:
         pids = {pid for rec in collection if isinstance(rec, SupportsPatientID) and (pid := rec.PatientID) is not None}
-        if len(pids) > 1:
-            raise ValueError("Expected 1 PatientID, but found {len(pids)}")
-        elif len(pids) == 1:
-            pid = next(iter(pids))
-            return f"{self.prefix}{pid}"
-        return ""
+        return next(iter(pids)) if len(pids) == 1 else None
 
 
 @NAME_REGISTRY(name="study-date")
@@ -80,35 +75,84 @@ class StudyDateNamer(CaseRenamer):
     year_only: bool = False
 
     def __call__(self, key: Optional[str], collection: RecordCollection, index: int, total: int) -> str:
+        date = self.get_study_date(collection, self.year_only)
+        return f"{self.prefix}{date}" if date is not None else ""
+
+    @classmethod
+    def get_study_date(cls, collection: RecordCollection, year_only: bool = False) -> Optional[str]:
         dates = {
-            date
+            str(date)
             for rec in collection
             if isinstance(rec, SupportsStudyDate)
-            and (date := (rec.StudyYear if self.year_only else rec.StudyDate)) is not None
+            and (date := (rec.StudyYear if year_only else rec.StudyDate)) is not None
         }
-        if len(dates) > 1:
-            raise ValueError("Expected 1 StudyDate, but found {len(dates)}")
-        elif len(dates) == 1:
-            date = next(iter(dates))
-            return f"{self.prefix}{date}"
-        return ""
+        return next(iter(dates)) if len(dates) == 1 else None
 
 
 @NAME_REGISTRY(name="study-uid")
 @dataclass
 class StudyIDNamer(CaseRenamer[Optional[str]]):
     prefix: str = "Study-"
+    truncate: Optional[int] = 4
+    strip_period: bool = True
+    patient_namer: Optional[str] = None
+    date_namer: Optional[str] = None
+
+    _patient_namer: Optional[PatientIDNamer] = field(default=None, init=False)
+    _date_namer: Optional[StudyDateNamer] = field(default=None, init=False)
+
+    def __post_init__(self):
+        if self.patient_namer:
+            self._patient_namer = cast(
+                PatientIDNamer,
+                NAME_REGISTRY.get(self.patient_namer).instantiate_with_metadata().fn,
+            )
+            assert isinstance(self._patient_namer, PatientIDNamer), type(self._patient_namer)
+        if self.date_namer:
+            self._date_namer = cast(
+                StudyDateNamer,
+                NAME_REGISTRY.get(self.date_namer).instantiate_with_metadata().fn,
+            )
+            assert isinstance(self._date_namer, StudyDateNamer), type(self._date_namer)
 
     def __call__(self, key: Optional[str], collection: RecordCollection, index: int, total: int) -> str:
+        uid = self.get_study_uid(collection)
+        if not uid:
+            return ""
+
+        uid = self._strip(uid)
+        uid = self._truncate(uid)
+        pid = self._call_patient_namer(key, collection, index, total) if self._patient_namer is not None else ""
+        date = self._call_date_namer(key, collection, index, total) if self._date_namer is not None else ""
+
+        parts = [s for s in (pid, date, f"{self.prefix}{uid}") if s]
+        return "_".join(parts)
+
+    @classmethod
+    def get_study_uid(cls, collection: RecordCollection) -> Optional[str]:
         uids = {
             uid for rec in collection if isinstance(rec, SupportsStudyUID) and (uid := rec.StudyInstanceUID) is not None
         }
-        if len(uids) > 1:
-            raise ValueError("Expected 1 StudyInstanceUID, but found {len(pids)}")
-        elif len(uids) == 1:
-            uid = next(iter(uids))
-            return f"{self.prefix}{uid}"
-        return ""
+        return next(iter(uids)) if len(uids) == 1 else None
+
+    def _truncate(self, uid: str) -> str:
+        if self.truncate is not None:
+            assert self.truncate > 0
+            uid = uid[-self.truncate :]
+        return uid
+
+    def _strip(self, uid: str) -> str:
+        if self.strip_period:
+            uid = uid.replace(".", "")
+        return uid
+
+    def _call_patient_namer(self, key: Optional[str], collection: RecordCollection, index: int, total: int) -> str:
+        assert self._patient_namer is not None
+        return self._patient_namer(key, collection, index, total)
+
+    def _call_date_namer(self, key: Optional[str], collection: RecordCollection, index: int, total: int) -> str:
+        assert self._date_namer is not None
+        return self._date_namer(key, collection, index, total)
 
 
 class Input:
@@ -142,23 +186,23 @@ class Input:
         self,
         sources: Union[PathLike, Iterable[PathLike]],
         records: Optional[Iterable[str]] = None,
-        groups: Iterable[str] = ["patient-id", "study-date", "study-uid"],
+        groups: Iterable[str] = ["patient-id", "study-uid"],
         helpers: Iterable[str] = [],
-        namers: Iterable[str] = ["patient-id", "study-date", "study-uid"],
+        namers: Iterable[str] = ["patient-id", "study-uid"],
         filters: Iterable[str] = [],
-        require_dicom: bool = False,
         **kwargs,
     ):
         if records is None:
             self.records = RECORD_REGISTRY.available_keys()
         else:
             self.records = records
-        self.groups = [GROUP_REGISTRY.get(g) for g in groups]
+        namers = list(namers)
+        groups = list(groups)
+        helpers = list(helpers)
+
+        self.grouper = bind_relevant_kwargs(Grouper, groups=groups, helpers=helpers, **kwargs)()
         self.namers = [NAME_REGISTRY.get(n)() for n in namers]
-        if not groups:
-            # Is there a use case for Input where a grouping operation wouldn't be used?
-            raise ValueError("`groups` cannot be empty")
-        if len(self.namers) != len(self.groups):
+        if len(namers) != len(groups):
             raise ValueError("Number of namers {namers} should match number of groups {groups}")
 
         # scan sources and build a RecordCollection with every valid file found
@@ -168,11 +212,7 @@ class Input:
         )
 
         # apply groupers to generate a dict of key -> group pairs
-        grouped_collections = {
-            key: grouped
-            for key, grouped in collection.group_by(*self.groups).items()
-            if not require_dicom or grouped.contains_record_type(DicomFileRecord)
-        }
+        grouped_collections = self.grouper(collection)
 
         # apply namers to generate a dict of (group name) -> group pairs
         self.cases: Dict[Tuple[str, ...], RecordCollection] = {}
@@ -181,10 +221,6 @@ class Input:
             group_key = (group_key,) if not isinstance(group_key, tuple) else group_key
             key = tuple(namer(k, group, i + 1, len(grouped_collections)) for namer, k in zip(self.namers, group_key))
             self.cases[key] = group
-
-    @property
-    def group_fn(self) -> Callable[[FileRecord], Hashable]:
-        return cast(Callable[[FileRecord], Hashable], self.groups[0])
 
     def __len__(self) -> int:
         return len(self.cases)
