@@ -284,6 +284,14 @@ class Laterality(EnumMixin):
     RIGHT = 2
     BILATERAL = 3
 
+    @property
+    def is_unilateral(self) -> bool:
+        return self in (Laterality.LEFT, Laterality.RIGHT)
+
+    @property
+    def is_unknown_or_none(self) -> bool:
+        return self in (Laterality.UNKNOWN, Laterality.NONE)
+
     @staticmethod
     def get_required_tags() -> List[Tag]:
         return [

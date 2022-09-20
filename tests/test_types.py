@@ -241,10 +241,37 @@ class TestLaterality:
             (Laterality.LEFT, False),
             (Laterality.BILATERAL, False),
             (Laterality.UNKNOWN, True),
+            (Laterality.NONE, False),
         ],
     )
     def test_is_unknown(self, orient, expected):
         assert orient.is_unknown == expected
+
+    @pytest.mark.parametrize(
+        "orient,expected",
+        [
+            (Laterality.RIGHT, False),
+            (Laterality.LEFT, False),
+            (Laterality.BILATERAL, False),
+            (Laterality.UNKNOWN, True),
+            (Laterality.NONE, True),
+        ],
+    )
+    def test_is_unknown_or_none(self, orient, expected):
+        assert orient.is_unknown_or_none == expected
+
+    @pytest.mark.parametrize(
+        "orient,expected",
+        [
+            (Laterality.RIGHT, True),
+            (Laterality.LEFT, True),
+            (Laterality.BILATERAL, False),
+            (Laterality.UNKNOWN, False),
+            (Laterality.NONE, False),
+        ],
+    )
+    def test_is_unilateral(self, orient, expected):
+        assert orient.is_unilateral == expected
 
     @pytest.mark.parametrize(
         "string,expected",
