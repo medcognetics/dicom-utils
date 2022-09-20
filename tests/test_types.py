@@ -274,6 +274,22 @@ class TestLaterality:
         assert orient.is_unilateral == expected
 
     @pytest.mark.parametrize(
+        "l1,l2,expected",
+        [
+            (Laterality.RIGHT, Laterality.BILATERAL, Laterality.BILATERAL),
+            (Laterality.LEFT, Laterality.RIGHT, Laterality.BILATERAL),
+            (Laterality.RIGHT, Laterality.LEFT, Laterality.BILATERAL),
+            (Laterality.LEFT, Laterality.LEFT, Laterality.LEFT),
+            (Laterality.RIGHT, Laterality.NONE, Laterality.RIGHT),
+            (Laterality.NONE, Laterality.NONE, Laterality.NONE),
+            (Laterality.UNKNOWN, Laterality.NONE, Laterality.NONE),
+            (Laterality.BILATERAL, Laterality.UNKNOWN, Laterality.BILATERAL),
+        ],
+    )
+    def test_reduce(self, l1, l2, expected):
+        assert l1.reduce(l2) == expected
+
+    @pytest.mark.parametrize(
         "string,expected",
         [
             ("rcc", Laterality.RIGHT),

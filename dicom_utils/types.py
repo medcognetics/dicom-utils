@@ -387,6 +387,37 @@ class Laterality(EnumMixin):
             return "r"
         return ""
 
+    def reduce(self, other: "Laterality") -> "Laterality":
+        r"""Reduces two :class:`Laterality` inputs according to the following rules:
+        * ANY + BILATERAL -> BILATERAL
+        * LEFT + RIGHT -> BILATERAL
+        * LEFT + (UNKNOWN/NONE) -> LEFT
+        * RIGHT + (UNKNOWN/NONE) -> RIGHT
+        * NONE + NONE -> NONE
+        * UNKOWN + UNKOWN -> UNKNOWN
+        """
+        # either input is unknown, fall back to __add__
+        if self.is_unknown or other.is_unknown:
+            return self + other
+
+        # if either input is bilateral, output should be bilateral
+        elif self == Laterality.BILATERAL or other == Laterality.BILATERAL:
+            return Laterality.BILATERAL
+
+        # if both inputs are unilateral complements, reduce to bilateral
+        # if either inputs is a unilateral non-complements, return the unilateral laterality
+        elif self.is_unilateral or other.is_unilateral:
+            return (
+                Laterality.BILATERAL
+                if self.is_unilateral and other.is_unilateral and self != other
+                else self
+                if self.is_unilateral
+                else other
+            )
+
+        # only remaining possibility
+        return Laterality.NONE
+
 
 CC_STRINGS: Final = {"cranio-caudal", "caudal-cranial"}
 ML_STRINGS: Final = {"medio-lateral", "medial-lateral"}
