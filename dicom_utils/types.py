@@ -592,10 +592,9 @@ class PixelSpacing:
         raise ValueError(f"Failed to parse PixelSpacing from {string}")
 
     @classmethod
-    def from_dicom(cls, dcm: Dicom) -> "PixelSpacing":
-        for tag in cls.get_required_tags():
+    def from_tags(cls, tags: Dict[Tag, Any]) -> "PixelSpacing":
+        for tag, spacing in tags.items():
             try:
-                spacing = get_value(dcm, tag, None)
                 if isinstance(spacing, str):
                     return cls.from_str(spacing)
                 elif isinstance(spacing, MultiValue):
@@ -604,6 +603,10 @@ class PixelSpacing:
             except ValueError:
                 pass
         raise RuntimeError("Failed to create PixelSpacing from DICOM")
+
+    @classmethod
+    def from_dicom(cls, dcm: Dicom) -> "PixelSpacing":
+        return cls.from_tags({tag: value for tag, value in get_tag_values(cls.get_required_tags(), dcm).items()})
 
     @staticmethod
     def get_required_tags() -> List[Tag]:

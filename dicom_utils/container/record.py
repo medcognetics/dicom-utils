@@ -30,6 +30,7 @@ from typing import (
 
 import pydicom
 from pydicom import Dataset, Sequence
+from pydicom.multival import MultiValue
 from pydicom.uid import SecondaryCaptureImageStorage
 
 
@@ -69,6 +70,7 @@ from ..types import DicomKeyError, DicomValueError
 from ..types import ImageType as IT
 from ..types import Laterality, MammogramType, MammogramView
 from ..types import PhotometricInterpretation as PI
+from ..types import PixelSpacing as PixelSpacingClass
 from ..types import ViewPosition, get_value, iterate_view_modifier_codes
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
@@ -572,6 +574,8 @@ class DicomImageFileRecord(DicomFileRecord):
     PhotometricInterpretation: Optional[PI] = None
     ImageType: Optional[IT] = None
     BitsStored: Optional[int] = None
+    PixelSpacing: Optional[Union[str, MultiValue]] = None
+    ImagerPixelSpacing: Optional[Union[str, MultiValue]] = None
     ViewCodeSequence: Optional[Dataset] = None
     ViewModifierCodeSequence: Optional[Dataset] = None
     ViewPosition: Optional[str] = None
@@ -596,6 +600,17 @@ class DicomImageFileRecord(DicomFileRecord):
             if meaning in keywords:
                 return True
         return False
+
+    @property
+    def pixel_spacing(self) -> Optional[PixelSpacingClass]:
+        if not self.PixelSpacing and not self.ImagerPixelSpacing:
+            return None
+        return PixelSpacingClass.from_tags(
+            {
+                Tag.PixelSpacing: self.PixelSpacing,
+                Tag.ImagerPixelSpacing: self.ImagerPixelSpacing,
+            }
+        )
 
     @property
     def view_modifier_codes(self) -> Iterator[Dataset]:
@@ -626,6 +641,7 @@ class DicomImageFileRecord(DicomFileRecord):
             dcm: Dicom file object
             modality: Optional modality override
         """
+        # raise an exception if Rows/Columns aren't present
         for tag in (Tag.Rows, Tag.Columns):
             value = get_value(dcm, tag, None)
             if value is None:

@@ -6,12 +6,13 @@ from dataclasses import fields, replace
 from io import IOBase
 from os import PathLike
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import pydicom
 import pytest
 from pydicom import DataElement, Sequence
 from pydicom.dataset import Dataset
+from pydicom.multival import MultiValue
 from pydicom.uid import AllTransferSyntaxes, SecondaryCaptureImageStorage
 
 from dicom_utils.container import FileRecord
@@ -25,7 +26,7 @@ from dicom_utils.container.record import (
 )
 from dicom_utils.dicom_factory import DicomFactory
 from dicom_utils.tags import Tag
-from dicom_utils.types import Laterality, MammogramType, ViewPosition, get_value
+from dicom_utils.types import Laterality, MammogramType, PixelSpacing, ViewPosition, get_value
 
 
 class TestStandardizedFilename:
@@ -396,6 +397,8 @@ class TestDicomImageFileRecord(TestDicomFileRecord):
             NumberOfFrames: Optional[int] = None,
             Modality: Optional[str] = "CT",
             view_modifier_code: Optional[str] = None,
+            PixelSpacing: Optional[Any] = MultiValue(str, [0.661468, 0.661468]),
+            ImagerPixelSpacing: Optional[Any] = None,
             **kwargs,
         ):
             filename = Path(tmp_path, filename)
@@ -415,6 +418,8 @@ class TestDicomImageFileRecord(TestDicomFileRecord):
                 NumberOfFrames=NumberOfFrames,
                 Modality=kwargs.get("modality", Modality),
                 ViewModifierCodeSequence=view_modifier_code_seq,
+                PixelSpacing=PixelSpacing,
+                ImagerPixelSpacing=ImagerPixelSpacing,
             )
             return record
 
@@ -471,6 +476,20 @@ class TestDicomImageFileRecord(TestDicomFileRecord):
         rec = record_factory(view_modifier_code=code)
         assert rec.is_magnified == exp
 
+    @pytest.mark.parametrize(
+        "spacing,imager_spacing,exp",
+        [
+            pytest.param("[0.01, 0.01]", None, PixelSpacing(0.01, 0.01)),
+            pytest.param(None, "[0.01, 0.01]", PixelSpacing(0.01, 0.01)),
+            pytest.param(MultiValue(str, [0.02, 0.02]), None, PixelSpacing(0.02, 0.02)),
+            pytest.param(None, MultiValue(str, [0.02, 0.02]), PixelSpacing(0.02, 0.02)),
+            pytest.param(None, None, None),
+        ],
+    )
+    def test_pixel_spacing(self, spacing, imager_spacing, exp, record_factory):
+        rec = record_factory(PixelSpacing=spacing, ImagerPixelSpacing=imager_spacing)
+        assert rec.pixel_spacing == exp
+
 
 class TestMammogramFileRecord(TestDicomFileRecord):
     @pytest.fixture
@@ -482,6 +501,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             NumberOfFrames: Optional[int] = None,
             Modality: Optional[str] = "MG",
             view_modifier_code: Optional[str] = "medio-lateral oblique",
+            PixelSpacing: Optional[Any] = MultiValue(str, [0.661468, 0.661468]),
+            ImagerPixelSpacing: Optional[Any] = None,
             laterality: Optional[Laterality] = Laterality.LEFT,
             view_position: Optional[ViewPosition] = ViewPosition.MLO,
             mammogram_type: Optional[MammogramType] = MammogramType.FFDM,
@@ -513,6 +534,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 NumberOfFrames=NumberOfFrames,
                 Modality=kwargs.get("modality", Modality),
                 ViewModifierCodeSequence=view_modifier_code_seq,
+                PixelSpacing=PixelSpacing,
+                ImagerPixelSpacing=ImagerPixelSpacing,
             )
             return record
 
