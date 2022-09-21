@@ -5,7 +5,13 @@ from typing import Optional
 
 import pytest
 
-from dicom_utils.container.protocols import SupportsManufacturer, SupportsPatientID, SupportsStudyUID, SupportsUID
+from dicom_utils.container.protocols import (
+    SupportsManufacturer,
+    SupportsPatientAge,
+    SupportsPatientID,
+    SupportsStudyUID,
+    SupportsUID,
+)
 
 
 class TestSupportsStudyUID:
@@ -125,3 +131,29 @@ class TestSupportsManufacturer:
             assert m is None
         else:
             assert m.group() == exp
+
+
+class TestSupportsPatientAge:
+    @pytest.fixture
+    def factory(self):
+        @dataclass
+        class Impl(SupportsPatientAge):
+            PatientAge: Optional[str] = None
+            PatientBirthDate: Optional[str] = None
+
+        return Impl
+
+    @pytest.mark.parametrize(
+        "age,exp",
+        [
+            pytest.param("095Y", 95),
+            pytest.param("020Y", 20),
+            pytest.param("99Y", 99),
+            pytest.param("32", 32),
+            pytest.param("", None),
+            pytest.param(None, None),
+        ],
+    )
+    def test_patient_age(self, factory, age, exp):
+        s = factory(age)
+        assert s.patient_age == exp
