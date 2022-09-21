@@ -584,6 +584,32 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         record = record_factory(view_position=view_pos)
         assert record.is_standard_mammo_view == exp
 
+    @pytest.mark.parametrize(
+        "spot,mag,secondary,for_proc,cad,exp",
+        [
+            pytest.param(False, False, False, False, False, True),
+            pytest.param(True, False, False, False, False, False),
+            pytest.param(False, True, False, False, False, False),
+            pytest.param(False, False, True, False, False, False),
+            pytest.param(False, False, False, True, False, False),
+            pytest.param(False, False, False, False, True, False),
+        ],
+    )
+    def test_is_standard_mammo_view_modifiers(self, mocker, spot, mag, secondary, for_proc, cad, exp, record_factory):
+        record = record_factory(view_position=ViewPosition.MLO)
+        if spot:
+            object.__setattr__(record, "is_spot_compression", True)
+        if mag:
+            object.__setattr__(record, "is_magnified", True)
+        if secondary:
+            # for some reason setting is_secondary_capture won't work
+            object.__setattr__(record, "SOPClassUID", SecondaryCaptureImageStorage)
+        if for_proc:
+            object.__setattr__(record, "is_for_processing", True)
+        if cad:
+            object.__setattr__(record, "is_cad", True)
+        assert record.is_standard_mammo_view == exp
+
     @pytest.mark.parametrize("secondary_capture", [False, True])
     def test_is_complete_mammo_case(self, secondary_capture, record_factory):
         record = record_factory()
@@ -714,3 +740,17 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         helpers = [ModalityHelper(force=force)]
         rec = MammogramFileRecord.from_file(path, helpers=helpers)
         assert rec.Modality == exp
+
+    @pytest.mark.parametrize(
+        "l1,l2,exp",
+        [
+            pytest.param(None, None, Laterality.NONE),
+            pytest.param(Laterality.LEFT, None, Laterality.LEFT),
+            pytest.param(None, Laterality.RIGHT, Laterality.RIGHT),
+            pytest.param(Laterality.LEFT, Laterality.RIGHT, Laterality.BILATERAL),
+        ],
+    )
+    def test_collection_laterality(self, l1, l2, exp, record_factory):
+        rec1 = record_factory(laterality=l1)
+        rec2 = record_factory(laterality=l2)
+        assert MammogramFileRecord.collection_laterality([rec1, rec2]) == exp
