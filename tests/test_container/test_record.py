@@ -601,7 +601,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         assert actual == expected
 
     @pytest.mark.parametrize(
-        "mtype,spot,mag,id,laterality,view_pos,uid,exp",
+        "mtype,spot,mag,id,laterality,view_pos,uid,secondary,for_proc,exp",
         [
             pytest.param(
                 MammogramType.FFDM,
@@ -611,6 +611,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.LEFT,
                 ViewPosition.MLO,
                 "1",
+                False,
+                False,
                 "ffdm_lmlo_1.dcm",
             ),
             pytest.param(
@@ -621,6 +623,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.RIGHT,
                 ViewPosition.CC,
                 "2",
+                False,
+                False,
                 "ffdm_rcc_2.dcm",
             ),
             pytest.param(
@@ -631,6 +635,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.RIGHT,
                 ViewPosition.XCCL,
                 "1",
+                False,
+                False,
                 "synth_rxccl_spot_mag_id_1.dcm",
             ),
             pytest.param(
@@ -641,11 +647,27 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.UNKNOWN,
                 ViewPosition.UNKNOWN,
                 "2",
+                False,
+                False,
                 "ffdm_2.dcm",
+            ),
+            pytest.param(
+                MammogramType.SYNTH,
+                True,
+                True,
+                True,
+                Laterality.RIGHT,
+                ViewPosition.XCCL,
+                "1",
+                True,
+                True,
+                "synth_rxccl_secondary_proc_spot_mag_id_1.dcm",
             ),
         ],
     )
-    def test_standardized_filename(self, mtype, spot, mag, id, laterality, view_pos, uid, exp, record_factory):
+    def test_standardized_filename(
+        self, mtype, spot, mag, id, laterality, view_pos, uid, secondary, for_proc, exp, record_factory
+    ):
         seq = []
         if spot:
             seq.append(make_view_modifier_code("spot compression"))
@@ -664,6 +686,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             ViewModifierCodeSequence=seq,
             laterality=laterality,
             view_position=view_pos,
+            SOPClassUID=SecondaryCaptureImageStorage if secondary else None,
+            PresentationIntentType="FOR PROCESSING" if for_proc else None,
         )
         actual = record.standardized_filename(uid)
         assert isinstance(actual, StandardizedFilename)

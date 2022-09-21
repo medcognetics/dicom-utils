@@ -3,6 +3,7 @@
 
 
 import logging
+import warnings
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -105,8 +106,12 @@ class Grouper:
                 result = {k: v for k, v in mapped}
                 mapper.close_bar()
 
-        end_len = sum(len(c) for c in result.values())
-        assert start_len == end_len, "A record was lost during grouping"
+        end_len = sum(len(collection) for collection in result.values())
+        if start_len != end_len:
+            warnings.warn(
+                "Grouping began with {start_len} records and ended with {end_len} records. "
+                "This may be expected behavior depending on what helpers are being used."
+            )
         return cast(Dict[Hashable, RecordCollection], result)
 
     @classmethod
