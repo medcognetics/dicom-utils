@@ -277,6 +277,16 @@ class TestDicomFileRecord(TestFileRecord):
         proto.__class__.from_file(proto.path)
         spy.assert_called_once()
 
+    @pytest.mark.parametrize("file_exists", [True, False])
+    def test_from_dicom(self, mocker, record_factory, file_exists):
+        proto = record_factory()
+        with pydicom.dcmread(proto.path) as dcm:
+            if not file_exists:
+                proto.path.unlink()
+                assert not proto.path.is_file()
+            result = proto.__class__.from_dicom(proto.path, dcm)
+        assert result == proto
+
     @pytest.mark.parametrize(
         "sop,series,exp",
         [

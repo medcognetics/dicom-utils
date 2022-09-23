@@ -492,8 +492,6 @@ class DicomFileRecord(
             dcm: Dicom file object
         """
         path = Path(path)
-        if not path.is_file():
-            raise FileNotFoundError(path)
         values = {tag.name: get_value(dcm, tag, None, try_file_meta=True) for tag in cls.get_required_tags()}
         values.update(overrides)
 
