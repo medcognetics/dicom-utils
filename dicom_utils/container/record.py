@@ -30,6 +30,7 @@ from typing import (
 
 import pydicom
 from pydicom import Dataset, Sequence
+from pydicom.multival import MultiValue
 from pydicom.uid import SecondaryCaptureImageStorage
 
 
@@ -69,10 +70,19 @@ from ..types import DicomKeyError, DicomValueError
 from ..types import ImageType as IT
 from ..types import Laterality, MammogramType, MammogramView
 from ..types import PhotometricInterpretation as PI
+from ..types import PixelSpacing as PixelSpacingClass
 from ..types import ViewPosition, get_value, iterate_view_modifier_codes
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
-from .protocols import SupportsManufacturer, SupportsPatientID, SupportsStudyDate, SupportsStudyUID, SupportsUID
+from .protocols import (
+    SupportsGenerated,
+    SupportsManufacturer,
+    SupportsPatientAge,
+    SupportsPatientID,
+    SupportsStudyDate,
+    SupportsStudyUID,
+    SupportsUID,
+)
 
 
 STANDARD_MAMMO_VIEWS: Final[Set[MammogramView]] = {
@@ -103,7 +113,11 @@ class StandardizedFilename(PosixPath):
 
     @property
     def prefix(self) -> str:
-        return SEP.join(self.tokenize()[:FILE_ID_IDX])
+        return SEP.join(self.prefix_parts)
+
+    @property
+    def prefix_parts(self) -> List[str]:
+        return self.tokenize()[:FILE_ID_IDX]
 
     @property
     def file_id(self) -> str:
@@ -323,7 +337,16 @@ class FileRecord:
 
 @RECORD_REGISTRY(name="dicom", suffixes=[".dcm"])
 @dataclass(frozen=True, order=False, eq=False)
-class DicomFileRecord(FileRecord, SupportsStudyUID, SupportsStudyDate, SupportsManufacturer, SupportsUID):
+class DicomFileRecord(
+    FileRecord,
+    SupportsStudyUID,
+    SupportsStudyDate,
+    SupportsManufacturer,
+    SupportsUID,
+    SupportsPatientID,
+    SupportsPatientAge,
+    SupportsGenerated,
+):
     r"""Data structure for storing critical information about a DICOM file.
     File IO operations on DICOMs can be expensive, so this class collects all
     required information in a single pass to avoid repeated file opening.
@@ -337,6 +360,8 @@ class DicomFileRecord(FileRecord, SupportsStudyUID, SupportsStudyDate, SupportsM
     BodyPartExamined: Optional[str] = None
     PatientOrientation: Optional[List[str]] = None
     StudyDate: Optional[str] = None
+    ContentDate: Optional[str] = None
+    AcquisitionDate: Optional[str] = None
     SeriesDescription: Optional[str] = None
     StudyDescription: Optional[str] = None
     PatientName: Optional[str] = None
@@ -347,7 +372,11 @@ class DicomFileRecord(FileRecord, SupportsStudyUID, SupportsStudyDate, SupportsM
     ManufacturerModelNumber: Optional[str] = None
     PresentationIntentType: Optional[str] = None
     PatientAge: Optional[str] = None
+    PatientBirthDate: Optional[str] = None
     BodyPartThickness: Optional[str] = None
+
+    generated: bool = False
+    is_cad: bool = False
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, type(self)):
@@ -419,6 +448,8 @@ class DicomFileRecord(FileRecord, SupportsStudyUID, SupportsStudyDate, SupportsM
         result["secondary_capture"] = self.is_secondary_capture
         result["diagnostic"] = self.is_diagnostic
         result["screening"] = self.is_screening
+        result["is_cad"] = self.is_cad
+        result["generated"] = self.generated
         return result
 
     @classmethod
@@ -519,6 +550,8 @@ class DicomFileRecord(FileRecord, SupportsStudyUID, SupportsStudyDate, SupportsM
             path = path.add_modifier("secondary")
         if self.is_for_processing:
             path = path.add_modifier("proc")
+        if self.is_cad:
+            path = path.add_modifier("cad")
         return path
 
     @classmethod
@@ -541,6 +574,8 @@ class DicomImageFileRecord(DicomFileRecord):
     PhotometricInterpretation: Optional[PI] = None
     ImageType: Optional[IT] = None
     BitsStored: Optional[int] = None
+    PixelSpacing: Optional[Union[str, MultiValue]] = None
+    ImagerPixelSpacing: Optional[Union[str, MultiValue]] = None
     ViewCodeSequence: Optional[Dataset] = None
     ViewModifierCodeSequence: Optional[Dataset] = None
     ViewPosition: Optional[str] = None
@@ -565,6 +600,17 @@ class DicomImageFileRecord(DicomFileRecord):
             if meaning in keywords:
                 return True
         return False
+
+    @property
+    def pixel_spacing(self) -> Optional[PixelSpacingClass]:
+        if not self.PixelSpacing and not self.ImagerPixelSpacing:
+            return None
+        return PixelSpacingClass.from_tags(
+            {
+                Tag.PixelSpacing: self.PixelSpacing,
+                Tag.ImagerPixelSpacing: self.ImagerPixelSpacing,
+            }
+        )
 
     @property
     def view_modifier_codes(self) -> Iterator[Dataset]:
@@ -595,6 +641,7 @@ class DicomImageFileRecord(DicomFileRecord):
             dcm: Dicom file object
             modality: Optional modality override
         """
+        # raise an exception if Rows/Columns aren't present
         for tag in (Tag.Rows, Tag.Columns):
             value = get_value(dcm, tag, None)
             if value is None:
@@ -689,6 +736,7 @@ class MammogramFileRecord(DicomImageFileRecord):
             and not self.is_magnified
             and not self.is_secondary_capture
             and not self.is_for_processing
+            and not self.is_cad
         )
 
     @property
@@ -697,11 +745,10 @@ class MammogramFileRecord(DicomImageFileRecord):
 
     @classmethod
     def is_complete_mammo_case(cls, records: Iterable["MammogramFileRecord"]) -> bool:
-        study_uid: Optional[StudyUID] = None
         needed_views: Dict[MammogramView, Optional[MammogramFileRecord]] = {k: None for k in STANDARD_MAMMO_VIEWS}
         for rec in records:
-            # don't consider secondary captures
-            if not isinstance(rec, MammogramFileRecord) or rec.is_secondary_capture:
+            # only consider standard views
+            if not isinstance(rec, MammogramFileRecord) or not rec.is_standard_mammo_view:
                 continue
             key = rec.mammogram_view
             if key in needed_views:
@@ -744,7 +791,8 @@ class MammogramFileRecord(DicomImageFileRecord):
 
         # modifiers
         # TODO make this a loop/lookup
-        modifiers: List[str] = []
+        path = super().standardized_filename(file_id)
+        modifiers: List[str] = path.prefix_parts[1:]
         if self.is_spot_compression:
             modifiers.append("spot")
         if self.is_magnified:
@@ -764,7 +812,7 @@ class MammogramFileRecord(DicomImageFileRecord):
 
         prefix = [filetype, view, *modifiers]
         prefix = [p for p in prefix if p]
-        path = super().standardized_filename(file_id).with_prefix(*prefix)
+        path = path.with_prefix(*prefix)
         return path.with_suffix(".dcm")
 
     @classmethod

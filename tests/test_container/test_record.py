@@ -6,12 +6,13 @@ from dataclasses import fields, replace
 from io import IOBase
 from os import PathLike
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import pydicom
 import pytest
 from pydicom import DataElement, Sequence
 from pydicom.dataset import Dataset
+from pydicom.multival import MultiValue
 from pydicom.uid import AllTransferSyntaxes, SecondaryCaptureImageStorage
 
 from dicom_utils.container import FileRecord
@@ -25,7 +26,7 @@ from dicom_utils.container.record import (
 )
 from dicom_utils.dicom_factory import DicomFactory
 from dicom_utils.tags import Tag
-from dicom_utils.types import Laterality, MammogramType, ViewPosition, get_value
+from dicom_utils.types import Laterality, MammogramType, PixelSpacing, ViewPosition, get_value
 
 
 class TestStandardizedFilename:
@@ -396,6 +397,8 @@ class TestDicomImageFileRecord(TestDicomFileRecord):
             NumberOfFrames: Optional[int] = None,
             Modality: Optional[str] = "CT",
             view_modifier_code: Optional[str] = None,
+            PixelSpacing: Optional[Any] = MultiValue(str, [0.661468, 0.661468]),
+            ImagerPixelSpacing: Optional[Any] = None,
             **kwargs,
         ):
             filename = Path(tmp_path, filename)
@@ -415,6 +418,8 @@ class TestDicomImageFileRecord(TestDicomFileRecord):
                 NumberOfFrames=NumberOfFrames,
                 Modality=kwargs.get("modality", Modality),
                 ViewModifierCodeSequence=view_modifier_code_seq,
+                PixelSpacing=PixelSpacing,
+                ImagerPixelSpacing=ImagerPixelSpacing,
             )
             return record
 
@@ -471,6 +476,20 @@ class TestDicomImageFileRecord(TestDicomFileRecord):
         rec = record_factory(view_modifier_code=code)
         assert rec.is_magnified == exp
 
+    @pytest.mark.parametrize(
+        "spacing,imager_spacing,exp",
+        [
+            pytest.param("[0.01, 0.01]", None, PixelSpacing(0.01, 0.01)),
+            pytest.param(None, "[0.01, 0.01]", PixelSpacing(0.01, 0.01)),
+            pytest.param(MultiValue(str, [0.02, 0.02]), None, PixelSpacing(0.02, 0.02)),
+            pytest.param(None, MultiValue(str, [0.02, 0.02]), PixelSpacing(0.02, 0.02)),
+            pytest.param(None, None, None),
+        ],
+    )
+    def test_pixel_spacing(self, spacing, imager_spacing, exp, record_factory):
+        rec = record_factory(PixelSpacing=spacing, ImagerPixelSpacing=imager_spacing)
+        assert rec.pixel_spacing == exp
+
 
 class TestMammogramFileRecord(TestDicomFileRecord):
     @pytest.fixture
@@ -482,6 +501,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             NumberOfFrames: Optional[int] = None,
             Modality: Optional[str] = "MG",
             view_modifier_code: Optional[str] = "medio-lateral oblique",
+            PixelSpacing: Optional[Any] = MultiValue(str, [0.661468, 0.661468]),
+            ImagerPixelSpacing: Optional[Any] = None,
             laterality: Optional[Laterality] = Laterality.LEFT,
             view_position: Optional[ViewPosition] = ViewPosition.MLO,
             mammogram_type: Optional[MammogramType] = MammogramType.FFDM,
@@ -513,6 +534,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 NumberOfFrames=NumberOfFrames,
                 Modality=kwargs.get("modality", Modality),
                 ViewModifierCodeSequence=view_modifier_code_seq,
+                PixelSpacing=PixelSpacing,
+                ImagerPixelSpacing=ImagerPixelSpacing,
             )
             return record
 
@@ -584,6 +607,32 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         record = record_factory(view_position=view_pos)
         assert record.is_standard_mammo_view == exp
 
+    @pytest.mark.parametrize(
+        "spot,mag,secondary,for_proc,cad,exp",
+        [
+            pytest.param(False, False, False, False, False, True),
+            pytest.param(True, False, False, False, False, False),
+            pytest.param(False, True, False, False, False, False),
+            pytest.param(False, False, True, False, False, False),
+            pytest.param(False, False, False, True, False, False),
+            pytest.param(False, False, False, False, True, False),
+        ],
+    )
+    def test_is_standard_mammo_view_modifiers(self, mocker, spot, mag, secondary, for_proc, cad, exp, record_factory):
+        record = record_factory(view_position=ViewPosition.MLO)
+        if spot:
+            object.__setattr__(record, "is_spot_compression", True)
+        if mag:
+            object.__setattr__(record, "is_magnified", True)
+        if secondary:
+            # for some reason setting is_secondary_capture won't work
+            object.__setattr__(record, "SOPClassUID", SecondaryCaptureImageStorage)
+        if for_proc:
+            object.__setattr__(record, "is_for_processing", True)
+        if cad:
+            object.__setattr__(record, "is_cad", True)
+        assert record.is_standard_mammo_view == exp
+
     @pytest.mark.parametrize("secondary_capture", [False, True])
     def test_is_complete_mammo_case(self, secondary_capture, record_factory):
         record = record_factory()
@@ -601,7 +650,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         assert actual == expected
 
     @pytest.mark.parametrize(
-        "mtype,spot,mag,id,laterality,view_pos,uid,exp",
+        "mtype,spot,mag,id,laterality,view_pos,uid,secondary,for_proc,exp",
         [
             pytest.param(
                 MammogramType.FFDM,
@@ -611,6 +660,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.LEFT,
                 ViewPosition.MLO,
                 "1",
+                False,
+                False,
                 "ffdm_lmlo_1.dcm",
             ),
             pytest.param(
@@ -621,6 +672,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.RIGHT,
                 ViewPosition.CC,
                 "2",
+                False,
+                False,
                 "ffdm_rcc_2.dcm",
             ),
             pytest.param(
@@ -631,6 +684,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.RIGHT,
                 ViewPosition.XCCL,
                 "1",
+                False,
+                False,
                 "synth_rxccl_spot_mag_id_1.dcm",
             ),
             pytest.param(
@@ -641,11 +696,27 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.UNKNOWN,
                 ViewPosition.UNKNOWN,
                 "2",
+                False,
+                False,
                 "ffdm_2.dcm",
+            ),
+            pytest.param(
+                MammogramType.SYNTH,
+                True,
+                True,
+                True,
+                Laterality.RIGHT,
+                ViewPosition.XCCL,
+                "1",
+                True,
+                True,
+                "synth_rxccl_secondary_proc_spot_mag_id_1.dcm",
             ),
         ],
     )
-    def test_standardized_filename(self, mtype, spot, mag, id, laterality, view_pos, uid, exp, record_factory):
+    def test_standardized_filename(
+        self, mtype, spot, mag, id, laterality, view_pos, uid, secondary, for_proc, exp, record_factory
+    ):
         seq = []
         if spot:
             seq.append(make_view_modifier_code("spot compression"))
@@ -664,6 +735,8 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             ViewModifierCodeSequence=seq,
             laterality=laterality,
             view_position=view_pos,
+            SOPClassUID=SecondaryCaptureImageStorage if secondary else None,
+            PresentationIntentType="FOR PROCESSING" if for_proc else None,
         )
         actual = record.standardized_filename(uid)
         assert isinstance(actual, StandardizedFilename)
@@ -690,3 +763,17 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         helpers = [ModalityHelper(force=force)]
         rec = MammogramFileRecord.from_file(path, helpers=helpers)
         assert rec.Modality == exp
+
+    @pytest.mark.parametrize(
+        "l1,l2,exp",
+        [
+            pytest.param(None, None, Laterality.NONE),
+            pytest.param(Laterality.LEFT, None, Laterality.LEFT),
+            pytest.param(None, Laterality.RIGHT, Laterality.RIGHT),
+            pytest.param(Laterality.LEFT, Laterality.RIGHT, Laterality.BILATERAL),
+        ],
+    )
+    def test_collection_laterality(self, l1, l2, exp, record_factory):
+        rec1 = record_factory(laterality=l1)
+        rec2 = record_factory(laterality=l2)
+        assert MammogramFileRecord.collection_laterality([rec1, rec2]) == exp

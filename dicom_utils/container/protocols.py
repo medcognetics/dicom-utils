@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import re
-from typing import Optional, Protocol, Union, cast, runtime_checkable
+from typing import Optional, Protocol, Union, runtime_checkable
 
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 
@@ -26,7 +26,7 @@ class SupportsPatientID(Protocol):
 
     def same_patient_as(self, other: "SupportsPatientID") -> bool:
         r"""Checks if this record references the same patient as record ``other``."""
-        if self.PatientID:
+        if self.PatientID or other.PatientID:
             return self.PatientID == other.PatientID
         else:
             return bool(self.PatientName) and self.PatientName == other.PatientName
@@ -47,16 +47,27 @@ class SupportsUID(Protocol):
         r"""Tests if the record has a SeriesInstanceUID or SOPInstanceUID"""
         return bool(self.SeriesInstanceUID or self.SOPInstanceUID)
 
-    def same_uid_as(self, other: "SupportsUID") -> bool:
+    def same_uid_as(self, other: "SupportsUID", prefer_sop: bool = True) -> bool:
         r"""Checks if this record is part of the same study as record ``other``."""
-        return bool(self.SOPInstanceUID) and bool(other.SOPInstanceUID) and self.SOPInstanceUID == other.SOPInstanceUID
+        if not self.has_uid and other.has_uid:
+            return False
+
+        attr_to_check = "SOPInstanceUID" if prefer_sop else "SeriesInstanceUID"
+        if (v_self := getattr(self, attr_to_check)) and (v_other := getattr(other, attr_to_check)):
+            return v_self == v_other
+
+        fallback_attr = "SOPInstanceUID" if not prefer_sop else "SeriesInstanceUID"
+        assert attr_to_check != fallback_attr
+        v_self = getattr(self, fallback_attr)
+        v_other = getattr(other, fallback_attr)
+        return bool(v_self) and bool(v_other) and v_self == v_other
 
     def get_uid(self, prefer_sop: bool = True) -> ImageUID:
         r"""Gets an image level UID. The UID will be chosen from SeriesInstanceUID and SOPInstanceUID,
         with preference as specified in ``prefer_sop``.
         """
         if not self.has_uid:
-            raise AttributeError("DicomFileRecord has no UID")
+            raise AttributeError(f"{type(self)} has no UID")
         if prefer_sop:
             result = self.SOPInstanceUID or self.SeriesInstanceUID
         else:
@@ -85,8 +96,27 @@ class SupportsStudyDate(Protocol):
 
 
 @runtime_checkable
+class SupportsPatientAge(Protocol):
+    PatientAge: Optional[str] = None
+    PatientBirthDate: Optional[str] = None
+
+    @property
+    def patient_age(self) -> Optional[int]:
+        r"""PatientAge as an int"""
+        if not self.PatientAge:
+            return None
+
+        try:
+            return int(re.sub(r"[^0-9]", "", self.PatientAge))
+        except Exception:
+            pass
+        return None
+
+
+@runtime_checkable
 class SupportsGenerated(Protocol):
-    generated: bool
+    generated: bool = False
+    is_cad: bool = False
 
 
 @runtime_checkable
@@ -96,7 +126,17 @@ class SupportsManufacturer(Protocol):
     ManufacturerModelNumber: Optional[str] = None
 
     def search_manufacturer_info(self, pattern: Union[str, re.Pattern]) -> Optional[re.Match]:
-        pattern = pattern if isinstance(pattern, str) else cast(re.Pattern, re.compile(pattern))
+        r"""Applies a regex search against known manufacturer info.
+
+        Keys are searched in the following order:
+            * ``Manufacturer``
+            * ``ManufacturerModelName``
+            * ``ManufacturerModelNumber``
+
+        Args:
+            pattern: A regex string or :class:`re.Pattern` to search with
+        """
+        pattern = pattern if isinstance(pattern, re.Pattern) else re.compile(pattern)
         assert isinstance(pattern, re.Pattern)
         if self.Manufacturer and (m := pattern.search(self.Manufacturer)):
             return m
