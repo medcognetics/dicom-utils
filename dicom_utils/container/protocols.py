@@ -145,3 +145,14 @@ class SupportsManufacturer(Protocol):
         elif self.ManufacturerModelNumber and (m := pattern.search(self.ManufacturerModelNumber)):
             return m
         return None
+
+
+@runtime_checkable
+class SupportsSite(Protocol):
+    InstitutionAddress: Optional[str] = None
+    InstitutionName: Optional[str] = None
+    TreatmentSite: Optional[str] = None
+
+    @property
+    def site(self) -> Optional[str]:
+        return self.InstitutionAddress or self.TreatmentSite or self.InstitutionName
