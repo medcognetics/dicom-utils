@@ -79,6 +79,7 @@ from .protocols import (
     SupportsManufacturer,
     SupportsPatientAge,
     SupportsPatientID,
+    SupportsSite,
     SupportsStudyDate,
     SupportsStudyUID,
     SupportsUID,
@@ -346,6 +347,7 @@ class DicomFileRecord(
     SupportsPatientID,
     SupportsPatientAge,
     SupportsGenerated,
+    SupportsSite,
 ):
     r"""Data structure for storing critical information about a DICOM file.
     File IO operations on DICOMs can be expensive, so this class collects all
@@ -374,6 +376,9 @@ class DicomFileRecord(
     PatientAge: Optional[str] = None
     PatientBirthDate: Optional[str] = None
     BodyPartThickness: Optional[str] = None
+    InstitutionAddress: Optional[str] = None
+    InstitutionName: Optional[str] = None
+    TreatmentSite: Optional[str] = None
 
     generated: bool = False
     is_cad: bool = False
@@ -381,6 +386,8 @@ class DicomFileRecord(
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, type(self)):
             return False
+        Tag.TreatmentSite
+        Tag.InstitutionAddress
 
         if self.SOPInstanceUID and other.SOPInstanceUID:
             return self.same_uid_as(other)

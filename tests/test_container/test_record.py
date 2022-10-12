@@ -396,6 +396,26 @@ class TestDicomFileRecord(TestFileRecord):
             assert rec1 != rec2
             assert rec1 == rec3
 
+    @pytest.mark.parametrize(
+        "addr,name,ts,exp",
+        [
+            (None, None, None, None),
+            ("foo", None, None, "foo"),
+            (None, "foo", None, "foo"),
+            (None, None, "foo", "foo"),
+            ("foo", "bar", "baz", "foo"),
+            (None, "bar", "baz", "baz"),
+        ],
+    )
+    def test_site(self, addr, name, ts, exp, record_factory):
+        rec = record_factory("foo.dcm")
+        rec = rec.replace(
+            InstitutionAddress=addr,
+            InstitutionName=name,
+            TreatmentSite=ts,
+        )
+        assert rec.site == exp
+
 
 class TestDicomImageFileRecord(TestDicomFileRecord):
     @pytest.fixture
