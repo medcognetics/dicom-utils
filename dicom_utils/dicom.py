@@ -287,7 +287,8 @@ def path_to_dicoms(path: Path) -> Iterator[Dicom]:
 def set_pixels(dcm: FileDataset, arr: np.ndarray, syntax: UID) -> FileDataset:
     r"""Sets the pixels of a DICOM object from a numpy array, accounting for TransferSyntaxUID."""
     if syntax.is_compressed:
-        # swap in a temporary uncompressed TSUID
+        # NOTE: dcm.file_meta.TransferSyntaxUID must be an uncompressed TSUID when calling dcm.compress().
+        # swap in a temporary uncompressed TSUID to address this
         dcm.file_meta.TransferSyntaxUID = ImplicitVRLittleEndian
         # encapsulate frames
         if int(dcm.NumberOfFrames) > 1:
