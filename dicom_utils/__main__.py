@@ -8,6 +8,8 @@ from typing import Callable
 
 from .cli.cat import get_parser as cat_parser
 from .cli.cat import main as cat_main
+from .cli.decompress import get_parser as decompress_parser
+from .cli.decompress import main as decompress_main
 from .cli.dicom2img import get_parser as dicom2img_parser
 from .cli.dicom2img import main as dicom2img_main
 from .cli.dicom_types import get_parser as dicom_types_parser
@@ -62,6 +64,7 @@ def main() -> None:
         ("dicom_types", "Summarize image types", dicom_types_main, dicom_types_parser),
         ("overlap", "Check overlap of study UIDs between dirs", overlap_main, overlap_parser),
         ("validate", "Validate metadata of a DICOM file", validate_main, validate_parser),
+        ("decompress", "Decompress pixel contents of a DICOM file", decompress_main, decompress_parser),
     ]:
         add_subparser(subparsers, name=name, help=help, main=main, modifier=modifier)
 

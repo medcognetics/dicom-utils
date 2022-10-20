@@ -12,7 +12,7 @@ from numpy import ndarray
 from pydicom import FileDataset
 from pydicom.encaps import encapsulate
 from pydicom.pixel_data_handlers.util import apply_voi_lut
-from pydicom.uid import UID
+from pydicom.uid import UID, ImplicitVRLittleEndian
 
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
@@ -287,12 +287,17 @@ def path_to_dicoms(path: Path) -> Iterator[Dicom]:
 def set_pixels(dcm: FileDataset, arr: np.ndarray, syntax: UID) -> FileDataset:
     r"""Sets the pixels of a DICOM object from a numpy array, accounting for TransferSyntaxUID."""
     if syntax.is_compressed:
+        # swap in a temporary uncompressed TSUID
+        dcm.file_meta.TransferSyntaxUID = ImplicitVRLittleEndian
+        # encapsulate frames
         if int(dcm.NumberOfFrames) > 1:
             new_data = encapsulate([a.tobytes() for a in arr], has_bot=False)
         else:
             new_data = encapsulate([arr.tobytes()])
+        # update dcm with compressed attributes
         dcm.PixelData = new_data
         dcm.compress(syntax)
+        dcm.file_meta.TransferSyntaxUID = syntax
     else:
         dcm.PixelData = arr.tobytes()
     dcm.file_meta.TransferSyntaxUID = syntax
