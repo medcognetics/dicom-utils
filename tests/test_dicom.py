@@ -8,6 +8,7 @@ import numpy as np
 import pydicom
 import pytest
 from numpy.random import default_rng
+from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
 from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted, set_pixels
@@ -123,17 +124,19 @@ def test_deprecated_is_inverted(dicom_object):
 
 
 @pytest.mark.parametrize(
-    "rows,cols,num_frames,bits",
+    "rows,cols,num_frames,bits,orig_tsuid",
     [
-        pytest.param(32, 32, 1, 16),
-        pytest.param(32, 64, 1, 16),
-        pytest.param(32, 64, 3, 16),
+        pytest.param(32, 32, 1, 16, ImplicitVRLittleEndian),
+        pytest.param(32, 64, 1, 16, ImplicitVRLittleEndian),
+        pytest.param(32, 64, 3, 16, ImplicitVRLittleEndian),
+        pytest.param(32, 64, 3, 16, RLELossless),
     ],
 )
-def test_set_pixels(dicom_object, rows, cols, num_frames, bits, transfer_syntax):
+def test_set_pixels(dicom_object, rows, cols, num_frames, bits, transfer_syntax, orig_tsuid):
     dicom_object.Rows = rows
     dicom_object.Columns = cols
     dicom_object.NumberOfFrames = num_frames
+    dicom_object.file_meta.TransferSyntaxUID = orig_tsuid
 
     low = 0
     high = bits
