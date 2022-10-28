@@ -1,18 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import os
+import subprocess
 import sys
 from os import PathLike
 from pathlib import Path
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
 from warnings import warn
 
 import numpy as np
 import pydicom
 from numpy import ndarray
+from PIL import Image
 from pydicom import FileDataset
 from pydicom.encaps import encapsulate
 from pydicom.pixel_data_handlers.util import apply_voi_lut
-from pydicom.uid import UID, ImplicitVRLittleEndian
+from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian
 
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
@@ -171,6 +175,8 @@ def read_dicom_image(
     strict_interp: bool = False,
     volume_handler: VolumeHandler = KeepVolume(),
     as_uint8: bool = False,
+    use_nvjpeg: Optional[bool] = False,
+    nvjpeg_batch_size: Optional[int] = None,
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -238,6 +244,10 @@ def read_dicom_image(
         D: int = int(dcm.get("NumberOfFrames", 1))
         dims = (C, D, *dims[-2:]) if D > 1 else (C, *dims[-2:])
 
+        # decompress with GPU if requested
+        if use_nvjpeg is None or use_nvjpeg:
+            dcm = decompress(dcm, use_nvjpeg=use_nvjpeg, batch_size=nvjpeg_batch_size)
+
     # DICOM is channels last, so permute dims
     channels_last_dims = *dims[1:], dims[0]
     pixels = dcm_to_pixels(dcm, channels_last_dims, strict_interp)
@@ -303,3 +313,105 @@ def set_pixels(dcm: FileDataset, arr: np.ndarray, syntax: UID) -> FileDataset:
         dcm.PixelData = arr.tobytes()
     dcm.file_meta.TransferSyntaxUID = syntax
     return dcm
+
+
+def decompress(
+    dcm: Dicom,
+    strict: bool = False,
+    use_nvjpeg: Optional[bool] = None,
+    batch_size: Optional[int] = None,
+    verbose: bool = False,
+) -> Dicom:
+    r"""Decompress pixel data of a DICOM object
+
+    Args:
+        dcm: DICOM object to decompress
+        strict: Raise an error if a decompressed DICOM is given as input
+        use_nvjpeg: Use GPU accelerated decompression. Set to ``None`` to use if available
+        batch_size: GPU decompression batch size. Set to ``None`` to defer to environment variable
+        ``NVJPEG2K_BATCH_SIZE``
+
+    Returns:
+        DICOM object with decompressed pixel data and ExplicitVRLittleEndian transfer syntax.
+    """
+    tsuid = dcm.file_meta.TransferSyntaxUID
+    if not tsuid.is_compressed:
+        if strict:
+            raise RuntimeError(f"TransferSyntaxUID {tsuid} is already decompressed")
+        else:
+            return dcm
+
+    use_nvjpeg = use_nvjpeg if use_nvjpeg is not None else nvjpeg2k_is_available()
+    if use_nvjpeg:
+        batch_size = batch_size or int(os.environ["NVJPEG2K_BATCH_SIZE"])
+        pixels = nvjpeg_decompress(dcm, batch_size, verbose)
+    else:
+        pixels = dcm.pixel_array
+    assert isinstance(dcm, FileDataset)
+    dcm = set_pixels(dcm, pixels, ExplicitVRLittleEndian)
+    return dcm
+
+
+NVJPEG2K = os.environ.get("NVJPEG2K_PATH", None)
+
+
+def nvjpeg2k_is_available() -> bool:  # pragma: no cover
+    return NVJPEG2K is not None and Path(NVJPEG2K).is_file()
+
+
+def check_nvjpeg() -> None:  # pragma: no cover
+    if NVJPEG2K is None:
+        raise EnvironmentError("NVJPEG2K_PATH should be set to the path of the decoder script")
+    elif not Path(NVJPEG2K).is_file():
+        raise FileNotFoundError(NVJPEG2K)
+
+
+# TODO find a way to create a small JPEG2K file for testing
+def nvjpeg_decompress(
+    dcm: Dicom,
+    batch_size: int = 4,
+    verbose: bool = False,
+) -> np.ndarray:  # pragma: no cover
+    r"""Decompress pixel data of a DICOM object with NVJPEG2000
+
+    Args:
+        dcm: DICOM object to decompress
+        batch_size: GPU decompression batch size. Set to ``None`` to defer to environment variable
+        ``NVJPEG2K_BATCH_SIZE``.
+
+    Returns:
+        Decompressed pixel array
+    """
+
+    # check nvjpeg available and file is JPEG2000 compressed
+    check_nvjpeg()
+
+    # extract iterator of compressed frames
+    frames = VolumeHandler.iterate_frames(dcm)
+
+    # create temp dir for NVJPEG inputs
+    with TemporaryDirectory(prefix="nvjpeg_in") as td_in:
+        # write each frame to a temp file in memory
+        files = {}
+        for f in frames:
+            file = NamedTemporaryFile("wb", dir=td_in)
+            file.write(f)
+            file.flush()
+            files[Path(file.name).name] = file
+        total_frames = len(files)
+
+        # create temp dir for NVJPEG outputs
+        with TemporaryDirectory(prefix="nvjpeg_out") as td_out:
+            # call NVJPEG
+            cmd = [NVJPEG2K, "-i", td_in, "-o", td_out, "-b", str(batch_size), "-v"]
+            subprocess.run(cmd, capture_output=not verbose)
+
+            for f in files.values():
+                f.close()
+
+            # build ordered list of frames to read and load them as numpy arrays
+            files = [Path(td_out, k).with_suffix(".pgm") for k in files.keys()]
+            assert all(f.is_file() for f in files)
+            assert len(files) == total_frames
+            pixels = np.stack([np.asarray(Image.open(f), dtype=np.uint16) for f in files])
+            return pixels
