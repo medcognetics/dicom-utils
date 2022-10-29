@@ -12,7 +12,6 @@ from warnings import warn
 import numpy as np
 import pydicom
 from numpy import ndarray
-from PIL import Image
 from pydicom import FileDataset
 from pydicom.encaps import encapsulate
 from pydicom.pixel_data_handlers.util import apply_voi_lut
@@ -353,6 +352,7 @@ def decompress(
 
 
 NVJPEG2K = os.environ.get("NVJPEG2K_PATH", None)
+BYTES_PER_UINT16: Final = 2
 
 
 def nvjpeg2k_is_available() -> bool:  # pragma: no cover
@@ -398,20 +398,26 @@ def nvjpeg_decompress(
             file.write(f)
             file.flush()
             files[Path(file.name).name] = file
-        total_frames = len(files)
 
         # create temp dir for NVJPEG outputs
         with TemporaryDirectory(prefix="nvjpeg_out") as td_out:
             # call NVJPEG
             cmd = [NVJPEG2K, "-i", td_in, "-o", td_out, "-b", str(batch_size), "-v"]
-            subprocess.run(cmd, capture_output=not verbose)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None if verbose else subprocess.PIPE)
+            assert process.stdout is not None
 
+            # compute expected shape and expected total number of bytes
+            # NOTE: batched decoding may add padding, which will be included in stdout.
+            # Manually compute the expected number of bytes to read
+            shape = (int(dcm.NumberOfFrames), dcm.Rows, dcm.Columns)
+            expected_bytes = shape[0] * shape[1] * shape[2] * BYTES_PER_UINT16
+
+            # read data into numpy array and reshape
+            img_bytes = process.stdout.read(expected_bytes)
+            pixels = np.frombuffer(img_bytes, dtype=np.uint16).reshape(*shape)
+
+            # cleanup temp files
             for f in files.values():
                 f.close()
 
-            # build ordered list of frames to read and load them as numpy arrays
-            files = [Path(td_out, k).with_suffix(".pgm") for k in files.keys()]
-            assert all(f.is_file() for f in files)
-            assert len(files) == total_frames
-            pixels = np.stack([np.asarray(Image.open(f), dtype=np.uint16) for f in files])
             return pixels
