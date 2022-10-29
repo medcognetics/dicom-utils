@@ -5,7 +5,7 @@ import os
 import sys
 from os import PathLike
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory
 from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
 from warnings import warn
 
