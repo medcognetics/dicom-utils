@@ -3,6 +3,7 @@
 import argparse
 from argparse import ArgumentParser
 from pathlib import Path
+from time import time
 
 import pydicom
 
@@ -33,10 +34,15 @@ def main(args: argparse.Namespace) -> None:
     if not dest.parent.is_dir():
         raise NotADirectoryError(dest.parent)
 
+    start_time = time()
     with pydicom.dcmread(path) as dcm:
         dcm = decompress(dcm, strict=args.strict, use_nvjpeg=args.gpu, batch_size=args.batch_size, verbose=args.verbose)
         assert not dcm.file_meta.TransferSyntaxUID.is_compressed
         dcm.save_as(dest)
+    end_time = time()
+    if args.verbose:
+        total_time = end_time - start_time
+        print(f"Total time (s): {total_time}")
 
 
 def entrypoint():
