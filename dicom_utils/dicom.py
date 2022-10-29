@@ -12,7 +12,6 @@ from warnings import warn
 import numpy as np
 import pydicom
 from numpy import ndarray
-from PIL import Image
 from pydicom import FileDataset
 from pydicom.encaps import encapsulate
 from pydicom.pixel_data_handlers.util import apply_voi_lut
