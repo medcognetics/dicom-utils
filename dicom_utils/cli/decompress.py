@@ -48,12 +48,14 @@ def main(args: argparse.Namespace) -> None:
 
     start_time = time()
     with pydicom.dcmread(path) as dcm:
+        dcmread_time = time() - start_time
         dcm = decompress(dcm, strict=args.strict, use_nvjpeg=args.gpu, batch_size=args.batch_size, verbose=args.verbose)
         assert not dcm.file_meta.TransferSyntaxUID.is_compressed
         dcm.save_as(dest)
     end_time = time()
     if args.verbose:
         total_time = end_time - start_time
+        print(f"pydicom.dcmread time (s): {dcmread_time}")
         print(f"Total time (s): {total_time}")
 
     if args.test:
