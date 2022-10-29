@@ -415,10 +415,17 @@ def nvjpeg_decompress(
         # NOTE: batched decoding may add padding, which will be included in stdout.
         # Manually compute the expected number of bytes to read
         shape = (num_frames, dcm.Rows, dcm.Columns)
-        expected_bytes = shape[0] * shape[1] * shape[2] * BYTES_PER_UINT16
+        expected_bytes = shape[0] * shape[1] * shape[2]
 
         # read data into numpy array and reshape
-        img_bytes = process.stdout.read(expected_bytes)
-        pixels = np.frombuffer(img_bytes, dtype=np.uint16).reshape(*shape)
+        img_bytes = process.stdout.read(expected_bytes * BYTES_PER_UINT16)
+        np.fromfile
+        pixels = np.frombuffer(
+            img_bytes,
+            dtype=np.uint16,
+            count=expected_bytes,
+        ).reshape(*shape)
+        process.kill()
+        process.poll()
 
         return pixels
