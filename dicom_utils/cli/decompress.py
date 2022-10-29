@@ -5,7 +5,9 @@ from argparse import ArgumentParser
 from pathlib import Path
 from time import time
 
+import numpy as np
 import pydicom
+from PIL import Image
 
 from ..dicom import decompress
 
@@ -23,7 +25,17 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
         "-b", "--batch-size", default=4, type=int, help="batch size for NVJPEG2K accelerated decompression"
     )
     parser.add_argument("-v", "--verbose", default=False, action="store_true", help="print NVJPEG2K outputs")
+    parser.add_argument(
+        "-t", "--test", default=False, action="store_true", help="test equivalence to CPU decompression"
+    )
     return parser
+
+
+def to_img(x: np.ndarray) -> Image.Image:
+    x = x.astype(np.float32)
+    x = (x - x.min()) / (x.max() - x.min()) * 255
+    x = x.astype(np.uint8)
+    return Image.fromarray(x)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -43,6 +55,12 @@ def main(args: argparse.Namespace) -> None:
     if args.verbose:
         total_time = end_time - start_time
         print(f"Total time (s): {total_time}")
+
+    if args.test:
+        with pydicom.dcmread(path) as dcm2:
+            px1 = dcm.pixel_array
+            px2 = dcm2.pixel_array
+            assert (px1 == px2).all()
 
 
 def entrypoint():

@@ -5,7 +5,7 @@ import subprocess
 import sys
 from os import PathLike
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory
 from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
 from warnings import warn
 
@@ -366,6 +366,11 @@ def check_nvjpeg() -> None:  # pragma: no cover
         raise FileNotFoundError(NVJPEG2K)
 
 
+def _zero_pad(x: int, total: int) -> str:
+    padding = len(str(total))
+    return str(x).zfill(padding)
+
+
 # TODO find a way to create a small JPEG2K file for testing
 def nvjpeg_decompress(
     dcm: Dicom,
@@ -388,36 +393,32 @@ def nvjpeg_decompress(
 
     # extract iterator of compressed frames
     frames = VolumeHandler.iterate_frames(dcm)
+    num_frames = int(dcm.NumberOfFrames)
 
     # create temp dir for NVJPEG inputs
     with TemporaryDirectory(prefix="nvjpeg_in") as td_in:
         # write each frame to a temp file in memory
-        files = {}
-        for f in frames:
-            file = NamedTemporaryFile("wb", dir=td_in)
-            file.write(f)
-            file.flush()
-            files[Path(file.name).name] = file
+        for i, frame in enumerate(frames):
+            # NOTE: the receiving C++ script will process files in sorted order.
+            # Ensure zero padding is added to filename to sorted order is correct
+            path = Path(td_in, f"frame_{_zero_pad(i, num_frames)}.j2k")
+            with open(path, "wb") as file:
+                file.write(frame)
+                file.flush()
 
-        # create temp dir for NVJPEG outputs
-        with TemporaryDirectory(prefix="nvjpeg_out") as td_out:
-            # call NVJPEG
-            cmd = [NVJPEG2K, "-i", td_in, "-o", td_out, "-b", str(batch_size), "-v"]
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None if verbose else subprocess.PIPE)
-            assert process.stdout is not None
+        # call NVJPEG
+        cmd = [NVJPEG2K, "-i", td_in, "-b", str(batch_size), "-v"]
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None if verbose else subprocess.PIPE)
+        assert process.stdout is not None
 
-            # compute expected shape and expected total number of bytes
-            # NOTE: batched decoding may add padding, which will be included in stdout.
-            # Manually compute the expected number of bytes to read
-            shape = (int(dcm.NumberOfFrames), dcm.Rows, dcm.Columns)
-            expected_bytes = shape[0] * shape[1] * shape[2] * BYTES_PER_UINT16
+        # compute expected shape and expected total number of bytes
+        # NOTE: batched decoding may add padding, which will be included in stdout.
+        # Manually compute the expected number of bytes to read
+        shape = (num_frames, dcm.Rows, dcm.Columns)
+        expected_bytes = shape[0] * shape[1] * shape[2] * BYTES_PER_UINT16
 
-            # read data into numpy array and reshape
-            img_bytes = process.stdout.read(expected_bytes)
-            pixels = np.frombuffer(img_bytes, dtype=np.uint16).reshape(*shape)
+        # read data into numpy array and reshape
+        img_bytes = process.stdout.read(expected_bytes)
+        pixels = np.frombuffer(img_bytes, dtype=np.uint16).reshape(*shape)
 
-            # cleanup temp files
-            for f in files.values():
-                f.close()
-
-            return pixels
+        return pixels
