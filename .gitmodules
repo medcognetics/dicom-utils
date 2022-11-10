@@ -1,0 +1,3 @@
+[submodule "pynvjpeg2k"]
+	path = pynvjpeg2k
+	url = git@github.com:medcognetics/pynvjpeg2k.git

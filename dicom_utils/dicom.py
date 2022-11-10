@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
-import subprocess
 import sys
 from os import PathLike
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from time import time
 from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
 from warnings import warn
 
@@ -21,6 +20,12 @@ from .basic_offset_table import BasicOffsetTable
 from .logging import logger
 from .types import Dicom, PhotometricInterpretation
 from .volume import KeepVolume, VolumeHandler
+
+
+try:
+    import pynvjpeg  # type: ignore
+except Exception:
+    pynvjpeg = None
 
 
 # Taken from https://pydicom.github.io/pydicom/dev/old/image_data_handlers.html
@@ -351,24 +356,16 @@ def decompress(
     return dcm
 
 
-NVJPEG2K = os.environ.get("NVJPEG2K_PATH", None)
-BYTES_PER_UINT16: Final = 2
-
-
 def nvjpeg2k_is_available() -> bool:  # pragma: no cover
-    return NVJPEG2K is not None and Path(NVJPEG2K).is_file()
+    return pynvjpeg is not None
 
 
-def check_nvjpeg() -> None:  # pragma: no cover
-    if NVJPEG2K is None:
-        raise EnvironmentError("NVJPEG2K_PATH should be set to the path of the decoder script")
-    elif not Path(NVJPEG2K).is_file():
-        raise FileNotFoundError(NVJPEG2K)
-
-
-def _zero_pad(x: int, total: int) -> str:
-    padding = len(str(total))
-    return str(x).zfill(padding)
+def _nvjpeg_get_batch_size(batch_size: int, num_frames: int) -> int:  # pragma: no cover
+    while num_frames % batch_size != 0 and batch_size > 1:
+        batch_size = batch_size - 1
+    assert batch_size >= 1
+    assert num_frames % batch_size == 0
+    return batch_size
 
 
 # TODO find a way to create a small JPEG2K file for testing
@@ -387,45 +384,17 @@ def nvjpeg_decompress(
     Returns:
         Decompressed pixel array
     """
+    if not nvjpeg2k_is_available():
+        raise ImportError("pynvjpeg is not available")
 
-    # check nvjpeg available and file is JPEG2000 compressed
-    check_nvjpeg()
-
-    # extract iterator of compressed frames
-    frames = VolumeHandler.iterate_frames(dcm)
     num_frames = int(dcm.NumberOfFrames)
+    rows = dcm.Rows
+    cols = dcm.Columns
 
-    # create temp dir for NVJPEG inputs
-    with TemporaryDirectory(prefix="nvjpeg_in") as td_in:
-        # write each frame to a temp file in memory
-        for i, frame in enumerate(frames):
-            # NOTE: the receiving C++ script will process files in sorted order.
-            # Ensure zero padding is added to filename to sorted order is correct
-            path = Path(td_in, f"frame_{_zero_pad(i, num_frames)}.j2k")
-            with open(path, "wb") as file:
-                file.write(frame)
-                file.flush()
-
-        # call NVJPEG
-        cmd = [NVJPEG2K, "-i", td_in, "-b", str(batch_size), "-v"]
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None if verbose else subprocess.PIPE)
-        assert process.stdout is not None
-
-        # compute expected shape and expected total number of bytes
-        # NOTE: batched decoding may add padding, which will be included in stdout.
-        # Manually compute the expected number of bytes to read
-        shape = (num_frames, dcm.Rows, dcm.Columns)
-        expected_bytes = shape[0] * shape[1] * shape[2]
-
-        # read data into numpy array and reshape
-        img_bytes = process.stdout.read(expected_bytes * BYTES_PER_UINT16)
-        np.fromfile
-        pixels = np.frombuffer(
-            img_bytes,
-            dtype=np.uint16,
-            count=expected_bytes,
-        ).reshape(*shape)
-        process.kill()
-        process.poll()
-
-        return pixels
+    batch_size = _nvjpeg_get_batch_size(batch_size, num_frames)
+    pixels = dcm.PixelData
+    t1 = time()
+    result = pynvjpeg.decode_frames_jpeg2k(pixels, len(pixels), rows, cols, batch_size)
+    t2 = time()
+    print(f"Delta: {t2 - t1}")
+    return result
