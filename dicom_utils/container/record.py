@@ -749,16 +749,23 @@ class MammogramFileRecord(DicomImageFileRecord):
         return self.BreastImplantPresent == "YES"
 
     @classmethod
-    def is_complete_mammo_case(cls, records: Iterable["MammogramFileRecord"]) -> bool:
-        needed_views: Dict[MammogramView, Optional[MammogramFileRecord]] = {k: None for k in STANDARD_MAMMO_VIEWS}
+    def get_standard_mammo_view_lookup(
+        cls, records: Iterable["MammogramFileRecord"]
+    ) -> Dict[MammogramView, List["MammogramFileRecord"]]:
+        needed_views: Dict[MammogramView, List[MammogramFileRecord]] = {k: [] for k in STANDARD_MAMMO_VIEWS}
         for rec in records:
             # only consider standard views
             if not isinstance(rec, MammogramFileRecord) or not rec.is_standard_mammo_view:
                 continue
             key = rec.mammogram_view
             if key in needed_views:
-                needed_views[key] = rec
-        return all(needed_views.values())
+                needed_views[key].append(rec)
+        return {k: v for k, v in needed_views.items() if v}
+
+    @classmethod
+    def is_complete_mammo_case(cls, records: Iterable["MammogramFileRecord"]) -> bool:
+        view_lookup = cls.get_standard_mammo_view_lookup(records)
+        return set(view_lookup.keys()) == STANDARD_MAMMO_VIEWS
 
     @classmethod
     def collection_laterality(cls, records: Iterable["MammogramFileRecord"]) -> Laterality:
