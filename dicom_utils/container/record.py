@@ -5,6 +5,7 @@ import inspect
 import json
 import logging
 from abc import ABC
+from collections import defaultdict
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property, partial
 from io import BytesIO, IOBase
@@ -752,15 +753,15 @@ class MammogramFileRecord(DicomImageFileRecord):
     def get_standard_mammo_view_lookup(
         cls, records: Iterable["MammogramFileRecord"]
     ) -> Dict[MammogramView, List["MammogramFileRecord"]]:
-        needed_views: Dict[MammogramView, List[MammogramFileRecord]] = {k: [] for k in STANDARD_MAMMO_VIEWS}
+        needed_views: Dict[MammogramView, List[MammogramFileRecord]] = defaultdict(list)
         for rec in records:
             # only consider standard views
             if not isinstance(rec, MammogramFileRecord) or not rec.is_standard_mammo_view:
                 continue
             key = rec.mammogram_view
-            if key in needed_views:
+            if key in STANDARD_MAMMO_VIEWS:
                 needed_views[key].append(rec)
-        return {k: v for k, v in needed_views.items() if v}
+        return needed_views
 
     @classmethod
     def is_complete_mammo_case(cls, records: Iterable["MammogramFileRecord"]) -> bool:
