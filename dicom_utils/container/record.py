@@ -5,6 +5,7 @@ import inspect
 import json
 import logging
 from abc import ABC
+from collections import defaultdict
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property, partial
 from io import BytesIO, IOBase
@@ -749,16 +750,23 @@ class MammogramFileRecord(DicomImageFileRecord):
         return self.BreastImplantPresent == "YES"
 
     @classmethod
-    def is_complete_mammo_case(cls, records: Iterable["MammogramFileRecord"]) -> bool:
-        needed_views: Dict[MammogramView, Optional[MammogramFileRecord]] = {k: None for k in STANDARD_MAMMO_VIEWS}
+    def get_standard_mammo_view_lookup(
+        cls, records: Iterable["MammogramFileRecord"]
+    ) -> Dict[MammogramView, List["MammogramFileRecord"]]:
+        needed_views: Dict[MammogramView, List[MammogramFileRecord]] = defaultdict(list)
         for rec in records:
             # only consider standard views
             if not isinstance(rec, MammogramFileRecord) or not rec.is_standard_mammo_view:
                 continue
             key = rec.mammogram_view
-            if key in needed_views:
-                needed_views[key] = rec
-        return all(needed_views.values())
+            if key in STANDARD_MAMMO_VIEWS:
+                needed_views[key].append(rec)
+        return needed_views
+
+    @classmethod
+    def is_complete_mammo_case(cls, records: Iterable["MammogramFileRecord"]) -> bool:
+        view_lookup = cls.get_standard_mammo_view_lookup(records)
+        return set(view_lookup.keys()) == STANDARD_MAMMO_VIEWS
 
     @classmethod
     def collection_laterality(cls, records: Iterable["MammogramFileRecord"]) -> Laterality:
