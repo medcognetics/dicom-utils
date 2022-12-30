@@ -311,7 +311,7 @@ def iterate_input_path(
     Inputs are processed as follows:
         * If the path is a text file, it is assumed to contain a list of paths to process. Each line is
           stripped and processed as a path. Invalid paths will raise ``FileNotFoundError`` if ``ignore_missing``
-          is ``True``.
+          is ``False``.
         * If the path is a file, it will be yielded.
         * If the path is a directory, it will be recursively searched for files up to ``max_depth``.
           If ``max_depth`` is reached, the directory will be yielded instead of recursing further.
