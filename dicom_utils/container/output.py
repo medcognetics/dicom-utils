@@ -182,7 +182,6 @@ class ManifestOutput(Output):
         collection: RecordCollection,
         dest: Path,
     ) -> Iterator[WriteResult]:
-
         # we want the manifest to reflect symlink paths and real paths.
         symlink_collection = RecordCollection()
         for symlink_path, rec in iterate_symlinks(collection, dest):

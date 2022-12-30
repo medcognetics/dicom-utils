@@ -86,7 +86,7 @@ test-ci: $(VENV)/bin/activate $(VENV)/bin/activate-test ## runs CI-only tests
 		-m "not ci_skip" \
 		./tests/
 
-types: $(VENV)/bin/activate node_modules pyrightconfig.json
+types: $(VENV)/bin/activate $(VENV)/bin/activate-test node_modules pyrightconfig.json
 	npx --no-install pyright tests $(PROJECT) -p pyrightconfig.json
 
 $(PROJECT)/_tag_enum.py: $(VENV)/bin/activate tag_enum.py
@@ -109,7 +109,7 @@ $(VENV)/bin/activate: setup.py requirements.txt
 	$(PYTHON) -m pip install -e .
 	touch $(VENV)/bin/activate
 
-$(VENV)/bin/activate-%: requirements.%.txt
+$(VENV)/bin/activate-%: requirements.%.txt $(VENV)/bin/activate 
 	test -d $(VENV) || $(PY_VER) -m venv $(VENV)
 	$(PYTHON) -m pip install -U pip 
 	$(PYTHON) -m pip install -r $<
