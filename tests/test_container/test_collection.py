@@ -23,7 +23,64 @@ from dicom_utils.container import (
     StudyUID,
     record_iterator,
 )
+from dicom_utils.container.collection import iterate_input_path
 from dicom_utils.dicom_factory import DicomFactory
+
+
+class TestIterateInputPath:
+    def test_file(self, tmp_path):
+        path = Path(tmp_path, "test.dcm")
+        path.touch()
+        result = list(iterate_input_path(path))
+        assert result == [path]
+
+    @pytest.mark.parametrize("max_depth", [None, 0, 1])
+    def test_dir(self, tmp_path, max_depth):
+        path = Path(tmp_path, "dir")
+        path.mkdir()
+        subfile = Path(path, "test.dcm")
+        subfile.touch()
+        result = list(iterate_input_path(path, max_depth))
+        if max_depth == 0:
+            assert result == [path]
+        else:
+            assert result == list(path.iterdir())
+
+    def test_text_file_of_files(self, tmp_path):
+        path = Path(tmp_path, "test.txt")
+        subdir = Path(tmp_path, "dir")
+        subdir.mkdir()
+        with path.open("w") as f:
+            targets = []
+            for i in range(3):
+                p = Path(subdir, f"test{i}.dcm")
+                p.touch()
+                targets.append(p)
+                f.write(f"{p}\n")
+        result = list(iterate_input_path(path))
+        assert result == targets
+
+    @pytest.mark.parametrize("max_depth", [None, 0, 1])
+    def test_text_file_of_dirs(self, tmp_path, max_depth):
+        path = Path(tmp_path, "test.txt")
+        subdir = Path(tmp_path, "dir")
+        subdir.mkdir()
+        with path.open("w") as f:
+            dir_targets = []
+            file_targets = []
+            for i in range(3):
+                subsubdir = Path(subdir, f"subsubdir{i}")
+                subsubdir.mkdir()
+                p = Path(subsubdir, f"test{i}.dcm")
+                p.touch()
+                dir_targets.append(subsubdir)
+                file_targets.append(p)
+                f.write(f"{subsubdir}\n")
+        result = list(iterate_input_path(path, max_depth))
+        if max_depth == 0:
+            assert result == dir_targets
+        else:
+            assert result == file_targets
 
 
 @pytest.fixture
