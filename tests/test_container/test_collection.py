@@ -71,8 +71,10 @@ class TestIterateInputPath:
             for i in range(3):
                 subsubdir = Path(subdir, f"subsubdir{i}")
                 subsubdir.mkdir()
-                p = Path(subsubdir, f"test{i}.dcm")
-                p.touch()
+                p = Path(subsubdir, f"test{i}.txt")
+                # write dummy file content to ensure we don't recursively read text files
+                with p.open("w") as f2:
+                    f2.write("nofile.txt")
                 dir_targets.append(subsubdir)
                 file_targets.append(p)
                 f.write(f"{subsubdir}\n")
@@ -81,6 +83,23 @@ class TestIterateInputPath:
             assert result == dir_targets
         else:
             assert result == file_targets
+
+    @pytest.mark.parametrize(
+        "ignore_missing",
+        [
+            True,
+            pytest.param(False, marks=pytest.mark.xfail(raises=FileNotFoundError)),
+        ],
+    )
+    def test_missing_filepath(self, tmp_path, ignore_missing):
+        path = Path(tmp_path, "test.txt")
+        subdir = Path(tmp_path, "dir")
+        subdir.mkdir()
+        with path.open("w") as f:
+            p = Path(subdir, "nofile.txt")
+            f.write(f"{p}\n")
+        result = list(iterate_input_path(path, ignore_missing=ignore_missing))
+        assert result == []
 
 
 @pytest.fixture
