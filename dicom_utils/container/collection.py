@@ -300,6 +300,52 @@ def iterate_filepaths(
             raise FileNotFoundError(path)
 
 
+def iterate_input_path(
+    path: Path,
+    max_depth: Optional[int] = None,
+    ignore_missing: bool = False,
+    _depth: int = 0,
+) -> Iterator[Path]:
+    r"""Iterates over an input path, yielding all files found.
+
+    Inputs are processed as follows:
+        * If the path is a text file, it is assumed to contain a list of paths to process. Each line is
+          stripped and processed as a path. Invalid paths will raise ``FileNotFoundError`` if ``ignore_missing``
+          is ``False``.
+        * If the path is a file, it will be yielded.
+        * If the path is a directory, it will be recursively searched for files up to ``max_depth``.
+          If ``max_depth`` is reached, the directory will be yielded instead of recursing further.
+
+    Args:
+        path:
+            Path to process
+        max_depth:
+            Maximum depth to recurse into directories. If ``None``, recurse infinitely.
+    """
+    # if path is a directory
+    if path.is_dir():
+        # possibly recurse into subdirectories
+        if max_depth is None or _depth < max_depth:
+            for child in path.iterdir():
+                yield from iterate_input_path(child, max_depth, _depth=_depth + 1)
+        # otherwise yield the directory itself
+        else:
+            yield path
+
+    # if path is a text file and we are at depth 0, read all lines in the file
+    elif path.is_file() and path.suffix == ".txt" and _depth == 0:
+        with open(path, "r") as f:
+            for line in f:
+                yield from iterate_input_path(Path(line.strip()), max_depth, ignore_missing)
+
+    # if path is any other file, return it
+    elif path.is_file():
+        yield path
+
+    elif not ignore_missing:
+        raise FileNotFoundError(path)
+
+
 R = TypeVar("R", bound=FileRecord)
 
 

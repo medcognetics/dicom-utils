@@ -670,7 +670,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             record = record.replace(SOPClassUID=SecondaryCaptureImageStorage)
         # should be incomplete until after this loop
         records: List[MammogramFileRecord] = []
-        for (laterality, view_pos) in STANDARD_MAMMO_VIEWS:
+        for laterality, view_pos in STANDARD_MAMMO_VIEWS:
             assert not MammogramFileRecord.is_complete_mammo_case(records)
             rec = replace(record, laterality=laterality, view_position=view_pos)
             records.append(rec)
