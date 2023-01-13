@@ -807,3 +807,30 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         rec1 = record_factory(laterality=l1)
         rec2 = record_factory(laterality=l2)
         assert MammogramFileRecord.collection_laterality([rec1, rec2]) == exp
+
+    @pytest.mark.parametrize(
+        "override",
+        ["MG", "US", "CR"],
+    )
+    def test_from_file_modality_override(self, override, record_factory):
+        rec = record_factory(Modality=override)
+        path = rec.path
+        rec_type = type(rec)
+        result = rec_type.from_file(path, overrides={"Modality": "MG"})
+        assert result.Modality == "MG"
+
+    @pytest.mark.parametrize(
+        "modality",
+        ["MG", "US", "CR"],
+    )
+    def test_from_dicom_modality_override(self, modality, record_factory):
+        rec = record_factory()
+        path = rec.path
+        rec_type = type(rec)
+
+        with pydicom.dcmread(path) as dcm:
+            dcm.Modality = modality
+            result1 = rec_type.from_dicom(path, pydicom.dcmread(path), overrides={"Modality": "MG"})
+            result2 = rec_type.from_dicom(path, pydicom.dcmread(path), Modality="MG")
+        assert result1.Modality == "MG"
+        assert result2.Modality == "MG"

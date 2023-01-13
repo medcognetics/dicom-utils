@@ -472,10 +472,11 @@ class DicomFileRecord(
 
         Args:
             path: Path to DICOM file
-            modality: Optional modality override
+            helpers: List of :class:`RecordHelper` objects to use for parsing
+            overrides: Dictionary of overrides to apply to the record
 
         Keyword Args:
-            Overrides forwarded to :func:`DicomFileRecord.read`
+            Forwarded to :func:`DicomFileRecord.read`
         """
         path = Path(path)
         if not path.is_file():
@@ -498,6 +499,10 @@ class DicomFileRecord(
         Args:
             path: Path to DICOM file (needed to set ``path`` attribute)
             dcm: Dicom file object
+            helpers: List of :class:`RecordHelper` objects to use for parsing
+
+        Keyword Args:
+            Overrides to apply to the record
         """
         path = Path(path)
         values = {tag.name: get_value(dcm, tag, None, try_file_meta=True) for tag in cls.get_required_tags()}
@@ -863,7 +868,7 @@ class MammogramFileRecord(DicomImageFileRecord):
         elif modality != "MG":
             raise DicomValueError(
                 f"Modality {modality} is invalid for mammograms. If you are certain {path} is a mammogram, pass "
-                "`modality`='MG' to `from_dicom`."
+                "`Modality`='MG' to `from_dicom` or `overrides={'Modality': 'MG'}` to `from_file`."
             )
 
         laterality = Laterality.from_dicom(dcm)
