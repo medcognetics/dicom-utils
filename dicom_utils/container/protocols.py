@@ -156,3 +156,12 @@ class SupportsSite(Protocol):
     @property
     def site(self) -> Optional[str]:
         return self.InstitutionAddress or self.TreatmentSite or self.InstitutionName
+
+
+@runtime_checkable
+class SupportsDataSetInfo(Protocol):
+    DataSetSource: Optional[str] = None
+    DataSetName: Optional[str] = None
+    DataSetDescription: Optional[str] = None
+    DataSetType: Optional[str] = None
+    DataSetSubtype: Optional[str] = None
