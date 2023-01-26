@@ -76,6 +76,7 @@ from ..types import ViewPosition, get_value, iterate_view_modifier_codes
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID
 from .helpers import TransferSyntaxUID as TSUID
 from .protocols import (
+    SupportsDataSetInfo,
     SupportsGenerated,
     SupportsManufacturer,
     SupportsPatientAge,
@@ -349,6 +350,7 @@ class DicomFileRecord(
     SupportsPatientAge,
     SupportsGenerated,
     SupportsSite,
+    SupportsDataSetInfo,
 ):
     r"""Data structure for storing critical information about a DICOM file.
     File IO operations on DICOMs can be expensive, so this class collects all
@@ -380,6 +382,11 @@ class DicomFileRecord(
     InstitutionAddress: Optional[str] = None
     InstitutionName: Optional[str] = None
     TreatmentSite: Optional[str] = None
+    DataSetName: Optional[str] = None
+    DataSetSource: Optional[str] = None
+    DataSetDescription: Optional[str] = None
+    DataSetType: Optional[str] = None
+    DataSetSubtype: Optional[str] = None
 
     generated: bool = False
     is_cad: bool = False

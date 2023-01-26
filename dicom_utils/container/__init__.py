@@ -3,9 +3,11 @@
 from .collection import FILTER_REGISTRY, RecordCollection, RecordCreator, RecordFilter, record_iterator
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID, TransferSyntaxUID
 from .protocols import (
+    SupportsDataSetInfo,
     SupportsGenerated,
     SupportsManufacturer,
     SupportsPatientID,
+    SupportsSite,
     SupportsStudyDate,
     SupportsStudyID,
     SupportsUID,
@@ -48,4 +50,6 @@ __all__ = [
     "SupportsStudyID",
     "SupportsUID",
     "SupportsStudyID",
+    "SupportsSite",
+    "SupportsDataSetInfo",
 ]
