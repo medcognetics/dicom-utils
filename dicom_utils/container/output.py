@@ -4,19 +4,36 @@
 import json
 import re
 from abc import ABC, abstractmethod
+from copy import copy
 from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Dict, Final, Iterable, Iterator, List, Optional, Set, Tuple, TypeVar, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Final,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from registry import Registry
 from tqdm_multiprocessing import ConcurrentMapper
 
 from ..types import MammogramType
-from .collection import RecordCollection
+from .collection import CollectionHelper, RecordCollection
+from .collection import apply_helpers as apply_collection_helpers
 from .input import Input
 from .protocols import SupportsGenerated
-from .record import FileRecord, MammogramFileRecord
+from .record import HELPER_REGISTRY, FileRecord, MammogramFileRecord, RecordHelper, apply_helpers
 
 
 YEAR_RE: Final = re.compile(r"\d{4}")
@@ -65,6 +82,22 @@ class Output(ABC):
 
         collection_filter:
             Filter function to exclude entire :class:`RecordCollection`s from the output.
+
+        helpers:
+            List of helper names to apply to the output. Can be :class:`RecordHelper` or
+            :class:`CollectionHelper` instances.
+
+        use_bar:
+            Whether to use a progress bar.
+
+        threads:
+            Whether to use threads instead of processes.
+
+        jobs:
+            Number of jobs to use. If None, use the number of CPUs.
+
+        chunksize:
+            Passed to :class:`ConcurrentMapper`.
     """
 
     def __init__(
@@ -73,6 +106,7 @@ class Output(ABC):
         output_subdir: PathLike = Path("."),
         record_filter: Optional[Callable[[FileRecord], bool]] = None,
         collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
+        helpers: List[str] = [],
         use_bar: bool = True,
         threads: bool = False,
         jobs: Optional[int] = None,
@@ -89,6 +123,9 @@ class Output(ABC):
         self.threads = threads
         self.jobs = jobs
         self.chunksize = chunksize
+        helpers = [HELPER_REGISTRY.get(h).instantiate_with_metadata().fn for h in helpers]
+        self.record_helpers: List[RecordHelper] = [h for h in helpers if isinstance(h, RecordHelper)]
+        self.collection_helpers: List[CollectionHelper] = [h for h in helpers if isinstance(h, CollectionHelper)]
 
     @property
     def path(self) -> Path:
@@ -120,17 +157,34 @@ class Output(ABC):
 
     def _process(
         self,
-        kc,
+        kc: Tuple[Sequence[str], RecordCollection],
         path: Path,
         record_filter: Optional[Callable[[FileRecord], bool]] = None,
         collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
     ) -> Optional[Iterable[WriteResult]]:
         key, collection = kc
         name = str(Path(*key))
+        # apply record and collection helpers
+        if self.record_helpers:
+            collection = RecordCollection((apply_helpers(rec.path, rec, self.record_helpers) for rec in collection))
+        if self.collection_helpers:
+            index = len(key)
+            # since we will often use multiple outputs, ensure that the original collection cannot be mutated by
+            # passing a copy below
+            collection = apply_collection_helpers(copy(collection), self.collection_helpers, index)
+            assert isinstance(
+                collection, RecordCollection
+            ), f"Collection helpers must return a RecordCollection, got {type(collection)}"
+
+        # apply collection and record filters
         if collection_filter is not None and not collection_filter(collection):
             return
         if record_filter is not None:
             collection = collection.filter(record_filter)
+            assert isinstance(
+                collection, RecordCollection
+            ), f"Record filters must return a RecordCollection, got {type(collection)}"
+
         dest = Path(path, name)
         # pyright fails to recognize this is an abstract classmethod
         written = self.write(key, name, collection, dest)  # type: ignore
@@ -199,6 +253,7 @@ class ManifestOutput(Output):
         yield WriteResult(key, path, collection, name=name, metadata=metadata)
 
 
+# TODO: consider deprecating this
 class FileListOutput(SymlinkFileOutput):
     def __init__(
         self,
@@ -207,11 +262,17 @@ class FileListOutput(SymlinkFileOutput):
         filelist_output_subdir: PathLike = Path("filelist"),
         record_filter: Optional[Callable[[FileRecord], bool]] = None,
         collection_filter: Optional[Callable[[RecordCollection], bool]] = None,
+        helpers: List[str] = [],
         use_bar: bool = True,
+        threads: bool = False,
+        jobs: Optional[int] = None,
+        chunksize: int = 8,
         by_case: Optional[bool] = None,
         min_name_len: Optional[int] = 3,
     ):
-        super().__init__(root, output_subdir, record_filter, collection_filter, use_bar)
+        super().__init__(
+            root, output_subdir, record_filter, collection_filter, helpers, use_bar, threads, jobs, chunksize
+        )
         self.filelist_output_subdir = Path(filelist_output_subdir)
         self.by_case = by_case if by_case is not None else (self.record_filter is None)
         self.min_name_len = min_name_len
@@ -334,40 +395,3 @@ for name, collection_filter in PRIMARY_OUTPUT_GROUPS:
     )
 
 OUTPUT_REGISTRY(ManifestOutput, name="manifest", output_subdir="cases")
-
-# register primary output groups
-# these can use a record filter
-# SECONDARY_OUTPUT_GROUPS: List[Tuple[str, Callable, Callable]] = [
-#    (mtype.simple_name, is_mammogram_case, partial(is_mammogram_record, mtype=mtype))
-#    for mtype in MammogramType
-#    if mtype != MammogramType.UNKNOWN
-# ]
-# SECONDARY_OUTPUT_GROUPS.append(("spot_mag", is_mammogram_case, is_spot_mag))
-# for name, collection_filter, record_filter in SECONDARY_OUTPUT_GROUPS:
-#    for by_case in (False, True):
-#        by_case_str = "by_case" if by_case else "by_file"
-#        OUTPUT_REGISTRY(
-#            partial(
-#                FileListOutput,
-#                filename=Path(f"{name}.txt"),
-#                collection_filter=collection_filter,
-#                record_filter=record_filter,
-#                by_case=by_case,
-#            ),
-#            name=f"filelist-{name}-{by_case_str}",
-#            subdir=f"file_lists/{by_case_str}",
-#        )
-#
-# for by_case in (False, True):
-#    by_case_str = "by_case" if by_case else "by_file"
-#    OUTPUT_REGISTRY(
-#        partial(
-#            FileListOutput,
-#            filename=Path("ffdm_complete.txt"),
-#            collection_filter=is_complete_case,
-#            record_filter=is_standard_ffdm,
-#            by_case=by_case,
-#        ),
-#        name=f"filelist-standard_ffdm-{by_case_str}",
-#        subdir=f"file_lists/{by_case_str}",
-#    )
