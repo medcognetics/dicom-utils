@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
+import multiprocessing
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
+from itertools import islice
 from os import PathLike
 from pathlib import Path
 from typing import (
@@ -206,6 +208,11 @@ class RecordCreator:
         return None
 
 
+def get_bar_description_suffix(jobs: Optional[int], threads: bool) -> str:
+    jobs = jobs or multiprocessing.cpu_count()
+    return f"{jobs} {'threads' if threads else 'processes'}"
+
+
 def record_iterator(
     files: Iterable[PathLike],
     jobs: Optional[int] = None,
@@ -215,6 +222,7 @@ def record_iterator(
     helpers: Iterable[str] = [],
     ignore_exceptions: bool = False,
     filters: Iterable[str] = [],
+    max_files: Optional[int] = None,
     **kwargs,
 ) -> Iterator[FileRecord]:
     r"""Produces :class:`FileRecord` instances by iterating over an input list of files. If a
@@ -264,13 +272,23 @@ def record_iterator(
     # a record creation attempt will only be made on valid files that pass all filters
 
     func = partial(creator.precheck_file, filter_funcs=filter_funcs)
+    bar_suffix = get_bar_description_suffix(jobs, threads)
+    files = files if max_files else islice(files, max_files)
     with ConcurrentMapper(threads, jobs, ignore_exceptions, chunksize=128) as mapper:
-        mapper.create_bar(desc="Scanning sources", disable=(not use_bar))
+        mapper.create_bar(
+            desc=f"Scanning sources ({bar_suffix})",
+            disable=(not use_bar),
+        )
         file_set = {Path(path) for path in mapper(func, files) if path is not None}
 
     # create and yield records
     with ConcurrentMapper(threads, jobs, ignore_exceptions, chunksize=32) as mapper:
-        mapper.create_bar(desc="Building records", total=len(file_set), unit="file", disable=(not use_bar))
+        mapper.create_bar(
+            desc=f"Building records ({bar_suffix})",
+            total=len(file_set),
+            unit="file",
+            disable=(not use_bar),
+        )
         for record in mapper(creator, file_set):
             if all(f(record) for f in filter_funcs):
                 yield record

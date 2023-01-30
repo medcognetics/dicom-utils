@@ -31,6 +31,7 @@ from tqdm_multiprocessing import ConcurrentMapper
 from ..types import MammogramType
 from .collection import CollectionHelper, RecordCollection
 from .collection import apply_helpers as apply_collection_helpers
+from .collection import get_bar_description_suffix
 from .input import Input
 from .protocols import SupportsGenerated
 from .record import HELPER_REGISTRY, FileRecord, MammogramFileRecord, RecordHelper, apply_helpers
@@ -141,7 +142,8 @@ class Output(ABC):
     def __call__(self, inp: Union[Input, Dict[str, Iterable[WriteResult]]]) -> Dict[str, Iterable[WriteResult]]:
         result: Dict[str, Iterable[WriteResult]] = {}
         iterable = inp if isinstance(inp, Input) else inp.items()
-        with self.mapper(total=len(iterable), desc=f"Writing {self.__class__.__name__}") as mapper:
+        desc = get_bar_description_suffix(self.jobs, self.threads)
+        with self.mapper(total=len(iterable), desc=f"Writing {self.__class__.__name__} ({desc})") as mapper:
             it = mapper(
                 self._process,
                 iterable,
