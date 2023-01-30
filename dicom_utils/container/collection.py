@@ -22,6 +22,7 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    cast,
     overload,
 )
 
@@ -93,8 +94,10 @@ def apply_helpers(collection: C, helpers: Iterable[CollectionHelper], index: int
         if not isinstance(h, CollectionHelper):
             raise TypeError(f"type {type(h)} is not a `CollectionHelper`")
         logger.debug(f"Applying collection helper {type(h)}")
-        collection = h(collection, index)
-    return collection
+        collection = h(cast(C, collection), index)
+        if not isinstance(collection, RecordCollection):
+            raise TypeError(f"Collection helper {type(h)} returned invalid type {type(collection)}")
+    return cast(C, collection)
 
 
 class RecordCreator:

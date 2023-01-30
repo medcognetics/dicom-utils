@@ -938,8 +938,10 @@ def apply_helpers(path: PathLike, rec: R, helpers: Iterable[RecordHelper]) -> R:
         if not isinstance(h, RecordHelper):
             raise TypeError(f"type {type(h)} is not a `RecordHelper`")
         logger.debug(f"Applying helper {type(h)} to {path}")
-        rec = h(path, rec)
-    return rec
+        rec = h(path, cast(R, rec))
+        if not isinstance(rec, FileRecord):
+            raise TypeError(f"Expected `FileRecord` from {type(h)}, got {type(rec)}")
+    return cast(R, rec)
 
 
 def apply_read_helpers(obj: T, record_type: Type[FileRecord], helpers: Iterable[RecordHelper]) -> T:
