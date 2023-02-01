@@ -387,6 +387,7 @@ class DicomFileRecord(
     DataSetDescription: Optional[str] = None
     DataSetType: Optional[str] = None
     DataSetSubtype: Optional[str] = None
+    PerformedProcedureStepDescription: Optional[str] = None
 
     generated: bool = False
     is_cad: bool = False
@@ -743,6 +744,20 @@ class MammogramFileRecord(DicomImageFileRecord):
             return True
         return "anterior compression" in self.view_modifier_code_meanings
 
+    @cached_property
+    def is_stereo(self) -> bool:
+        r"""Check if this is a stereotactic biopsy mammogram"""
+        # NOTE: this info is also in the PerformedProtocolCodeSequence.
+        # However, checking the 3 places below should be sufficient
+        return any(
+            "stereo" in (getattr(self, tag.name) or "").lower()
+            for tag in (
+                Tag.StudyDescription,
+                Tag.SeriesDescription,
+                Tag.PerformedProcedureStepDescription,
+            )
+        )
+
     @property
     def is_standard_mammo_view(self) -> bool:
         r"""Checks if this record corresponds to a standard mammography view.
@@ -755,6 +770,7 @@ class MammogramFileRecord(DicomImageFileRecord):
             and not self.is_secondary_capture
             and not self.is_for_processing
             and not self.is_cad
+            and not self.is_stereo
         )
 
     @property
@@ -832,6 +848,8 @@ class MammogramFileRecord(DicomImageFileRecord):
             modifiers.append("imf")
         if self.is_anterior_compression:
             modifiers.append("ac")
+        if self.is_stereo:
+            modifiers.append("stereo")
 
         view = f"{self.laterality.short_str}{self.view_position.short_str}"
 
