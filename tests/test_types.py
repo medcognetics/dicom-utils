@@ -147,11 +147,35 @@ def get_simple_image_type_test_cases():
 
 
 class TestImageType:
-    def test_from_dicom(self, dicom_object):
+    @pytest.mark.parametrize(
+        "pixels,exam,flavor,extras",
+        [
+            ("ORIGINAL", "PRIMARY", None, None),
+            ("DERIVED", "PRIMARY", "AXIAL", None),
+            ("DERIVED", "PRIMARY", "AXIAL", ["STEREO"]),
+        ],
+    )
+    def test_from_dicom(self, dicom_object, pixels, exam, flavor, extras):
+        dicom_object.ImageType = [x for x in (pixels, exam, flavor, *(extras or [])) if x]
         img_type = ImageType.from_dicom(dicom_object)
-        assert img_type.pixels == "ORIGINAL"
-        assert img_type.exam == "PRIMARY"
-        assert img_type.flavor == "AXIAL"
+        assert img_type.pixels == pixels
+        assert img_type.exam == exam
+        assert img_type.flavor == flavor
+        assert img_type.extras == extras
+
+    @pytest.mark.parametrize(
+        "pixels,exam,flavor,extras,target,expected",
+        [
+            ("ORIGINAL", "PRIMARY", "AXIAL", [], "ORIGINAL", True),
+            ("ORIGINAL", "PRIMARY", "AXIAL", [], "PRIMARY", True),
+            ("ORIGINAL", "PRIMARY", "AXIAL", [], "AXIAL", True),
+            ("ORIGINAL", "PRIMARY", None, None, "AXIAL", False),
+            ("ORIGINAL", "PRIMARY", None, ["AXIAL"], "AXIAL", True),
+        ],
+    )
+    def test_contains(self, pixels, exam, flavor, extras, target, expected):
+        img_type = ImageType(pixels, exam, flavor, extras)
+        assert (target in img_type) == expected
 
 
 class TestMammogramType:

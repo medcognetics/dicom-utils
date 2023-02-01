@@ -638,29 +638,34 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         assert record.is_standard_mammo_view == exp
 
     @pytest.mark.parametrize(
-        "spot,mag,secondary,for_proc,cad,exp",
+        "spot,mag,secondary,for_proc,cad,stereo,exp",
         [
-            pytest.param(False, False, False, False, False, True),
-            pytest.param(True, False, False, False, False, False),
-            pytest.param(False, True, False, False, False, False),
-            pytest.param(False, False, True, False, False, False),
-            pytest.param(False, False, False, True, False, False),
-            pytest.param(False, False, False, False, True, False),
+            pytest.param(False, False, False, False, False, False, True),
+            pytest.param(True, False, False, False, False, False, False),
+            pytest.param(False, True, False, False, False, False, False),
+            pytest.param(False, False, True, False, False, False, False),
+            pytest.param(False, False, False, True, False, False, False),
+            pytest.param(False, False, False, False, True, False, False),
+            pytest.param(False, False, False, False, False, True, False),
         ],
     )
-    def test_is_standard_mammo_view_modifiers(self, mocker, spot, mag, secondary, for_proc, cad, exp, record_factory):
+    def test_is_standard_mammo_view_modifiers(
+        self, mocker, spot, mag, secondary, for_proc, cad, stereo, exp, record_factory
+    ):
         record = record_factory(view_position=ViewPosition.MLO)
         if spot:
             object.__setattr__(record, "is_spot_compression", True)
         if mag:
             object.__setattr__(record, "is_magnified", True)
         if secondary:
-            # for some reason setting is_secondary_capture won't work
+            # We can't set `is_secondary_capture` directly since it's not a cached_property
             object.__setattr__(record, "SOPClassUID", SecondaryCaptureImageStorage)
         if for_proc:
             object.__setattr__(record, "is_for_processing", True)
         if cad:
             object.__setattr__(record, "is_cad", True)
+        if stereo:
+            object.__setattr__(record, "is_stereo", True)
         assert record.is_standard_mammo_view == exp
 
     @pytest.mark.parametrize("secondary_capture", [False, True])
@@ -680,7 +685,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         assert actual == expected
 
     @pytest.mark.parametrize(
-        "mtype,spot,mag,id,laterality,view_pos,uid,secondary,for_proc,exp",
+        "mtype,spot,mag,id,laterality,view_pos,uid,secondary,for_proc,stereo,exp",
         [
             pytest.param(
                 MammogramType.FFDM,
@@ -690,6 +695,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.LEFT,
                 ViewPosition.MLO,
                 "1",
+                False,
                 False,
                 False,
                 "ffdm_lmlo_1.dcm",
@@ -704,6 +710,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 "2",
                 False,
                 False,
+                False,
                 "ffdm_rcc_2.dcm",
             ),
             pytest.param(
@@ -714,6 +721,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.RIGHT,
                 ViewPosition.XCCL,
                 "1",
+                False,
                 False,
                 False,
                 "synth_rxccl_spot_mag_id_1.dcm",
@@ -728,6 +736,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 "2",
                 False,
                 False,
+                False,
                 "ffdm_2.dcm",
             ),
             pytest.param(
@@ -740,12 +749,26 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 "1",
                 True,
                 True,
+                False,
                 "synth_rxccl_secondary_proc_spot_mag_id_1.dcm",
+            ),
+            pytest.param(
+                MammogramType.FFDM,
+                False,
+                False,
+                False,
+                Laterality.RIGHT,
+                ViewPosition.CC,
+                "1",
+                False,
+                False,
+                True,
+                "ffdm_rcc_stereo_1.dcm",
             ),
         ],
     )
     def test_standardized_filename(
-        self, mtype, spot, mag, id, laterality, view_pos, uid, secondary, for_proc, exp, record_factory
+        self, mtype, spot, mag, id, laterality, view_pos, uid, secondary, for_proc, stereo, exp, record_factory
     ):
         seq = []
         if spot:
@@ -767,6 +790,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             view_position=view_pos,
             SOPClassUID=SecondaryCaptureImageStorage if secondary else None,
             PresentationIntentType="FOR PROCESSING" if for_proc else None,
+            PerformedProcedureStepDescription="Stereo, CC" if stereo else None,
         )
         actual = record.standardized_filename(uid)
         assert isinstance(actual, StandardizedFilename)
@@ -834,3 +858,21 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             result2 = rec_type.from_dicom(path, pydicom.dcmread(path), Modality="MG")
         assert result1.Modality == "MG"
         assert result2.Modality == "MG"
+
+    @pytest.mark.parametrize(
+        "tag,val,exp",
+        [
+            pytest.param(Tag.StudyDescription, "Stereo, LCC", True),
+            pytest.param(Tag.SeriesDescription, "L CC Stereo Projection", True),
+            pytest.param(Tag.PerformedProcedureStepDescription, "Stereo, LCC", True),
+            pytest.param(None, "", False),
+            pytest.param(Tag.SeriesDescription, "MAMMOGRAM, Stereo", True),
+            pytest.param(Tag.ImageType, ["DERIVED", "PRIMARY", "STEREO", "RIGHT"], True),
+            pytest.param(Tag.ImageType, ["DERIVED", "PRIMARY", "RIGHT"], False),
+        ],
+    )
+    def test_is_stereo(self, tag, val, exp, record_factory):
+        record = record_factory()
+        if tag is not None:
+            record = record.replace(**{tag.name: val})
+        assert record.is_stereo == exp
