@@ -866,6 +866,9 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             pytest.param(Tag.SeriesDescription, "L CC Stereo Projection", True),
             pytest.param(Tag.PerformedProcedureStepDescription, "Stereo, LCC", True),
             pytest.param(None, "", False),
+            pytest.param(Tag.SeriesDescription, "MAMMOGRAM, Stereo", True),
+            pytest.param(Tag.ImageType, ["DERIVED", "PRIMARY", "STEREO", "RIGHT"], True),
+            pytest.param(Tag.ImageType, ["DERIVED", "PRIMARY", "RIGHT"], False),
         ],
     )
     def test_is_stereo(self, tag, val, exp, record_factory):

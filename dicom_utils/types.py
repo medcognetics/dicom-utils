@@ -193,6 +193,9 @@ class ImageType:
     def __bool__(self) -> bool:
         return bool(self.pixels) and bool(self.exam)
 
+    def __contains__(self, val: Any) -> bool:
+        return val == self.pixels or val == self.exam or val == self.flavor or val in (self.extras or [])
+
     def simple_repr(self) -> str:
         s = "|".join(x for x in (self.pixels, self.exam))
         if self.flavor is not None:

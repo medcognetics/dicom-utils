@@ -747,6 +747,9 @@ class MammogramFileRecord(DicomImageFileRecord):
     @cached_property
     def is_stereo(self) -> bool:
         r"""Check if this is a stereotactic biopsy mammogram"""
+        if self.ImageType and "STEREO" in self.ImageType:
+            return True
+
         # NOTE: this info is also in the PerformedProtocolCodeSequence.
         # However, checking the 3 places below should be sufficient
         return any(
