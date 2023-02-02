@@ -119,19 +119,17 @@ class TestReadDicomImage:
 
     @pytest.mark.ci_skip  # CircleCI will not have a GPU
     def test_nvjpeg(self, dicom_file_j2k: str):
-        ds = pydicom.dcmread(dicom_file_j2k)
+        def read_image(use_nvjpeg: bool):
+            start_time = time.time()
+            image = read_dicom_image(pydicom.dcmread(dicom_file_j2k), use_nvjpeg=use_nvjpeg)
+            return image, time.time() - start_time
 
-        start_time = time.time()
-        cpu_decompressed = read_dicom_image(ds, use_nvjpeg=False)
-        cpu_time = time.time() - start_time
-
-        start_time = time.time()
-        gpu_decompressed = read_dicom_image(ds, use_nvjpeg=True)
-        gpu_time = time.time() - start_time
+        cpu_image, cpu_time = read_image(False)
+        gpu_image, gpu_time = read_image(True)
 
         assert gpu_time < cpu_time
-        assert cpu_decompressed.shape == gpu_decompressed.shape
-        assert (cpu_decompressed == gpu_decompressed).all()
+        assert cpu_image.shape == gpu_image.shape
+        assert (cpu_image == gpu_image).all()
 
 
 def test_deprecated_is_inverted(dicom_object):

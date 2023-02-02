@@ -249,9 +249,13 @@ def read_dicom_image(
         D: int = int(dcm.get("NumberOfFrames", 1))
         dims = (C, D, *dims[-2:]) if D > 1 else (C, *dims[-2:])
 
-        # decompress with GPU if requested
-        if use_nvjpeg is None or use_nvjpeg:
-            dcm = decompress(dcm, use_nvjpeg=use_nvjpeg, batch_size=nvjpeg_batch_size)
+    # decompress with GPU if requested
+    # TODO If the volume handler is ReduceVolume, we should be decompressing
+    # before the handler is applied instead of after.
+    # But for every other handler we should decompress after.
+    # We need to figure out the best way to deal with this.
+    if use_nvjpeg is None or use_nvjpeg:
+        dcm = decompress(dcm, use_nvjpeg=use_nvjpeg, batch_size=nvjpeg_batch_size)
 
     # DICOM is channels last, so permute dims
     channels_last_dims = *dims[1:], dims[0]
@@ -348,7 +352,7 @@ def decompress(
 
     use_nvjpeg = use_nvjpeg if use_nvjpeg is not None else nvjpeg2k_is_available()
     if use_nvjpeg:
-        batch_size = batch_size or int(os.environ["NVJPEG2K_BATCH_SIZE"])
+        batch_size = batch_size or int(os.environ.get("NVJPEG2K_BATCH_SIZE", 1))
         pixels = nvjpeg_decompress(dcm, batch_size, verbose)
     else:
         pixels = dcm.pixel_array
@@ -369,7 +373,6 @@ def _nvjpeg_get_batch_size(batch_size: int, num_frames: int) -> int:  # pragma: 
     return batch_size
 
 
-# TODO find a way to create a small JPEG2K file for testing
 def nvjpeg_decompress(
     dcm: Dicom,
     batch_size: int = 4,
@@ -395,6 +398,7 @@ def nvjpeg_decompress(
     batch_size = _nvjpeg_get_batch_size(batch_size, num_frames)
     pixels = dcm.PixelData
     t1 = time()
+    assert pynvjpeg is not None  # To fix a type error on the next line even though we already checked for this
     result = pynvjpeg.decode_frames_jpeg2k(pixels, len(pixels), rows, cols, batch_size)
     t2 = time()
     print(f"Delta: {t2 - t1}")
