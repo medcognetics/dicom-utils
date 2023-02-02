@@ -39,6 +39,8 @@ def test_decompress(get_dicom_file, tmp_path, start_compressed):
         sys.argv[0],
         str(dicom_file),
         str(dest),
+        "--verbose",
+        "--test",
     ]
     runpy.run_module("dicom_utils.cli.decompress", run_name="__main__", alter_sys=True)
 

@@ -31,13 +31,6 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     return parser
 
 
-def to_img(x: np.ndarray) -> Image.Image:
-    x = x.astype(np.float32)
-    x = (x - x.min()) / (x.max() - x.min()) * 255
-    x = x.astype(np.uint8)
-    return Image.fromarray(x)
-
-
 def main(args: argparse.Namespace) -> None:
     path = Path(args.path)
     dest = Path(args.dest)
