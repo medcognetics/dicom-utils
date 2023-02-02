@@ -23,6 +23,7 @@ from .volume import KeepVolume, VolumeHandler
 
 
 try:
+    # NOTE: This module will be open-sourced in the future
     import pynvjpeg  # type: ignore
 except Exception:
     pynvjpeg = None
