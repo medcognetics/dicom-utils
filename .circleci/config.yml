@@ -16,15 +16,15 @@ commands:
     # 3. Clone the desired submodule
     # 4. Go back to step 1 for any additional submodules
     parameters:
-    repo:
-      default: "none"
-      type: string
-    ssh_key_fingerprint:
-      default: "none"
-      type: string
-    working_directory:
-      default: "."
-      type: string
+      repo:
+        default: "none"
+        type: string
+      ssh_key_fingerprint:
+        default: "none"
+        type: string
+      working_directory:
+        default: "."
+        type: string
     steps:
       - run: rm -f $HOME/.ssh/config # Old config may contain an old key
       - add_ssh_keys:
@@ -67,7 +67,7 @@ jobs:
       - run:
           name: Run tests
           command: make test-ci
-      - setup_node_modules
+      - install_npm
       - run:
           name: Run static type checking
           command: make types
