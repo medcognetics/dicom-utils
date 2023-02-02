@@ -190,15 +190,19 @@ def read_dicom_image(
         dcm:
             DICOM object to load images from
         stop_before_pixels:
-            If true, return randomly generated data
+            If ``True``, return randomly generated data
         shape:
             Manual shape override when ``stop_before_pixels`` is true. Should not include a channel dimension
         strict_interp:
-            If true, don't make any assumptions for trying to work around parsing errors
+            If ``True``, don't make any assumptions for trying to work around parsing errors
         volume_handler:
             Handler for processing 3D volumes
         as_uint8:
             If ``True``, convert non-uint8 outputs to uint8 using min/max normalization
+        use_nvjpeg:
+            If ``True``, decompress JPEG2000 images via GPU
+        nvjpeg_batch_size:
+            Batch size for GPU JPEG2000 decompression
 
     Shape:
         - Output: :math:`(C, H, W)` or :math:`(C, D, H, W)`
@@ -365,6 +369,7 @@ def nvjpeg2k_is_available() -> bool:  # pragma: no cover
     return pynvjpeg is not None
 
 
+# TODO: support num_frames % batch_size != 0 in C++ extension
 def _nvjpeg_get_batch_size(batch_size: int, num_frames: int) -> int:  # pragma: no cover
     while num_frames % batch_size != 0 and batch_size > 1:
         batch_size = batch_size - 1
@@ -401,5 +406,4 @@ def nvjpeg_decompress(
     assert pynvjpeg is not None  # To fix a type error on the next line even though we already checked for this
     result = pynvjpeg.decode_frames_jpeg2k(pixels, len(pixels), rows, cols, batch_size)
     t2 = time()
-    print(f"Delta: {t2 - t1}")
     return result
