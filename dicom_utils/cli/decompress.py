@@ -5,9 +5,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from time import time
 
-import numpy as np
 import pydicom
-from PIL import Image
 
 from ..dicom import decompress
 

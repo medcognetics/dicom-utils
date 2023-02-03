@@ -402,8 +402,6 @@ def nvjpeg_decompress(
 
     batch_size = _nvjpeg_get_batch_size(batch_size, num_frames)
     pixels = dcm.PixelData
-    t1 = time()
     assert pynvjpeg is not None  # To fix a type error on the next line even though we already checked for this
     result = pynvjpeg.decode_frames_jpeg2k(pixels, len(pixels), rows, cols, batch_size)
-    t2 = time()
     return result

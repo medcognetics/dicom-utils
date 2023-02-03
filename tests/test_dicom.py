@@ -3,6 +3,7 @@
 
 
 import time
+from typing import Final
 
 import numpy as np
 import pydicom
@@ -118,16 +119,22 @@ class TestReadDicomImage:
         assert array.dtype == np.uint8
 
     @pytest.mark.ci_skip  # CircleCI will not have a GPU
-    def test_nvjpeg(self, dicom_file_j2k: str):
+    def test_nvjpeg(self, dicom_file_j2k: str, mocker):
+        BATCH_SIZE: Final[int] = 1
+        mocked_get_batch_size = mocker.patch("dicom_utils.dicom._nvjpeg_get_batch_size")
+
         def read_image(use_nvjpeg: bool):
-            start_time = time.time()
-            image = read_dicom_image(pydicom.dcmread(dicom_file_j2k), use_nvjpeg=use_nvjpeg)
-            return image, time.time() - start_time
+            ds = pydicom.dcmread(dicom_file_j2k)
+            image = read_dicom_image(ds, use_nvjpeg=use_nvjpeg, nvjpeg_batch_size=BATCH_SIZE)
+            if use_nvjpeg:
+                mocked_get_batch_size.assert_called_with(BATCH_SIZE, ds.NumberOfFrames)
+            else:
+                mocked_get_batch_size.assert_not_called
+            return image
 
-        cpu_image, cpu_time = read_image(False)
-        gpu_image, gpu_time = read_image(True)
+        cpu_image = read_image(False)
+        gpu_image = read_image(True)
 
-        assert gpu_time < cpu_time
         assert cpu_image.shape == gpu_image.shape
         assert (cpu_image == gpu_image).all()
 
