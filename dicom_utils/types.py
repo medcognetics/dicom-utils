@@ -390,7 +390,7 @@ class Laterality(EnumMixin):
             return "r"
         return ""
 
-    def reduce(self, other: "Laterality") -> "Laterality":
+    def __add__(self, other: "Laterality") -> "Laterality":
         r"""Reduces two :class:`Laterality` inputs according to the following rules:
         * ANY + BILATERAL -> BILATERAL
         * LEFT + RIGHT -> BILATERAL
@@ -399,9 +399,9 @@ class Laterality(EnumMixin):
         * NONE + NONE -> NONE
         * UNKOWN + UNKOWN -> UNKNOWN
         """
-        # either input is unknown, fall back to __add__
+        # either input is unknown, fall back to parent __add__
         if self.is_unknown or other.is_unknown:
-            return self + other
+            return cast(Laterality, super().__add__(other))
 
         # if either input is bilateral, output should be bilateral
         elif self == Laterality.BILATERAL or other == Laterality.BILATERAL:
@@ -420,6 +420,9 @@ class Laterality(EnumMixin):
 
         # only remaining possibility
         return Laterality.NONE
+
+    def reduce(self, *other: "Laterality") -> "Laterality":
+        return sum((self, *other), Laterality.UNKNOWN)
 
 
 CC_STRINGS: Final = {"cranio-caudal", "caudal-cranial"}
