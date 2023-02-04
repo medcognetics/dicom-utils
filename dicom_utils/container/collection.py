@@ -304,42 +304,76 @@ def iterate_filepaths(
 
 
 def iterate_input_path(
-    path: Path,
+    path: Union[PathLike, Iterable[PathLike]],
     max_depth: Optional[int] = None,
     ignore_missing: bool = False,
+    follow_symlinks: bool = True,
+    follow_text_files: bool = True,
     _depth: int = 0,
 ) -> Iterator[Path]:
     r"""Iterates over an input path, yielding all files found.
 
     Inputs are processed as follows:
-        * If the path is a text file, it is assumed to contain a list of paths to process. Each line is
-          stripped and processed as a path. Invalid paths will raise ``FileNotFoundError`` if ``ignore_missing``
-          is ``False``.
+        * If the path is a text file and ``follow_text_files`` and we are at depth 0, the text file is assumed to
+          contain a list of paths to process. Each line is stripped and processed as a path.
+          Invalid paths will raise ``FileNotFoundError`` if ``ignore_missing`` is ``False``.
         * If the path is a file, it will be yielded.
         * If the path is a directory, it will be recursively searched for files up to ``max_depth``.
           If ``max_depth`` is reached, the directory will be yielded instead of recursing further.
+        * If the path is a symlink, it will be validated and followed or ignored depending on ``follow_symlinks``.
 
     Args:
         path:
             Path to process
         max_depth:
             Maximum depth to recurse into directories. If ``None``, recurse infinitely.
+        ignore_missing:
+            If ``True``, ignore missing files and directories. Otherwise, raise ``FileNotFoundError``.
+        follow_symlinks:
+            If ``True``, follow symbolic links. Otherwise, ignore them.
+        follow_text_files:
+            If ``True``, follow symbolic links. Otherwise, ignore them.
     """
+    # if input is an interable of paths, recurse over them
+    if isinstance(path, Iterable):
+        assert _depth == 0, "Cannot iterate over an iterable of paths more than once"
+        for p in path:
+            yield from iterate_input_path(p, max_depth, ignore_missing, follow_symlinks, follow_text_files, _depth)
+        return
+    else:
+        path = Path(path)
+
+    # if path is a symlink, perform some checks before deferring to other handlers
+    if path.is_symlink():
+        # maybe ignore it
+        if not follow_symlinks:
+            return
+
+        # check if its valid
+        if not path.resolve().exists():
+            if ignore_missing:
+                return
+            raise FileNotFoundError(f"Symbolic link {path} points to a non-existent file")
+
     # if path is a directory
     if path.is_dir():
         # possibly recurse into subdirectories
         if max_depth is None or _depth < max_depth:
             for child in path.iterdir():
-                yield from iterate_input_path(child, max_depth, _depth=_depth + 1)
+                yield from iterate_input_path(
+                    child, max_depth, ignore_missing, follow_symlinks, follow_text_files, _depth=_depth + 1
+                )
         # otherwise yield the directory itself
         else:
             yield path
 
-    # if path is a text file and we are at depth 0, read all lines in the file
-    elif path.is_file() and path.suffix == ".txt" and _depth == 0:
+    # if path is a text file and we are at depth 0, read all lines in the file if requested
+    elif path.is_file() and path.suffix == ".txt" and _depth == 0 and follow_text_files:
         with open(path, "r") as f:
             for line in f:
-                yield from iterate_input_path(Path(line.strip()), max_depth, ignore_missing)
+                yield from iterate_input_path(
+                    Path(line.strip()), max_depth, ignore_missing, follow_symlinks, follow_text_files, _depth=0
+                )
 
     # if path is any other file, return it
     elif path.is_file():
@@ -560,6 +594,7 @@ class RecordCollection(Generic[R]):
         record_types: Optional[Iterable[str]] = None,
         helpers: Iterable[str] = [],
         filters: Iterable[str] = [],
+        iterator_kwargs: Dict[str, Any] = {},
         **kwargs,
     ) -> C:
         r"""Create a :class:`RecordCollection` from a list of paths, either files or directories.
@@ -594,5 +629,5 @@ class RecordCollection(Generic[R]):
         Keyword Args:
             Forwarded to :func:`record_iterator`
         """
-        paths = iterate_filepaths(paths, pattern)
+        paths = filter(lambda x: cast(Path, x).match(pattern), iterate_input_path(paths, **iterator_kwargs))
         return cls.from_files(paths, jobs, use_bar, threads, record_types, helpers, filters=filters, **kwargs)
