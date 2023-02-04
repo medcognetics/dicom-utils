@@ -127,7 +127,7 @@ class TestReadDicomImage:
             ds = pydicom.dcmread(dicom_file_j2k)
             image = read_dicom_image(ds, use_nvjpeg=use_nvjpeg, nvjpeg_batch_size=BATCH_SIZE)
             if use_nvjpeg:
-                mocked_get_batch_size.assert_called_with(BATCH_SIZE, ds.NumberOfFrames)
+                mocked_get_batch_size.assert_called_with(BATCH_SIZE, ds.get("NumberOfFrames", 1))
             else:
                 mocked_get_batch_size.assert_not_called
             return image

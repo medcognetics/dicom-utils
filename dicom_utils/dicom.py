@@ -396,7 +396,7 @@ def nvjpeg_decompress(
     if not nvjpeg2k_is_available():
         raise ImportError("pynvjpeg is not available")
 
-    num_frames = int(dcm.NumberOfFrames)
+    num_frames = int(dcm.get("NumberOfFrames", 1))
     rows = dcm.Rows
     cols = dcm.Columns
 

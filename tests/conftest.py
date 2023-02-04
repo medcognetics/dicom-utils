@@ -37,7 +37,7 @@ def dicom_object(dicom_file):
 
 @pytest.fixture
 def dicom_file_j2k() -> str:
-    filename = get_testdata_file("JPEG2000.dcm")
+    filename = get_testdata_file("RG1_J2KR.dcm")
     assert isinstance(filename, str)
     return filename
 
