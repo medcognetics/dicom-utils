@@ -393,7 +393,13 @@ class RecordCollection(Generic[R]):
         self.records: Set[R] = set(records)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(length={len(self)})"
+        types = {}
+        for record in self.records:
+            name = record.__class__.__name__
+            types.setdefault(name, 0)
+            types[name] += 1
+        root = self.common_parent_dir()
+        return f"{self.__class__.__name__}(length={len(self)}, types={types}, parent={root})"
 
     def __len__(self) -> int:
         r"""Returns the total number of contained records"""
