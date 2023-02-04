@@ -295,5 +295,10 @@ class TestRecordCollection:
 
     def test_repr(self, tmp_path, collection):
         result = repr(collection)
-        expected = f"RecordCollection(length=9, types={{'DicomImageFileRecord': 9}}, parent={tmp_path})"
-        assert result == expected
+        expected_start = f"RecordCollection(length=9, types={{'DicomImageFileRecord': 9}}, parent={tmp_path}"
+        assert result.startswith(expected_start)
+
+    def test_repr_empty(self):
+        result = repr(RecordCollection())
+        expected_start = "RecordCollection(length=0, types={}, parent=None"
+        assert result.startswith(expected_start)

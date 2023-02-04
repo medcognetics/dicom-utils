@@ -399,7 +399,9 @@ class RecordCollection(Generic[R]):
             types.setdefault(name, 0)
             types[name] += 1
         root = self.common_parent_dir()
-        return f"{self.__class__.__name__}(length={len(self)}, types={types}, parent={root})"
+        sample_rec = next(iter(self.records), None)
+        sample_path = sample_rec.path if sample_rec else None
+        return f"{self.__class__.__name__}(length={len(self)}, types={types}, parent={root}, sample_path={sample_path})"
 
     def __len__(self) -> int:
         r"""Returns the total number of contained records"""
@@ -461,6 +463,8 @@ class RecordCollection(Generic[R]):
 
     def common_parent_dir(self) -> Optional[Path]:
         parents = self.parent_dirs()
+        if not parents:
+            return None
         proto = next(iter(parents))
         while proto.parent != proto:
             if all(p.is_relative_to(proto) for p in parents):
