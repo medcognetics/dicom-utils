@@ -12,7 +12,7 @@ from numpy.random import default_rng
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
-from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted, set_pixels
+from dicom_utils.dicom import data_handlers, default_data_handlers, image_is_uint16, is_inverted, set_pixels
 
 
 class TestReadDicomImage:
@@ -126,7 +126,7 @@ class TestReadDicomImage:
         def read_image(use_nvjpeg: bool):
             ds = pydicom.dcmread(dicom_file_j2k)
             image = read_dicom_image(ds, use_nvjpeg=use_nvjpeg, nvjpeg_batch_size=BATCH_SIZE)
-            if use_nvjpeg:
+            if use_nvjpeg and image_is_uint16(ds):
                 mocked_get_batch_size.assert_called_with(BATCH_SIZE, ds.get("NumberOfFrames", 1))
             else:
                 mocked_get_batch_size.assert_not_called

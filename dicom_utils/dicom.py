@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import functools
 import os
 import sys
 from os import PathLike
 from pathlib import Path
-from time import time
 from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
 from warnings import warn
 
@@ -328,6 +328,10 @@ def set_pixels(dcm: FileDataset, arr: np.ndarray, syntax: UID) -> FileDataset:
     return dcm
 
 
+def image_is_uint16(dcm: Dicom) -> bool:
+    return int(dcm.get("PixelRepresentation", 0)) == 0
+
+
 def decompress(
     dcm: Dicom,
     strict: bool = False,
@@ -355,6 +359,11 @@ def decompress(
             return dcm
 
     use_nvjpeg = use_nvjpeg if use_nvjpeg is not None else nvjpeg2k_is_available()
+
+    # The GPU NVJPEG decoder doesn't seem to work with int16 pixel data
+    # But this hasn't been thoroughly investigated
+    use_nvjpeg = use_nvjpeg and image_is_uint16(dcm)
+
     if use_nvjpeg:
         batch_size = batch_size or int(os.environ.get("NVJPEG2K_BATCH_SIZE", 1))
         pixels = nvjpeg_decompress(dcm, batch_size, verbose)
@@ -396,12 +405,21 @@ def nvjpeg_decompress(
     if not nvjpeg2k_is_available():
         raise ImportError("pynvjpeg is not available")
 
-    num_frames = int(dcm.get("NumberOfFrames", 1))
+    num_frames = dcm.get("NumberOfFrames", 1)
+
+    # In case number of frames is present in "dcm" but stored as "None"
+    dcm.NumberOfFrames = int(1 if num_frames is None else num_frames)
+
     rows = dcm.Rows
     cols = dcm.Columns
 
-    batch_size = _nvjpeg_get_batch_size(batch_size, num_frames)
-    pixels = dcm.PixelData
+    batch_size = _nvjpeg_get_batch_size(batch_size, dcm.NumberOfFrames)
     assert pynvjpeg is not None  # To fix a type error on the next line even though we already checked for this
-    result = pynvjpeg.decode_frames_jpeg2k(pixels, len(pixels), rows, cols, batch_size)
-    return result
+
+    # NOTE: pynvjpeg.decode_frames_jpeg2k should be faster, but it's not as reliable.
+    # For example, pynvjpeg.decode_frames_jpeg2k doesn't work with Pydicom's test file "RG1_J2KR.dcm"
+    # This approach seems to be about as fast, but might be faster if batch_size was used.
+    frame_stack = functools.reduce(lambda a, b: a + b, VolumeHandler.iterate_frames(dcm))
+    decoded_frames = pynvjpeg.decode_jpeg2k(frame_stack, len(frame_stack), rows, cols)
+
+    return decoded_frames

@@ -36,10 +36,22 @@ def dicom_object(dicom_file):
 
 
 @pytest.fixture
-def dicom_file_j2k() -> str:
+def dicom_file_j2k_uint16() -> str:
     filename = get_testdata_file("RG1_J2KR.dcm")
     assert isinstance(filename, str)
     return filename
+
+
+@pytest.fixture
+def dicom_file_j2k_int16() -> str:
+    filename = get_testdata_file("JPEG2000.dcm")
+    assert isinstance(filename, str)
+    return filename
+
+
+@pytest.fixture(params=["dicom_file_j2k_uint16", "dicom_file_j2k_int16"])
+def dicom_file_j2k(request):
+    return request.getfixturevalue(request.param)
 
 
 @pytest.fixture
