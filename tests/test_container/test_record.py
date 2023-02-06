@@ -638,34 +638,30 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         assert record.is_standard_mammo_view == exp
 
     @pytest.mark.parametrize(
-        "spot,mag,secondary,for_proc,cad,stereo,exp",
+        "attr_name,val,exp",
         [
-            pytest.param(False, False, False, False, False, False, True),
-            pytest.param(True, False, False, False, False, False, False),
-            pytest.param(False, True, False, False, False, False, False),
-            pytest.param(False, False, True, False, False, False, False),
-            pytest.param(False, False, False, True, False, False, False),
-            pytest.param(False, False, False, False, True, False, False),
-            pytest.param(False, False, False, False, False, True, False),
+            pytest.param(None, None, True),
+            pytest.param("is_spot_compression", True, False),
+            pytest.param("is_magnified", True, False),
+            # We can't set `is_secondary_capture` directly since it's not a cached_property
+            pytest.param("SOPClassUID", SecondaryCaptureImageStorage, False),
+            pytest.param("is_for_processing", True, False),
+            pytest.param("is_cad", True, False),
+            pytest.param("is_stereo", True, False),
+            pytest.param("is_infra_mammary_fold", True, False),
+            pytest.param("is_nipple_in_profile", True, False),
+            pytest.param("is_anterior_compression", True, False),
+            pytest.param("is_tangential", True, False),
+            # Implant displaced views are standard
+            pytest.param("is_implant_displaced", True, True),
         ],
     )
-    def test_is_standard_mammo_view_modifiers(
-        self, mocker, spot, mag, secondary, for_proc, cad, stereo, exp, record_factory
-    ):
+    def test_is_standard_mammo_view_modifiers(self, record_factory, attr_name, val, exp):
         record = record_factory(view_position=ViewPosition.MLO)
-        if spot:
-            object.__setattr__(record, "is_spot_compression", True)
-        if mag:
-            object.__setattr__(record, "is_magnified", True)
-        if secondary:
-            # We can't set `is_secondary_capture` directly since it's not a cached_property
-            object.__setattr__(record, "SOPClassUID", SecondaryCaptureImageStorage)
-        if for_proc:
-            object.__setattr__(record, "is_for_processing", True)
-        if cad:
-            object.__setattr__(record, "is_cad", True)
-        if stereo:
-            object.__setattr__(record, "is_stereo", True)
+        if attr_name is not None:
+            assert hasattr(record, attr_name)
+            object.__setattr__(record, attr_name, val)
+            assert getattr(record, attr_name) == val
         assert record.is_standard_mammo_view == exp
 
     @pytest.mark.parametrize("secondary_capture", [False, True])
