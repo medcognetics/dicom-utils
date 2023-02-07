@@ -1,1 +1,14 @@
 -e .
+
+# -e pynvjpeg2k  # Run this manually if you wish to install pynvjpeg2k (not required)
+#
+# The following steps may be required:
+#
+# 1. apt install cmake
+#
+# 2. Add CUDA tools to path
+# CUDA_FOLDER="cuda-12.0"
+# export PATH="/usr/local/$CUDA_FOLDER/bin:$PATH"
+# export LD_LIBRARY_PATH="/usr/local/$CUDA_FOLDER/lib64:$LD_LIBRARY_PATH"
+#
+# 3. apt -y install python3-pybind11

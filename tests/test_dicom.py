@@ -3,6 +3,7 @@
 
 
 import time
+from typing import Final
 
 import numpy as np
 import pydicom
@@ -11,7 +12,7 @@ from numpy.random import default_rng
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
-from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted, set_pixels
+from dicom_utils.dicom import data_handlers, default_data_handlers, image_is_uint16, is_inverted, set_pixels
 
 
 class TestReadDicomImage:
@@ -116,6 +117,26 @@ class TestReadDicomImage:
         assert array.shape[0] == 3
         assert array.shape[-2:] == (100, 100)
         assert array.dtype == np.uint8
+
+    @pytest.mark.ci_skip  # CircleCI will not have a GPU
+    def test_nvjpeg(self, dicom_file_j2k: str, mocker):
+        BATCH_SIZE: Final[int] = 1
+        mocked_get_batch_size = mocker.patch("dicom_utils.dicom._nvjpeg_get_batch_size")
+
+        def read_image(use_nvjpeg: bool):
+            ds = pydicom.dcmread(dicom_file_j2k)
+            image = read_dicom_image(ds, use_nvjpeg=use_nvjpeg, nvjpeg_batch_size=BATCH_SIZE)
+            if use_nvjpeg and image_is_uint16(ds):
+                mocked_get_batch_size.assert_called_with(BATCH_SIZE, ds.get("NumberOfFrames", 1))
+            else:
+                mocked_get_batch_size.assert_not_called
+            return image
+
+        cpu_image = read_image(False)
+        gpu_image = read_image(True)
+
+        assert cpu_image.shape == gpu_image.shape
+        assert (cpu_image == gpu_image).all()
 
 
 def test_deprecated_is_inverted(dicom_object):

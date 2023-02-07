@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import functools
+import os
 import sys
 from os import PathLike
 from pathlib import Path
@@ -12,12 +14,19 @@ from numpy import ndarray
 from pydicom import FileDataset
 from pydicom.encaps import encapsulate
 from pydicom.pixel_data_handlers.util import apply_voi_lut
-from pydicom.uid import UID, ImplicitVRLittleEndian
+from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian
 
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
 from .types import Dicom, PhotometricInterpretation
 from .volume import KeepVolume, VolumeHandler
+
+
+try:
+    # NOTE: This module will be open-sourced in the future
+    import pynvjpeg  # type: ignore
+except Exception:
+    pynvjpeg = None
 
 
 # Taken from https://pydicom.github.io/pydicom/dev/old/image_data_handlers.html
@@ -171,6 +180,8 @@ def read_dicom_image(
     strict_interp: bool = False,
     volume_handler: VolumeHandler = KeepVolume(),
     as_uint8: bool = False,
+    use_nvjpeg: Optional[bool] = False,
+    nvjpeg_batch_size: Optional[int] = None,
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -179,15 +190,19 @@ def read_dicom_image(
         dcm:
             DICOM object to load images from
         stop_before_pixels:
-            If true, return randomly generated data
+            If ``True``, return randomly generated data
         shape:
             Manual shape override when ``stop_before_pixels`` is true. Should not include a channel dimension
         strict_interp:
-            If true, don't make any assumptions for trying to work around parsing errors
+            If ``True``, don't make any assumptions for trying to work around parsing errors
         volume_handler:
             Handler for processing 3D volumes
         as_uint8:
             If ``True``, convert non-uint8 outputs to uint8 using min/max normalization
+        use_nvjpeg:
+            If ``True``, decompress JPEG2000 images via GPU
+        nvjpeg_batch_size:
+            Batch size for GPU JPEG2000 decompression
 
     Shape:
         - Output: :math:`(C, H, W)` or :math:`(C, D, H, W)`
@@ -237,6 +252,14 @@ def read_dicom_image(
         dcm = volume_handler(dcm)
         D: int = int(dcm.get("NumberOfFrames", 1))
         dims = (C, D, *dims[-2:]) if D > 1 else (C, *dims[-2:])
+
+    # decompress with GPU if requested
+    # TODO If the volume handler is ReduceVolume, we should be decompressing
+    # before the handler is applied instead of after.
+    # But for every other handler we should decompress after.
+    # We need to figure out the best way to deal with this.
+    if use_nvjpeg is None or use_nvjpeg:
+        dcm = decompress(dcm, use_nvjpeg=use_nvjpeg, batch_size=nvjpeg_batch_size)
 
     # DICOM is channels last, so permute dims
     channels_last_dims = *dims[1:], dims[0]
@@ -303,3 +326,102 @@ def set_pixels(dcm: FileDataset, arr: np.ndarray, syntax: UID) -> FileDataset:
         dcm.PixelData = arr.tobytes()
     dcm.file_meta.TransferSyntaxUID = syntax
     return dcm
+
+
+def image_is_uint16(dcm: Dicom) -> bool:
+    return int(dcm.get("PixelRepresentation", 0)) == 0
+
+
+def decompress(
+    dcm: Dicom,
+    strict: bool = False,
+    use_nvjpeg: Optional[bool] = None,
+    batch_size: Optional[int] = None,
+    verbose: bool = False,
+) -> Dicom:
+    r"""Decompress pixel data of a DICOM object
+
+    Args:
+        dcm: DICOM object to decompress
+        strict: Raise an error if a decompressed DICOM is given as input
+        use_nvjpeg: Use GPU accelerated decompression. Set to ``None`` to use if available
+        batch_size: GPU decompression batch size. Set to ``None`` to defer to environment variable
+        ``NVJPEG2K_BATCH_SIZE``
+
+    Returns:
+        DICOM object with decompressed pixel data and ExplicitVRLittleEndian transfer syntax.
+    """
+    tsuid = dcm.file_meta.TransferSyntaxUID
+    if not tsuid.is_compressed:
+        if strict:
+            raise RuntimeError(f"TransferSyntaxUID {tsuid} is already decompressed")
+        else:
+            return dcm
+
+    use_nvjpeg = use_nvjpeg if use_nvjpeg is not None else nvjpeg2k_is_available()
+
+    # The GPU NVJPEG decoder doesn't seem to work with int16 pixel data
+    # But this hasn't been thoroughly investigated
+    use_nvjpeg = use_nvjpeg and image_is_uint16(dcm)
+
+    if use_nvjpeg:
+        batch_size = batch_size or int(os.environ.get("NVJPEG2K_BATCH_SIZE", 1))
+        pixels = nvjpeg_decompress(dcm, batch_size, verbose)
+    else:
+        pixels = dcm.pixel_array
+    assert isinstance(dcm, FileDataset)
+    dcm = set_pixels(dcm, pixels, ExplicitVRLittleEndian)
+    return dcm
+
+
+def nvjpeg2k_is_available() -> bool:  # pragma: no cover
+    return pynvjpeg is not None
+
+
+# TODO: support num_frames % batch_size != 0 in C++ extension
+def _nvjpeg_get_batch_size(batch_size: int, num_frames: int) -> int:  # pragma: no cover
+    while num_frames % batch_size != 0 and batch_size > 1:
+        batch_size = batch_size - 1
+    assert batch_size >= 1
+    assert num_frames % batch_size == 0
+    return batch_size
+
+
+def nvjpeg_decompress(
+    dcm: Dicom,
+    batch_size: int = 4,
+    verbose: bool = False,
+) -> np.ndarray:  # pragma: no cover
+    r"""Decompress pixel data of a DICOM object with NVJPEG2000
+
+    Args:
+        dcm: DICOM object to decompress
+        batch_size: GPU decompression batch size. Set to ``None`` to defer to environment variable
+        ``NVJPEG2K_BATCH_SIZE``.
+
+    Returns:
+        Decompressed pixel array
+    """
+    if not nvjpeg2k_is_available():
+        raise ImportError("pynvjpeg is not available")
+
+    num_frames = dcm.get("NumberOfFrames", 1)
+
+    # In case number of frames is present in "dcm" but stored as "None"
+    dcm.NumberOfFrames = int(1 if num_frames is None else num_frames)
+
+    rows = dcm.Rows
+    cols = dcm.Columns
+
+    batch_size = _nvjpeg_get_batch_size(batch_size, dcm.NumberOfFrames)
+    assert pynvjpeg is not None  # To fix a type error on the next line even though we already checked for this
+
+    # NOTE: pynvjpeg.decode_frames_jpeg2k should be faster, but it's not as reliable.
+    # For example, pynvjpeg.decode_frames_jpeg2k doesn't work with Pydicom's test file "RG1_J2KR.dcm"
+    # This approach seems to be about as fast, but might be faster if batch_size was used.
+    # The optimal approach would probably be to leverage pydicom.encaps.get_frame_offsets
+    # and let pynvjpeg create the frame stack.
+    frame_stack = functools.reduce(lambda a, b: a + b, VolumeHandler.iterate_frames(dcm))
+    decoded_frames = pynvjpeg.decode_jpeg2k(frame_stack, len(frame_stack), rows, cols)
+
+    return decoded_frames

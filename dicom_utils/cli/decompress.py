@@ -3,13 +3,11 @@
 import argparse
 from argparse import ArgumentParser
 from pathlib import Path
+from time import time
 
 import pydicom
-from pydicom import FileDataset
-from pydicom.uid import ExplicitVRLittleEndian
 
-from ..dicom import set_pixels
-from ..types import Dicom
+from ..dicom import decompress
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -18,21 +16,17 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument(
         "-s", "--strict", default=False, action="store_true", help="if true, raise an error on uncompressed input"
     )
+    parser.add_argument(
+        "-g", "--gpu", default=False, action="store_true", help="use NVJPEG2K accelerated decompression"
+    )
+    parser.add_argument(
+        "-b", "--batch-size", default=4, type=int, help="batch size for NVJPEG2K accelerated decompression"
+    )
+    parser.add_argument("-v", "--verbose", default=False, action="store_true", help="print NVJPEG2K outputs")
+    parser.add_argument(
+        "-t", "--test", default=False, action="store_true", help="test equivalence to CPU decompression"
+    )
     return parser
-
-
-def decompress(dcm: Dicom, strict: bool = False) -> Dicom:
-    tsuid = dcm.file_meta.TransferSyntaxUID
-    if not tsuid.is_compressed:
-        if strict:
-            raise RuntimeError(f"TransferSyntaxUID {tsuid} is already decompressed")
-        else:
-            return dcm
-
-    pixels = dcm.pixel_array
-    assert isinstance(dcm, FileDataset)
-    dcm = set_pixels(dcm, pixels, ExplicitVRLittleEndian)
-    return dcm
 
 
 def main(args: argparse.Namespace) -> None:
@@ -43,10 +37,23 @@ def main(args: argparse.Namespace) -> None:
     if not dest.parent.is_dir():
         raise NotADirectoryError(dest.parent)
 
+    start_time = time()
     with pydicom.dcmread(path) as dcm:
-        dcm = decompress(dcm, strict=args.strict)
+        dcmread_time = time() - start_time
+        dcm = decompress(dcm, strict=args.strict, use_nvjpeg=args.gpu, batch_size=args.batch_size, verbose=args.verbose)
         assert not dcm.file_meta.TransferSyntaxUID.is_compressed
         dcm.save_as(dest)
+    end_time = time()
+    if args.verbose:
+        total_time = end_time - start_time
+        print(f"pydicom.dcmread time (s): {dcmread_time}")
+        print(f"Total time (s): {total_time}")
+
+    if args.test:
+        with pydicom.dcmread(path) as dcm2:
+            px1 = dcm.pixel_array
+            px2 = dcm2.pixel_array
+            assert (px1 == px2).all()
 
 
 def entrypoint():
