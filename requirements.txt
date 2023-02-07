@@ -2,7 +2,7 @@
 
 # -e .[j2k]  # Run this manually if you wish to install pynvjpeg2k (not required)
 # For example,
-# $ epip install -e ".[j2k,dev]"
+# $ pip install -e ".[j2k,dev]"
 #
 # The following steps may be required:
 #

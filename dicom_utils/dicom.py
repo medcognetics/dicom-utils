@@ -403,7 +403,7 @@ def nvjpeg_decompress(
         Decompressed pixel array
     """
     if not nvjpeg2k_is_available():
-        raise ImportError("pynvjpeg is not available")
+        raise ImportError('pynvjpeg is not available. Install with: pip install -e ".[j2k]"')
 
     num_frames = dcm.get("NumberOfFrames", 1)
 
