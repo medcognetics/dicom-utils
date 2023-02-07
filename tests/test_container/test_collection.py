@@ -46,7 +46,8 @@ class TestIterateInputPath:
         else:
             assert result == list(path.iterdir())
 
-    def test_text_file_of_files(self, tmp_path):
+    @pytest.mark.parametrize("follow_text_files", [True, False])
+    def test_text_file_of_files(self, tmp_path, follow_text_files):
         path = Path(tmp_path, "test.txt")
         subdir = Path(tmp_path, "dir")
         subdir.mkdir()
@@ -57,8 +58,8 @@ class TestIterateInputPath:
                 p.touch()
                 targets.append(p)
                 f.write(f"{p}\n")
-        result = list(iterate_input_path(path))
-        assert result == targets
+        result = list(iterate_input_path(path, follow_text_files=follow_text_files))
+        assert result == (targets if follow_text_files else [path])
 
     @pytest.mark.parametrize("max_depth", [None, 0, 1])
     def test_text_file_of_dirs(self, tmp_path, max_depth):
@@ -100,6 +101,43 @@ class TestIterateInputPath:
             f.write(f"{p}\n")
         result = list(iterate_input_path(path, ignore_missing=ignore_missing))
         assert result == []
+
+    @pytest.mark.parametrize("follow_symlinks", [True, False])
+    def test_handle_symlink_files(self, tmp_path, follow_symlinks):
+        real_path = tmp_path / "real"
+        symlink_path = tmp_path / "symlink"
+        real_path.mkdir()
+        symlink_path.mkdir()
+
+        for i in range(3):
+            p = real_path / f"test{i}.dcm"
+            p.touch()
+            symlink = symlink_path / f"test{i}.dcm"
+            symlink.symlink_to(p)
+            assert symlink.is_file()
+
+        result = list(iterate_input_path(symlink_path, follow_symlinks=follow_symlinks))
+        assert len(result) == (3 if follow_symlinks else 0)
+        assert all(r.is_symlink() for r in result)
+
+    @pytest.mark.parametrize("follow_symlinks", [True, False])
+    def test_handle_symlink_dirs(self, tmp_path, follow_symlinks):
+        real_path = tmp_path / "real"
+        symlink_path = tmp_path / "symlink"
+        real_path.mkdir()
+        symlink_path.mkdir()
+
+        for i in range(3):
+            p = real_path / str(i) / f"test{i}.dcm"
+            p.parent.mkdir()
+            p.touch()
+            symlink = symlink_path / str(i)
+            symlink.symlink_to(p.parent)
+            assert symlink.is_dir()
+
+        result = list(iterate_input_path(symlink_path, follow_symlinks=follow_symlinks))
+        assert len(result) == (3 if follow_symlinks else 0)
+        assert all(r.parent.is_symlink() for r in result)
 
 
 @pytest.fixture
