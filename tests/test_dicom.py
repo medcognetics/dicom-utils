@@ -119,6 +119,7 @@ class TestReadDicomImage:
         assert array.dtype == np.uint8
 
     @pytest.mark.ci_skip  # CircleCI will not have a GPU
+    @pytest.importorskip("pynvjpeg", reason="pynvjpeg is not installed")
     def test_nvjpeg(self, dicom_file_j2k: str, mocker):
         BATCH_SIZE: Final[int] = 1
         mocked_get_batch_size = mocker.patch("dicom_utils.dicom._nvjpeg_get_batch_size")
