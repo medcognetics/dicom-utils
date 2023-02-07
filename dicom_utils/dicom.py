@@ -5,23 +5,22 @@ import os
 import sys
 from os import PathLike
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
 from warnings import warn
 
 import numpy as np
 import pydicom
 from numpy import ndarray
-from pydicom import FileDataset, DataElement
+from pydicom import DataElement, FileDataset
 from pydicom.encaps import encapsulate
 from pydicom.pixel_data_handlers.util import apply_voi_lut
 from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian
 
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
+from .tags import Tag
 from .types import Dicom, PhotometricInterpretation, iterate_shared_functional_groups
 from .volume import KeepVolume, VolumeHandler
-from .tags import Tag
 
 
 try:
