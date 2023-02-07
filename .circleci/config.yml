@@ -4,33 +4,6 @@ orbs:
   codecov: codecov/codecov@1.0.2
 
 commands:
-  checkout_private_submodule:
-    # Why is checking out a private submodule so complicated?
-    # 1. GitHub does not allow a public key to be copied as a deploy key into multiple repos.
-    #    Therefore, each submodule needs its own unique deploy public key.
-    # 2. If we add all submodule deploy private keys at once, CircleCI
-    #    will only use the first deploy private key added.
-    # Therefore, we do this:
-    # 1. Remove .ssh/config so we don't use any previously added keys
-    # 2. Add the key which is able to access the submodule we are about to clone
-    # 3. Clone the desired submodule
-    # 4. Go back to step 1 for any additional submodules
-    parameters:
-      repo:
-        default: "none"
-        type: string
-      ssh_key_fingerprint:
-        default: "none"
-        type: string
-      working_directory:
-        default: "."
-        type: string
-    steps:
-      - run: rm -f $HOME/.ssh/config # Old config may contain an old key
-      - add_ssh_keys:
-          fingerprints:
-            - <<parameters.ssh_key_fingerprint>>
-      - run: cd <<parameters.working_directory>> && git submodule update --init <<parameters.repo>>
   install_npm:
     steps:
       - run: sudo apt update
@@ -54,9 +27,6 @@ jobs:
       - image: circleci/python:3.10
     steps:
       - checkout
-      - checkout_private_submodule:
-          repo: pynvjpeg2k
-          ssh_key_fingerprint: ab:1b:ef:f1:39:f5:dd:f1:97:de:0b:c5:8a:2a:58:52
       - run:
           name: Install dependencies
           command: make init
