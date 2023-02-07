@@ -15,6 +15,7 @@ from dicom_utils.types import (
     ImageType,
     Laterality,
     MammogramType,
+    MammogramView,
     PhotometricInterpretation,
     PixelSpacing,
     ViewPosition,
@@ -556,6 +557,34 @@ class TestViewPosition:
         x = ViewPosition.from_dicom(dcm)
         assert x == exp
 
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (ViewPosition.MLO, True),
+            (ViewPosition.CC, True),
+            *[(view, False) for view in ViewPosition if view not in (ViewPosition.MLO, ViewPosition.CC)],
+        ],
+    )
+    def test_is_standard_view(self, value, expected):
+        assert value.is_standard_view == expected
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (view, view in (ViewPosition.MLO, ViewPosition.ML, ViewPosition.LM, ViewPosition.LMO))
+            for view in ViewPosition
+        ],
+    )
+    def test_is_mlo_like(self, value, expected):
+        assert value.is_mlo_like == expected
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [(view, view in (ViewPosition.CC, ViewPosition.XCCL, ViewPosition.XCCM)) for view in ViewPosition],
+    )
+    def test_is_cc_like(self, value, expected):
+        assert value.is_cc_like == expected
+
 
 class TestPixelSpacing:
     @pytest.mark.parametrize(
@@ -588,3 +617,61 @@ class TestPixelSpacing:
         dcm = factory()
         actual = PixelSpacing.from_dicom(dcm)
         assert actual == exp
+
+
+class TestMammogramView:
+    @pytest.mark.parametrize(
+        "lat_in,view_in,lat_out,view_out",
+        [
+            (None, None, Laterality.UNKNOWN, ViewPosition.UNKNOWN),
+            (Laterality.LEFT, None, Laterality.LEFT, ViewPosition.UNKNOWN),
+            (None, ViewPosition.MLO, Laterality.UNKNOWN, ViewPosition.MLO),
+        ],
+    )
+    def test_create(self, lat_in, view_in, lat_out, view_out):
+        assert MammogramView.create(lat_in, view_in) == MammogramView(lat_out, view_out)
+
+    @pytest.mark.parametrize(
+        "lat_in,view_in,lat_out,view_out",
+        [
+            ("L", "MLO", Laterality.LEFT, ViewPosition.MLO),
+            ("", "MLO", Laterality.UNKNOWN, ViewPosition.MLO),
+            ("L", "", Laterality.LEFT, ViewPosition.UNKNOWN),
+            ("R", "MLO", Laterality.RIGHT, ViewPosition.MLO),
+        ],
+    )
+    def test_from_dicom(self, lat_in, view_in, lat_out, view_out):
+        fact = DicomFactory(ViewPosition=view_in, Laterality=lat_in)
+        dcm = fact()
+        assert MammogramView.from_dicom(dcm) == MammogramView(lat_out, view_out)
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (view, view in (ViewPosition.MLO, ViewPosition.ML, ViewPosition.LM, ViewPosition.LMO))
+            for view in ViewPosition
+        ],
+    )
+    def test_is_mlo_like(self, value, expected):
+        mview = MammogramView(view=value)
+        assert mview.is_mlo_like == expected
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [(view, view in (ViewPosition.CC, ViewPosition.XCCL, ViewPosition.XCCM)) for view in ViewPosition],
+    )
+    def test_is_cc_like(self, value, expected):
+        mview = MammogramView(view=value)
+        assert mview.is_cc_like == expected
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (ViewPosition.MLO, True),
+            (ViewPosition.CC, True),
+            *[(view, False) for view in ViewPosition if view not in (ViewPosition.MLO, ViewPosition.CC)],
+        ],
+    )
+    def test_is_standard_view(self, value, expected):
+        mview = MammogramView(view=value)
+        assert mview.is_standard_mammo_view == expected
