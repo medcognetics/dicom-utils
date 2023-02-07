@@ -419,6 +419,8 @@ def nvjpeg_decompress(
     # NOTE: pynvjpeg.decode_frames_jpeg2k should be faster, but it's not as reliable.
     # For example, pynvjpeg.decode_frames_jpeg2k doesn't work with Pydicom's test file "RG1_J2KR.dcm"
     # This approach seems to be about as fast, but might be faster if batch_size was used.
+    # The optimal approach would probably be to leverage pydicom.encaps.get_frame_offsets
+    # and let pynvjpeg create the frame stack.
     frame_stack = functools.reduce(lambda a, b: a + b, VolumeHandler.iterate_frames(dcm))
     decoded_frames = pynvjpeg.decode_jpeg2k(frame_stack, len(frame_stack), rows, cols)
 
