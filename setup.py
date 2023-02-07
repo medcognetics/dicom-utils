@@ -41,6 +41,7 @@ PROJECT = "dicom_utils"
 extras = {}
 extras["testing"] = ["pytest", "pytest-mock", "pytest-cov", "pytest-xdist"]
 extras["dev"] = extras["testing"] + ["colorama==0.4.3"]
+extras["j2k"] = ["pynvjpeg2k @ git+ssh://git@github.com/medcognetics/pynvjpeg2k.git"]
 
 
 def write_version_info():
