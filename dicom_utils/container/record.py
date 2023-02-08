@@ -629,6 +629,12 @@ class DicomImageFileRecord(DicomFileRecord):
     def is_volume(self) -> bool:
         return self.is_valid_image and ((self.NumberOfFrames or 1) > 1)
 
+    @property
+    def image_area(self) -> Optional[int]:
+        if self.Rows is not None and self.Columns is not None:
+            return self.Rows * self.Columns
+        return None
+
     @cached_property
     def is_magnified(self) -> bool:
         keywords = {"magnification", "magnified"}
@@ -730,6 +736,17 @@ class MammogramFileRecord(DicomImageFileRecord):
                 and not other.is_implant_displaced
             ):
                 return True
+            # If mammograms have different types, order by type priority
+            elif (
+                self.mammogram_type is not None
+                and other.mammogram_type is not None
+                and self.mammogram_type != other.mammogram_type
+            ):
+                return self.mammogram_type < other.mammogram_type
+            # If mammograms have different resolutions, order by resolution
+            elif self.image_area != other.image_area:
+                # Higher resolution is preferred, so flip the comparison sign
+                return (self.image_area or float("inf")) > (other.image_area or float("inf"))
         # Super compares by SOPInstanceUID
         return super().__lt__(other)
 
@@ -869,6 +886,42 @@ class MammogramFileRecord(DicomImageFileRecord):
             return Laterality.RIGHT
         else:
             return Laterality.NONE
+
+    @classmethod
+    def get_preferred_views(
+        cls, col: Iterable["MammogramFileRecord"]
+    ) -> Dict[MammogramView, Optional["MammogramFileRecord"]]:
+        r"""Selects preferred inference views from a collection of :class:`MammogramFileRecord`s.
+
+        Args:
+            col: Collection to select from
+
+        Returns:
+            Dictionary giving the selected view (or `None` if a view could not be found) for each of the
+            four standard view positions.
+        """
+        result: Dict[MammogramView, Optional["MammogramFileRecord"]] = {}
+        col = list(col)
+
+        # Try each standard view
+        for mammo_view in STANDARD_MAMMO_VIEWS:
+            lat, view_pos = mammo_view
+
+            # Select only views that match what we're looking for.
+            # We permit MLO-like or CC-like views
+            def _filter(rec: MammogramFileRecord) -> bool:
+                candidate = rec.mammogram_view
+                assert view_pos.is_mlo_like or view_pos.is_cc_like
+                laterality_match = candidate.laterality == lat
+                view_match = candidate.is_mlo_like if view_pos.is_mlo_like else candidate.is_cc_like
+                return view_match and laterality_match
+
+            candidates = list(filter(_filter, col))
+
+            # Select the most preferred image if one exists
+            selection = min(candidates, default=None)
+            result[mammo_view] = selection
+        return result
 
     def standardized_filename(self, file_id: Optional[str] = None) -> StandardizedFilename:
         r"""Returns a standardized filename for the DICOM represented by this :class:`DicomFileRecord`.

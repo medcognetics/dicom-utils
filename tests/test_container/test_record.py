@@ -27,7 +27,7 @@ from dicom_utils.container.record import (
 )
 from dicom_utils.dicom_factory import DicomFactory
 from dicom_utils.tags import Tag
-from dicom_utils.types import Laterality, MammogramType, PixelSpacing, ViewPosition, get_value
+from dicom_utils.types import Laterality, MammogramType, MammogramView, PixelSpacing, ViewPosition, get_value
 
 
 class TestStandardizedFilename:
@@ -1060,6 +1060,16 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
                 True,
             ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.FFDM),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.SYNTH),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.SYNTH),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.FFDM),
+                False,
+            ),
         ],
     )
     def test_lt(self, rec1, rec2, exp):
@@ -1138,6 +1148,11 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 ),
                 MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
                 False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.SYNTH),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.FFDM),
+                True,
             ),
         ],
     )
@@ -1218,6 +1233,11 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
                 False,
             ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.SYNTH),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.FFDM),
+                True,
+            ),
         ],
     )
     def test_ge(self, rec1, rec2, exp):
@@ -1297,7 +1317,284 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
                 True,
             ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.SYNTH),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, mammogram_type=MammogramType.FFDM),
+                False,
+            ),
         ],
     )
     def test_le(self, rec1, rec2, exp):
         assert (rec1 <= rec2) == exp
+
+    @pytest.mark.parametrize(
+        "views,to_check,exp",
+        [
+            (
+                [
+                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("m2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("m3.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.CC),
+                    MammogramFileRecord(Path("m4.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m1.dcm"),
+            ),
+            (
+                [
+                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("m2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("m3.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.CC),
+                    MammogramFileRecord(Path("m4.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                MammogramView(Laterality.RIGHT, ViewPosition.CC),
+                Path("m4.dcm"),
+            ),
+            (
+                [
+                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("m2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("m3.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.CC),
+                ],
+                MammogramView(Laterality.RIGHT, ViewPosition.CC),
+                None,
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(
+                        Path("m1.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        BreastImplantPresent="YES",
+                    ),
+                    MammogramFileRecord(
+                        Path("m2.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        BreastImplantPresent="YES",
+                        ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                    ),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m2.dcm"),
+                id="prefer-id-over-non-id-1",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(
+                        Path("m1.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        BreastImplantPresent="YES",
+                        ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                    ),
+                    MammogramFileRecord(
+                        Path("m2.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        BreastImplantPresent="YES",
+                    ),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m1.dcm"),
+                id="prefer-id-over-non-id-2",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(
+                        Path("m1.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        mammogram_type=MammogramType.FFDM,
+                    ),
+                    MammogramFileRecord(
+                        Path("m2.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        mammogram_type=MammogramType.SYNTH,
+                    ),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m1.dcm"),
+                id="prefer-ffdm-to-synth-1",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(
+                        Path("m1.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        mammogram_type=MammogramType.SYNTH,
+                    ),
+                    MammogramFileRecord(
+                        Path("m2.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        mammogram_type=MammogramType.FFDM,
+                    ),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m2.dcm"),
+                id="prefer-ffdm-to-synth-2",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(
+                        Path("m1.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        PaddleDescription="SPOT",
+                    ),
+                    MammogramFileRecord(Path("m2.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m2.dcm"),
+                id="prefer-standard-to-nonstandard-1",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(
+                        Path("m2.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        PaddleDescription="SPOT",
+                    ),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m1.dcm"),
+                id="prefer-standard-to-nonstandard-2",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(
+                        Path("m1.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        Rows=512,
+                        Columns=512,
+                    ),
+                    MammogramFileRecord(
+                        Path("m2.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        Rows=2048,
+                        Columns=2048,
+                    ),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m2.dcm"),
+                id="prefer-high-res-to-low-res-1",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(
+                        Path("m1.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        Rows=2048,
+                        Columns=2048,
+                    ),
+                    MammogramFileRecord(
+                        Path("m2.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        Rows=512,
+                        Columns=512,
+                    ),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m1.dcm"),
+                id="prefer-high-res-to-low-res-2",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(
+                        Path("m1.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        SOPInstanceUID=SOPUID("1.2.3"),
+                    ),
+                    MammogramFileRecord(
+                        Path("m2.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        SOPInstanceUID=SOPUID("1.2.4"),
+                    ),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m1.dcm"),
+                id="sopuid-fallback-1",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(
+                        Path("m1.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        SOPInstanceUID=SOPUID("1.2.4"),
+                    ),
+                    MammogramFileRecord(
+                        Path("m2.dcm"),
+                        laterality=Laterality.LEFT,
+                        view_position=ViewPosition.MLO,
+                        SOPInstanceUID=SOPUID("1.2.3"),
+                    ),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m2.dcm"),
+                id="sopuid-fallback-2",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("m2.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.ML),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m1.dcm"),
+                id="nonstandard-fallback-1",
+            ),
+            # We should fall back to MLO-like or CC-like views if MLO / CC are unavailable
+            pytest.param(
+                [
+                    MammogramFileRecord(Path("m2.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.ML),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                Path("m2.dcm"),
+                id="nonstandard-fallback-2",
+            ),
+            pytest.param([], MammogramView(Laterality.LEFT, ViewPosition.MLO), None, id="empty-input"),
+            pytest.param(
+                [
+                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.AT),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                None,
+                id="no-matching-input",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(Path("m1.dcm"), laterality=None, view_position=ViewPosition.MLO),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                None,
+                id="no-matching-laterality",
+            ),
+            pytest.param(
+                [
+                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.LEFT, view_position=None),
+                ],
+                MammogramView(Laterality.LEFT, ViewPosition.MLO),
+                None,
+                id="no-matching-view-position",
+            ),
+        ],
+    )
+    def test_get_preferred_views(self, views, to_check, exp):
+        result = MammogramFileRecord.get_preferred_views(views)
+        if exp is not None:
+            act = result[to_check]
+            assert act is not None
+            assert act.path == exp
+        else:
+            assert result[to_check] is None
