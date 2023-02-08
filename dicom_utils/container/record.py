@@ -402,6 +402,26 @@ class DicomFileRecord(
             return self.same_uid_as(other)
         return self.path == other.path
 
+    def __lt__(self, other: FileRecord) -> bool:
+        if not isinstance(other, DicomFileRecord):
+            return FileRecord(self.path) < other
+        return str(self.SOPInstanceUID) < str(other.SOPInstanceUID)
+
+    def __gt__(self, other: FileRecord) -> bool:
+        if not isinstance(other, DicomFileRecord):
+            return FileRecord(self.path) > other
+        return str(self.SOPInstanceUID) > str(other.SOPInstanceUID)
+
+    def __le__(self, other: FileRecord) -> bool:
+        if not isinstance(other, DicomFileRecord):
+            return FileRecord(self.path) <= other
+        return str(self.SOPInstanceUID) <= str(other.SOPInstanceUID)
+
+    def __ge__(self, other: FileRecord) -> bool:
+        if not isinstance(other, DicomFileRecord):
+            return FileRecord(self.path) >= other
+        return str(self.SOPInstanceUID) >= str(other.SOPInstanceUID)
+
     def __hash__(self) -> int:
         if self.has_uid:
             return hash(self.get_uid(prefer_sop=True))

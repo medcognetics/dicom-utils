@@ -17,6 +17,7 @@ from pydicom.uid import AllTransferSyntaxes, SecondaryCaptureImageStorage
 
 from dicom_utils.container import FileRecord
 from dicom_utils.container.record import (
+    SOPUID,
     STANDARD_MAMMO_VIEWS,
     DicomFileRecord,
     DicomImageFileRecord,
@@ -415,6 +416,118 @@ class TestDicomFileRecord(TestFileRecord):
             TreatmentSite=ts,
         )
         assert rec.site == exp
+
+    @pytest.mark.parametrize(
+        "rec1,rec2,exp",
+        [
+            # Other is FileRecord, fallback to path comparison
+            (DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), False),
+            (DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("bar.dcm")), False),
+            (DicomFileRecord(Path("bar.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), True),
+            # Otherwise compare SOPInstanceUID
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                False,
+            ),
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                True,
+            ),
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                False,
+            ),
+        ],
+    )
+    def test_lt(self, rec1, rec2, exp):
+        assert (rec1 < rec2) == exp
+
+    @pytest.mark.parametrize(
+        "rec1,rec2,exp",
+        [
+            # Other is FileRecord, fallback to path comparison
+            (DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), False),
+            (DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("bar.dcm")), True),
+            (DicomFileRecord(Path("bar.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), False),
+            # Otherwise compare SOPInstanceUID
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                False,
+            ),
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                False,
+            ),
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                True,
+            ),
+        ],
+    )
+    def test_gt(self, rec1, rec2, exp):
+        assert (rec1 > rec2) == exp
+
+    @pytest.mark.parametrize(
+        "rec1,rec2,exp",
+        [
+            # Other is FileRecord, fallback to path comparison
+            (DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), True),
+            (DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("bar.dcm")), False),
+            (DicomFileRecord(Path("bar.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), True),
+            # Otherwise compare SOPInstanceUID
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                True,
+            ),
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                True,
+            ),
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                False,
+            ),
+        ],
+    )
+    def test_le(self, rec1, rec2, exp):
+        assert (rec1 <= rec2) == exp
+
+    @pytest.mark.parametrize(
+        "rec1,rec2,exp",
+        [
+            # Other is FileRecord, fallback to path comparison
+            (DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), True),
+            (DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("bar.dcm")), True),
+            (DicomFileRecord(Path("bar.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), False),
+            # Otherwise compare SOPInstanceUID
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                True,
+            ),
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                False,
+            ),
+            (
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                True,
+            ),
+        ],
+    )
+    def test_ge(self, rec1, rec2, exp):
+        assert (rec1 >= rec2) == exp
 
 
 class TestDicomImageFileRecord(TestDicomFileRecord):
