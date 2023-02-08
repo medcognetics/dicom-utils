@@ -5,9 +5,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from time import time
 
-import numpy as np
 import pydicom
-from PIL import Image
 
 from ..dicom import decompress
 
@@ -29,13 +27,6 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
         "-t", "--test", default=False, action="store_true", help="test equivalence to CPU decompression"
     )
     return parser
-
-
-def to_img(x: np.ndarray) -> Image.Image:
-    x = x.astype(np.float32)
-    x = (x - x.min()) / (x.max() - x.min()) * 255
-    x = x.astype(np.uint8)
-    return Image.fromarray(x)
 
 
 def main(args: argparse.Namespace) -> None:
