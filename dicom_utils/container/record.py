@@ -395,8 +395,6 @@ class DicomFileRecord(
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, type(self)):
             return False
-        Tag.TreatmentSite
-        Tag.InstitutionAddress
 
         if self.SOPInstanceUID and other.SOPInstanceUID:
             return self.same_uid_as(other)
@@ -719,6 +717,35 @@ class MammogramFileRecord(DicomImageFileRecord):
             object.__setattr__(self, "view_position", ViewPosition.from_str(self.view_position))
         if isinstance(self.laterality, str):
             object.__setattr__(self, "laterality", Laterality.from_str(self.laterality))
+
+    def __lt__(self, other: FileRecord) -> bool:
+        if isinstance(other, MammogramFileRecord):
+            # Standard views take priority over nonstandard views
+            if self.is_standard_mammo_view and not other.is_standard_mammo_view:
+                return True
+            # Implant displaced views take priority over implant views (only for same study)
+            elif (
+                self.StudyInstanceUID == other.StudyInstanceUID
+                and self.is_implant_displaced
+                and not other.is_implant_displaced
+            ):
+                return True
+        # Super compares by SOPInstanceUID
+        return super().__lt__(other)
+
+    def __le__(self, other: FileRecord) -> bool:
+        if isinstance(other, MammogramFileRecord):
+            if self < other:
+                return True
+            elif other < self:
+                return False
+        return super().__le__(other)
+
+    def __gt__(self, other: FileRecord) -> bool:
+        return not self <= other
+
+    def __ge__(self, other: FileRecord) -> bool:
+        return not self < other
 
     @property
     def mammogram_view(self) -> MammogramView:

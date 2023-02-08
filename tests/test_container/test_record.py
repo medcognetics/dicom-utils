@@ -6,7 +6,7 @@ from dataclasses import fields, replace
 from io import IOBase
 from os import PathLike
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 import pydicom
 import pytest
@@ -985,3 +985,319 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         if tag is not None:
             record = record.replace(**{tag.name: val})
         assert record.is_stereo == exp
+
+    @pytest.mark.parametrize(
+        "rec1,rec2,exp",
+        [
+            # Other is FileRecord, fallback to path comparison
+            (MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), False),
+            (MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("bar.dcm")), False),
+            (MammogramFileRecord(Path("bar.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), True),
+            # Other is DicomFileRecord, fallback to DicomFileRecord comparison
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                False,
+            ),
+            # Otherwise compare views
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.ML),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.XCCL),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, PaddleDescription="SPOT"),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, PaddleDescription="SPOT"),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
+                MammogramFileRecord(
+                    Path("foo.dcm"),
+                    view_position=ViewPosition.CC,
+                    BreastImplantPresent="YES",
+                    ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                ),
+                False,
+            ),
+            (
+                MammogramFileRecord(
+                    Path("foo.dcm"),
+                    view_position=ViewPosition.CC,
+                    BreastImplantPresent="YES",
+                    ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                ),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
+                True,
+            ),
+        ],
+    )
+    def test_lt(self, rec1, rec2, exp):
+        assert (rec1 < rec2) == exp
+
+    @pytest.mark.parametrize(
+        "rec1,rec2,exp",
+        [
+            # Other is FileRecord, fallback to path comparison
+            (MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), False),
+            (MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("bar.dcm")), True),
+            (MammogramFileRecord(Path("bar.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), False),
+            # Other is DicomFileRecord, fallback to DicomFileRecord comparison
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                True,
+            ),
+            # Otherwise compare views
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.ML),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.XCCL),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, PaddleDescription="SPOT"),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, PaddleDescription="SPOT"),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
+                MammogramFileRecord(
+                    Path("foo.dcm"),
+                    view_position=ViewPosition.CC,
+                    BreastImplantPresent="YES",
+                    ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                ),
+                True,
+            ),
+            (
+                MammogramFileRecord(
+                    Path("foo.dcm"),
+                    view_position=ViewPosition.CC,
+                    BreastImplantPresent="YES",
+                    ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                ),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
+                False,
+            ),
+        ],
+    )
+    def test_gt(self, rec1, rec2, exp):
+        assert (rec1 > rec2) == exp
+
+    @pytest.mark.parametrize(
+        "rec1,rec2,exp",
+        [
+            # Other is FileRecord, fallback to path comparison
+            (MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), True),
+            (MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("bar.dcm")), True),
+            (MammogramFileRecord(Path("bar.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), False),
+            # Other is DicomFileRecord, fallback to DicomFileRecord comparison
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                True,
+            ),
+            # Otherwise compare views
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.ML),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.XCCL),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, PaddleDescription="SPOT"),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, PaddleDescription="SPOT"),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
+                MammogramFileRecord(
+                    Path("foo.dcm"),
+                    view_position=ViewPosition.CC,
+                    BreastImplantPresent="YES",
+                    ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                ),
+                True,
+            ),
+            (
+                MammogramFileRecord(
+                    Path("foo.dcm"),
+                    view_position=ViewPosition.CC,
+                    BreastImplantPresent="YES",
+                    ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                ),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
+                False,
+            ),
+        ],
+    )
+    def test_ge(self, rec1, rec2, exp):
+        assert (rec1 >= rec2) == exp
+
+    @pytest.mark.parametrize(
+        "rec1,rec2,exp",
+        [
+            # Other is FileRecord, fallback to path comparison
+            (MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), True),
+            (MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None), FileRecord(Path("bar.dcm")), False),
+            (MammogramFileRecord(Path("bar.dcm"), SOPInstanceUID=None), FileRecord(Path("foo.dcm")), True),
+            # Other is DicomFileRecord, fallback to DicomFileRecord comparison
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=None),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.4")),
+                DicomFileRecord(Path("foo.dcm"), SOPInstanceUID=SOPUID("1.2.3")),
+                False,
+            ),
+            # Otherwise compare views
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.MLO),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.ML),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.XCCL),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, PaddleDescription="SPOT"),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                False,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, PaddleDescription="SPOT"),
+                True,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
+                MammogramFileRecord(
+                    Path("foo.dcm"),
+                    view_position=ViewPosition.CC,
+                    BreastImplantPresent="YES",
+                    ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                ),
+                False,
+            ),
+            (
+                MammogramFileRecord(
+                    Path("foo.dcm"),
+                    view_position=ViewPosition.CC,
+                    BreastImplantPresent="YES",
+                    ViewModifierCodeSequence=cast(Dataset, DicomFactory.code_sequence("implant displaced")),
+                ),
+                MammogramFileRecord(Path("foo.dcm"), view_position=ViewPosition.CC, BreastImplantPresent="YES"),
+                True,
+            ),
+        ],
+    )
+    def test_le(self, rec1, rec2, exp):
+        assert (rec1 <= rec2) == exp
