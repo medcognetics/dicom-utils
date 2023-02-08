@@ -538,13 +538,22 @@ class ViewPosition(EnumMixin):
             return ""
         return self.name.lower()
 
+    @property
+    def is_standard_view(self) -> bool:
+        return self in {self.CC, self.MLO}
+
+    @property
+    def is_mlo_like(self) -> bool:
+        return self in {self.MLO, self.ML, self.LMO, self.LM}
+
+    @property
+    def is_cc_like(self) -> bool:
+        return self in {self.CC, self.XCCL, self.XCCM}
+
 
 class MammogramView(NamedTuple):
     laterality: Laterality = Laterality.UNKNOWN
     view: ViewPosition = ViewPosition.UNKNOWN
-
-    def __repr__(self):
-        return f"{self.laterality.short_str}{self.view.short_str}"
 
     @classmethod
     def create(cls, laterality: Optional[Laterality] = None, view: Optional[ViewPosition] = None) -> "MammogramView":
@@ -565,11 +574,19 @@ class MammogramView(NamedTuple):
         r"""Checks if this record corresponds to a standard mammography view.
         Standard mammography views are the MLO and CC views.
         """
-        return self.view in {ViewPosition.MLO, ViewPosition.CC}
+        return self.view.is_standard_view
 
     @staticmethod
     def get_required_tags() -> List[Tag]:
         return [*Laterality.get_required_tags(), *ViewPosition.get_required_tags()]
+
+    @property
+    def is_mlo_like(self) -> bool:
+        return self.view.is_mlo_like
+
+    @property
+    def is_cc_like(self) -> bool:
+        return self.view.is_cc_like
 
 
 # Matches floats, incluidng exponential notation
