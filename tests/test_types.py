@@ -198,6 +198,122 @@ class TestMammogramType:
     def test_from_str(self, input_str, expected):
         assert expected == MammogramType.from_str(input_str)
 
+    @pytest.mark.parametrize(
+        "val,exp",
+        [
+            (MammogramType.UNKNOWN, False),
+            *[(val, True) for val in MammogramType if val != MammogramType.UNKNOWN],
+        ],
+    )
+    def test_bool(self, val, exp):
+        assert bool(val) == exp
+
+    @pytest.mark.parametrize(
+        "val,exp",
+        [
+            (MammogramType.UNKNOWN, True),
+            *[(val, False) for val in MammogramType if val != MammogramType.UNKNOWN],
+        ],
+    )
+    def test_is_unknown(self, val, exp):
+        assert val.is_unknown == exp
+
+    @pytest.mark.parametrize(
+        "t1,t2,exp",
+        [
+            (MammogramType.FFDM, MammogramType.FFDM, False),
+            (MammogramType.FFDM, MammogramType.SYNTH, True),
+            (MammogramType.FFDM, MammogramType.TOMO, False),
+            (MammogramType.FFDM, MammogramType.SFM, True),
+            (MammogramType.SYNTH, MammogramType.FFDM, False),
+            (MammogramType.SYNTH, MammogramType.SYNTH, False),
+            (MammogramType.SYNTH, MammogramType.TOMO, False),
+            (MammogramType.TOMO, MammogramType.FFDM, True),
+            (MammogramType.TOMO, MammogramType.SYNTH, True),
+            (MammogramType.TOMO, MammogramType.TOMO, False),
+            (MammogramType.TOMO, MammogramType.SFM, True),
+            (MammogramType.UNKNOWN, MammogramType.UNKNOWN, False),
+            (MammogramType.FFDM, MammogramType.UNKNOWN, True),
+            (MammogramType.SYNTH, MammogramType.UNKNOWN, True),
+            (MammogramType.TOMO, MammogramType.UNKNOWN, True),
+            (MammogramType.SFM, MammogramType.UNKNOWN, True),
+        ],
+    )
+    def test_lt(self, t1, t2, exp):
+        assert (t1 < t2) == exp
+
+    @pytest.mark.parametrize(
+        "t1,t2,exp",
+        [
+            (MammogramType.FFDM, MammogramType.FFDM, True),
+            (MammogramType.FFDM, MammogramType.SYNTH, True),
+            (MammogramType.FFDM, MammogramType.TOMO, False),
+            (MammogramType.FFDM, MammogramType.SFM, True),
+            (MammogramType.SYNTH, MammogramType.FFDM, False),
+            (MammogramType.SYNTH, MammogramType.SYNTH, True),
+            (MammogramType.SYNTH, MammogramType.TOMO, False),
+            (MammogramType.TOMO, MammogramType.FFDM, True),
+            (MammogramType.TOMO, MammogramType.SYNTH, True),
+            (MammogramType.TOMO, MammogramType.TOMO, True),
+            (MammogramType.TOMO, MammogramType.SFM, True),
+            (MammogramType.UNKNOWN, MammogramType.UNKNOWN, True),
+            (MammogramType.FFDM, MammogramType.UNKNOWN, True),
+            (MammogramType.SYNTH, MammogramType.UNKNOWN, True),
+            (MammogramType.TOMO, MammogramType.UNKNOWN, True),
+            (MammogramType.SFM, MammogramType.UNKNOWN, True),
+        ],
+    )
+    def test_le(self, t1, t2, exp):
+        assert (t1 <= t2) == exp
+
+    @pytest.mark.parametrize(
+        "t1,t2,exp",
+        [
+            (MammogramType.FFDM, MammogramType.FFDM, False),
+            (MammogramType.FFDM, MammogramType.SYNTH, False),
+            (MammogramType.FFDM, MammogramType.TOMO, True),
+            (MammogramType.FFDM, MammogramType.SFM, False),
+            (MammogramType.SYNTH, MammogramType.FFDM, True),
+            (MammogramType.SYNTH, MammogramType.SYNTH, False),
+            (MammogramType.SYNTH, MammogramType.TOMO, True),
+            (MammogramType.TOMO, MammogramType.FFDM, False),
+            (MammogramType.TOMO, MammogramType.SYNTH, False),
+            (MammogramType.TOMO, MammogramType.TOMO, False),
+            (MammogramType.TOMO, MammogramType.SFM, False),
+            (MammogramType.UNKNOWN, MammogramType.UNKNOWN, False),
+            (MammogramType.FFDM, MammogramType.UNKNOWN, True),
+            (MammogramType.SYNTH, MammogramType.UNKNOWN, True),
+            (MammogramType.TOMO, MammogramType.UNKNOWN, True),
+            (MammogramType.SFM, MammogramType.UNKNOWN, True),
+        ],
+    )
+    def test_gt(self, t1, t2, exp):
+        assert (t1 > t2) == exp
+
+    @pytest.mark.parametrize(
+        "t1,t2,exp",
+        [
+            (MammogramType.FFDM, MammogramType.FFDM, True),
+            (MammogramType.FFDM, MammogramType.SYNTH, False),
+            (MammogramType.FFDM, MammogramType.TOMO, True),
+            (MammogramType.FFDM, MammogramType.SFM, False),
+            (MammogramType.SYNTH, MammogramType.FFDM, True),
+            (MammogramType.SYNTH, MammogramType.SYNTH, True),
+            (MammogramType.SYNTH, MammogramType.TOMO, True),
+            (MammogramType.TOMO, MammogramType.FFDM, False),
+            (MammogramType.TOMO, MammogramType.SYNTH, False),
+            (MammogramType.TOMO, MammogramType.TOMO, True),
+            (MammogramType.TOMO, MammogramType.SFM, False),
+            (MammogramType.UNKNOWN, MammogramType.UNKNOWN, True),
+            (MammogramType.FFDM, MammogramType.UNKNOWN, True),
+            (MammogramType.SYNTH, MammogramType.UNKNOWN, True),
+            (MammogramType.TOMO, MammogramType.UNKNOWN, True),
+            (MammogramType.SFM, MammogramType.UNKNOWN, True),
+        ],
+    )
+    def test_ge(self, t1, t2, exp):
+        assert (t1 >= t2) == exp
+
 
 class TestPhotometricInterpretation:
     @pytest.mark.parametrize(

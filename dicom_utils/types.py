@@ -92,12 +92,40 @@ class EnumMixin(Enum):
 
 
 class MammogramType(EnumMixin):
-    r"""Enum over the subcategories of mammograms"""
+    r"""Enum over the subcategories of mammograms.
+
+    Supports the following ordering: ``TOMO < FFDM < SYNTH < SFM < UNKNOWN``
+    """
     UNKNOWN = 0
-    FFDM = 1
-    SFM = 2
+    TOMO = 1
+    FFDM = 2
     SYNTH = 3
-    TOMO = 4
+    SFM = 4
+
+    def __lt__(self, other: "MammogramType") -> bool:
+        if self.is_unknown:
+            return False
+        elif other.is_unknown:
+            return True
+        return self.value < other.value
+
+    def __gt__(self, other: "MammogramType") -> bool:
+        if self.is_unknown and not other.is_unknown:
+            return True
+        return self.value > other.value
+
+    def __le__(self, other: "MammogramType") -> bool:
+        return self < other or self == other
+
+    def __ge__(self, other: "MammogramType") -> bool:
+        return self > other or self == other
+
+    def __bool__(self) -> bool:
+        return self != MammogramType.UNKNOWN
+
+    @property
+    def is_unknown(self) -> bool:
+        return not bool(self)
 
     @staticmethod
     def get_required_tags() -> List[Tag]:
