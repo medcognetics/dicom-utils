@@ -92,12 +92,53 @@ class EnumMixin(Enum):
 
 
 class MammogramType(EnumMixin):
-    r"""Enum over the subcategories of mammograms"""
+    r"""Enum over the subcategories of mammograms.
+
+    Supports the following ordering: ``TOMO < FFDM < SYNTH < SFM < UNKNOWN``
+    """
     UNKNOWN = 0
-    FFDM = 1
-    SFM = 2
+    TOMO = 1
+    FFDM = 2
     SYNTH = 3
-    TOMO = 4
+    SFM = 4
+
+    def __lt__(self, other: "MammogramType") -> bool:
+        return self.is_preferred_to(other)
+
+    def __le__(self, other: "MammogramType") -> bool:
+        return self.is_preferred_to(other) or self == other
+
+    def __bool__(self) -> bool:
+        return self != MammogramType.UNKNOWN
+
+    # TODO: MammogramType ordering uses the convention that x < y means x is more preferred than y
+    # We may want to change this to x > y means x is more preferred than y. This would be more intuitive
+    # but would mean `sorted(vals)` would return the values in the opposite order.
+    def is_preferred_to(self, other: "MammogramType") -> bool:
+        r"""Returns whether the current mammogram type is preferred to another.
+
+        Args:
+            other: The other mammogram type.
+
+        Returns:
+            Whether the current mammogram type is preferred to the other.
+        """
+        if self.is_unknown:
+            return False
+        elif other.is_unknown:
+            return True
+        return self.value < other.value
+
+    @staticmethod
+    def get_best(types: List["MammogramType"]) -> "MammogramType":
+        r"""Returns the best mammogram type from a list of types."""
+        if not types:
+            raise ValueError("types must not be empty")
+        return min(types)
+
+    @property
+    def is_unknown(self) -> bool:
+        return not bool(self)
 
     @staticmethod
     def get_required_tags() -> List[Tag]:
