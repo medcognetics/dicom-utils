@@ -241,6 +241,10 @@ class TestMammogramType:
     )
     def test_lt(self, t1, t2, exp):
         assert (t1 < t2) == exp
+        # TODO: Move these to separate tests if we decide to change the ordering
+        # convention in the future.
+        assert t1.is_preferred_to(t2) == exp
+        assert MammogramType.get_best([t1, t2]) == (t1 if exp else t2)
 
     @pytest.mark.parametrize(
         "t1,t2,exp",

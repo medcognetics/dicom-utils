@@ -123,6 +123,27 @@ class MammogramType(EnumMixin):
     def __bool__(self) -> bool:
         return self != MammogramType.UNKNOWN
 
+    # TODO: MammogramType ordering uses the convention that x < y means x is more preferred than y
+    # We may want to change this to x > y means x is more preferred than y. This would be more intuitive
+    # but would mean `sorted(vals)` would return the values in the opposite order.
+    def is_preferred_to(self, other: "MammogramType") -> bool:
+        r"""Returns whether the current mammogram type is preferred to another.
+
+        Args:
+            other: The other mammogram type.
+
+        Returns:
+            Whether the current mammogram type is preferred to the other.
+        """
+        return self < other
+
+    @staticmethod
+    def get_best(types: List["MammogramType"]) -> "MammogramType":
+        r"""Returns the best mammogram type from a list of types."""
+        if not types:
+            raise ValueError("types must not be empty")
+        return min(types)
+
     @property
     def is_unknown(self) -> bool:
         return not bool(self)
