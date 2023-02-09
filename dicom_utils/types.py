@@ -103,22 +103,10 @@ class MammogramType(EnumMixin):
     SFM = 4
 
     def __lt__(self, other: "MammogramType") -> bool:
-        if self.is_unknown:
-            return False
-        elif other.is_unknown:
-            return True
-        return self.value < other.value
-
-    def __gt__(self, other: "MammogramType") -> bool:
-        if self.is_unknown and not other.is_unknown:
-            return True
-        return self.value > other.value
+        return self.is_preferred_to(other)
 
     def __le__(self, other: "MammogramType") -> bool:
-        return self < other or self == other
-
-    def __ge__(self, other: "MammogramType") -> bool:
-        return self > other or self == other
+        return self.is_preferred_to(other) or self == other
 
     def __bool__(self) -> bool:
         return self != MammogramType.UNKNOWN
@@ -135,7 +123,11 @@ class MammogramType(EnumMixin):
         Returns:
             Whether the current mammogram type is preferred to the other.
         """
-        return self < other
+        if self.is_unknown:
+            return False
+        elif other.is_unknown:
+            return True
+        return self.value < other.value
 
     @staticmethod
     def get_best(types: List["MammogramType"]) -> "MammogramType":

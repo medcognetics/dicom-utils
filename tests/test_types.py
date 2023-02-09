@@ -285,10 +285,11 @@ class TestMammogramType:
             (MammogramType.TOMO, MammogramType.TOMO, False),
             (MammogramType.TOMO, MammogramType.SFM, False),
             (MammogramType.UNKNOWN, MammogramType.UNKNOWN, False),
-            (MammogramType.FFDM, MammogramType.UNKNOWN, True),
-            (MammogramType.SYNTH, MammogramType.UNKNOWN, True),
-            (MammogramType.TOMO, MammogramType.UNKNOWN, True),
-            (MammogramType.SFM, MammogramType.UNKNOWN, True),
+            (MammogramType.FFDM, MammogramType.UNKNOWN, False),
+            (MammogramType.SYNTH, MammogramType.UNKNOWN, False),
+            (MammogramType.TOMO, MammogramType.UNKNOWN, False),
+            (MammogramType.SFM, MammogramType.UNKNOWN, False),
+            (MammogramType.UNKNOWN, MammogramType.FFDM, True),
         ],
     )
     def test_gt(self, t1, t2, exp):
@@ -309,10 +310,11 @@ class TestMammogramType:
             (MammogramType.TOMO, MammogramType.TOMO, True),
             (MammogramType.TOMO, MammogramType.SFM, False),
             (MammogramType.UNKNOWN, MammogramType.UNKNOWN, True),
-            (MammogramType.FFDM, MammogramType.UNKNOWN, True),
-            (MammogramType.SYNTH, MammogramType.UNKNOWN, True),
-            (MammogramType.TOMO, MammogramType.UNKNOWN, True),
-            (MammogramType.SFM, MammogramType.UNKNOWN, True),
+            (MammogramType.FFDM, MammogramType.UNKNOWN, False),
+            (MammogramType.SYNTH, MammogramType.UNKNOWN, False),
+            (MammogramType.TOMO, MammogramType.UNKNOWN, False),
+            (MammogramType.SFM, MammogramType.UNKNOWN, False),
+            (MammogramType.UNKNOWN, MammogramType.FFDM, True),
         ],
     )
     def test_ge(self, t1, t2, exp):
