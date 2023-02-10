@@ -20,7 +20,7 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
         "-g", "--gpu", default=False, action="store_true", help="use NVJPEG2K accelerated decompression"
     )
     parser.add_argument(
-        "-b", "--batch-size", default=4, type=int, help="batch size for NVJPEG2K accelerated decompression"
+        "-b", "--batch-size", default=None, type=int, help="batch size for NVJPEG2K accelerated decompression"
     )
     parser.add_argument("-v", "--verbose", default=False, action="store_true", help="print NVJPEG2K outputs")
     parser.add_argument(

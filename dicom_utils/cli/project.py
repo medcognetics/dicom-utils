@@ -40,16 +40,6 @@ def project(x: np.ndarray, reduction: str = "max") -> np.ndarray:
     return x
 
 
-def window(x: np.ndarray, bins: int = 50) -> np.ndarray:
-    step = 1 / bins
-    quantiles = np.linspace(step, 1.0, bins)
-    quantiles = np.quantile(x, quantiles)
-    pos = quantiles.nonzero()[0][0]
-    bottom = quantiles[pos]
-    x = safe_subtract(x, bottom)
-    return x
-
-
 def main(args: argparse.Namespace) -> None:
     path = Path(args.path)
     dest = Path(args.dest)
@@ -63,7 +53,7 @@ def main(args: argparse.Namespace) -> None:
         dcm = convert_frame_voi_lut(dcm)
         pixels = project(dcm.pixel_array, args.method)
         dcm.PixelData = pixels.tobytes()
-        dcm.NumberOfFrames = "1"
+        dcm.NumberOfFrames = 1
         dcm.save_as(dest)
 
 
