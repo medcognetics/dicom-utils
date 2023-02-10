@@ -725,6 +725,37 @@ class MammogramFileRecord(DicomImageFileRecord):
             object.__setattr__(self, "laterality", Laterality.from_str(self.laterality))
 
     def __lt__(self, other: FileRecord) -> bool:
+        return self.is_preferred_to(other)
+
+    def __gt__(self, other: FileRecord) -> bool:
+        if isinstance(other, MammogramFileRecord):
+            return other.is_preferred_to(self)
+        return super().__gt__(other)
+
+    def __le__(self, other: FileRecord) -> bool:
+        if isinstance(other, MammogramFileRecord):
+            prefer_self = self.is_preferred_to(other)
+            prefer_other = other.is_preferred_to(self)
+            return prefer_self or not (prefer_self or prefer_other)
+        return super().__le__(other)
+
+    def __ge__(self, other: FileRecord) -> bool:
+        if isinstance(other, MammogramFileRecord):
+            prefer_self = self.is_preferred_to(other)
+            prefer_other = other.is_preferred_to(self)
+            return prefer_other or not (prefer_self or prefer_other)
+        return super().__ge__(other)
+
+    def is_preferred_to(self, other: FileRecord) -> bool:
+        r"""Checks if this record is preferred to another record.
+
+        Preference is determined as follows:
+            * If the other record is not a mammogram, fall back to comparison by SOPInstanceUID
+            * If this record is a standard view and the other record is not, this record is preferred
+            * If this record is an implant displaced view and the other record is not, this record is preferred
+            * If this record's image type is preferred over the other record's image type, this record is preferred
+            * If this record has a higher resolution than the other record, this record is preferred
+        """
         if isinstance(other, MammogramFileRecord):
             # Standard views take priority over nonstandard views
             if self.is_standard_mammo_view and not other.is_standard_mammo_view:
@@ -742,27 +773,13 @@ class MammogramFileRecord(DicomImageFileRecord):
                 and other.mammogram_type is not None
                 and self.mammogram_type != other.mammogram_type
             ):
-                return self.mammogram_type < other.mammogram_type
+                return self.mammogram_type.is_preferred_to(other.mammogram_type)
             # If mammograms have different resolutions, order by resolution
             elif self.image_area != other.image_area:
                 # Higher resolution is preferred, so flip the comparison sign
                 return (self.image_area or float("inf")) > (other.image_area or float("inf"))
         # Super compares by SOPInstanceUID
         return super().__lt__(other)
-
-    def __le__(self, other: FileRecord) -> bool:
-        if isinstance(other, MammogramFileRecord):
-            if self < other:
-                return True
-            elif other < self:
-                return False
-        return super().__le__(other)
-
-    def __gt__(self, other: FileRecord) -> bool:
-        return not self <= other
-
-    def __ge__(self, other: FileRecord) -> bool:
-        return not self < other
 
     @property
     def mammogram_view(self) -> MammogramView:
@@ -909,14 +926,14 @@ class MammogramFileRecord(DicomImageFileRecord):
 
             # Select only views that match what we're looking for.
             # We permit MLO-like or CC-like views
-            def _filter(rec: MammogramFileRecord) -> bool:
+            def check_is_candidate(rec: MammogramFileRecord) -> bool:
                 candidate = rec.mammogram_view
                 assert view_pos.is_mlo_like or view_pos.is_cc_like
                 laterality_match = candidate.laterality == lat
                 view_match = candidate.is_mlo_like if view_pos.is_mlo_like else candidate.is_cc_like
                 return view_match and laterality_match
 
-            candidates = list(filter(_filter, col))
+            candidates = list(filter(check_is_candidate, col))
 
             # Select the most preferred image if one exists
             selection = min(candidates, default=None)
