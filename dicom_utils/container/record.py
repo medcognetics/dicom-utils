@@ -395,12 +395,30 @@ class DicomFileRecord(
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, type(self)):
             return False
-        Tag.TreatmentSite
-        Tag.InstitutionAddress
 
         if self.SOPInstanceUID and other.SOPInstanceUID:
             return self.same_uid_as(other)
         return self.path == other.path
+
+    def __lt__(self, other: FileRecord) -> bool:
+        if not isinstance(other, DicomFileRecord):
+            return FileRecord(self.path) < other
+        return str(self.SOPInstanceUID) < str(other.SOPInstanceUID)
+
+    def __gt__(self, other: FileRecord) -> bool:
+        if not isinstance(other, DicomFileRecord):
+            return FileRecord(self.path) > other
+        return str(self.SOPInstanceUID) > str(other.SOPInstanceUID)
+
+    def __le__(self, other: FileRecord) -> bool:
+        if not isinstance(other, DicomFileRecord):
+            return FileRecord(self.path) <= other
+        return str(self.SOPInstanceUID) <= str(other.SOPInstanceUID)
+
+    def __ge__(self, other: FileRecord) -> bool:
+        if not isinstance(other, DicomFileRecord):
+            return FileRecord(self.path) >= other
+        return str(self.SOPInstanceUID) >= str(other.SOPInstanceUID)
 
     def __hash__(self) -> int:
         if self.has_uid:
@@ -611,6 +629,12 @@ class DicomImageFileRecord(DicomFileRecord):
     def is_volume(self) -> bool:
         return self.is_valid_image and ((self.NumberOfFrames or 1) > 1)
 
+    @property
+    def image_area(self) -> Optional[int]:
+        if self.Rows is not None and self.Columns is not None:
+            return self.Rows * self.Columns
+        return None
+
     @cached_property
     def is_magnified(self) -> bool:
         keywords = {"magnification", "magnified"}
@@ -699,6 +723,63 @@ class MammogramFileRecord(DicomImageFileRecord):
             object.__setattr__(self, "view_position", ViewPosition.from_str(self.view_position))
         if isinstance(self.laterality, str):
             object.__setattr__(self, "laterality", Laterality.from_str(self.laterality))
+
+    def __lt__(self, other: FileRecord) -> bool:
+        return self.is_preferred_to(other)
+
+    def __gt__(self, other: FileRecord) -> bool:
+        if isinstance(other, MammogramFileRecord):
+            return other.is_preferred_to(self)
+        return super().__gt__(other)
+
+    def __le__(self, other: FileRecord) -> bool:
+        if isinstance(other, MammogramFileRecord):
+            prefer_self = self.is_preferred_to(other)
+            prefer_other = other.is_preferred_to(self)
+            return prefer_self or not (prefer_self or prefer_other)
+        return super().__le__(other)
+
+    def __ge__(self, other: FileRecord) -> bool:
+        if isinstance(other, MammogramFileRecord):
+            prefer_self = self.is_preferred_to(other)
+            prefer_other = other.is_preferred_to(self)
+            return prefer_other or not (prefer_self or prefer_other)
+        return super().__ge__(other)
+
+    def is_preferred_to(self, other: FileRecord) -> bool:
+        r"""Checks if this record is preferred to another record.
+
+        Preference is determined as follows:
+            * If the other record is not a mammogram, fall back to comparison by SOPInstanceUID
+            * If this record is a standard view and the other record is not, this record is preferred
+            * If this record is an implant displaced view and the other record is not, this record is preferred
+            * If this record's image type is preferred over the other record's image type, this record is preferred
+            * If this record has a higher resolution than the other record, this record is preferred
+        """
+        if isinstance(other, MammogramFileRecord):
+            # Standard views take priority over nonstandard views
+            if self.is_standard_mammo_view and not other.is_standard_mammo_view:
+                return True
+            # Implant displaced views take priority over implant views (only for same study)
+            elif (
+                self.StudyInstanceUID == other.StudyInstanceUID
+                and self.is_implant_displaced
+                and not other.is_implant_displaced
+            ):
+                return True
+            # If mammograms have different types, order by type priority
+            elif (
+                self.mammogram_type is not None
+                and other.mammogram_type is not None
+                and self.mammogram_type != other.mammogram_type
+            ):
+                return self.mammogram_type.is_preferred_to(other.mammogram_type)
+            # If mammograms have different resolutions, order by resolution
+            elif self.image_area != other.image_area:
+                # Higher resolution is preferred, so flip the comparison sign
+                return (self.image_area or float("inf")) > (other.image_area or float("inf"))
+        # Super compares by SOPInstanceUID
+        return super().__lt__(other)
 
     @property
     def mammogram_view(self) -> MammogramView:
@@ -822,6 +903,42 @@ class MammogramFileRecord(DicomImageFileRecord):
             return Laterality.RIGHT
         else:
             return Laterality.NONE
+
+    @classmethod
+    def get_preferred_views(
+        cls, col: Iterable["MammogramFileRecord"]
+    ) -> Dict[MammogramView, Optional["MammogramFileRecord"]]:
+        r"""Selects preferred inference views from a collection of :class:`MammogramFileRecord`s.
+
+        Args:
+            col: Collection to select from
+
+        Returns:
+            Dictionary giving the selected view (or `None` if a view could not be found) for each of the
+            four standard view positions.
+        """
+        result: Dict[MammogramView, Optional["MammogramFileRecord"]] = {}
+        col = list(col)
+
+        # Try each standard view
+        for mammo_view in STANDARD_MAMMO_VIEWS:
+            lat, view_pos = mammo_view
+
+            # Select only views that match what we're looking for.
+            # We permit MLO-like or CC-like views
+            def check_is_candidate(rec: MammogramFileRecord) -> bool:
+                candidate = rec.mammogram_view
+                assert view_pos.is_mlo_like or view_pos.is_cc_like
+                laterality_match = candidate.laterality == lat
+                view_match = candidate.is_mlo_like if view_pos.is_mlo_like else candidate.is_cc_like
+                return view_match and laterality_match
+
+            candidates = list(filter(check_is_candidate, col))
+
+            # Select the most preferred image if one exists
+            selection = min(candidates, default=None)
+            result[mammo_view] = selection
+        return result
 
     def standardized_filename(self, file_id: Optional[str] = None) -> StandardizedFilename:
         r"""Returns a standardized filename for the DICOM represented by this :class:`DicomFileRecord`.
