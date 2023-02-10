@@ -241,6 +241,10 @@ class TestMammogramType:
     )
     def test_lt(self, t1, t2, exp):
         assert (t1 < t2) == exp
+        # TODO: Move these to separate tests if we decide to change the ordering
+        # convention in the future.
+        assert t1.is_preferred_to(t2) == exp
+        assert MammogramType.get_best([t1, t2]) == (t1 if exp else t2)
 
     @pytest.mark.parametrize(
         "t1,t2,exp",
@@ -281,10 +285,11 @@ class TestMammogramType:
             (MammogramType.TOMO, MammogramType.TOMO, False),
             (MammogramType.TOMO, MammogramType.SFM, False),
             (MammogramType.UNKNOWN, MammogramType.UNKNOWN, False),
-            (MammogramType.FFDM, MammogramType.UNKNOWN, True),
-            (MammogramType.SYNTH, MammogramType.UNKNOWN, True),
-            (MammogramType.TOMO, MammogramType.UNKNOWN, True),
-            (MammogramType.SFM, MammogramType.UNKNOWN, True),
+            (MammogramType.FFDM, MammogramType.UNKNOWN, False),
+            (MammogramType.SYNTH, MammogramType.UNKNOWN, False),
+            (MammogramType.TOMO, MammogramType.UNKNOWN, False),
+            (MammogramType.SFM, MammogramType.UNKNOWN, False),
+            (MammogramType.UNKNOWN, MammogramType.FFDM, True),
         ],
     )
     def test_gt(self, t1, t2, exp):
@@ -305,10 +310,11 @@ class TestMammogramType:
             (MammogramType.TOMO, MammogramType.TOMO, True),
             (MammogramType.TOMO, MammogramType.SFM, False),
             (MammogramType.UNKNOWN, MammogramType.UNKNOWN, True),
-            (MammogramType.FFDM, MammogramType.UNKNOWN, True),
-            (MammogramType.SYNTH, MammogramType.UNKNOWN, True),
-            (MammogramType.TOMO, MammogramType.UNKNOWN, True),
-            (MammogramType.SFM, MammogramType.UNKNOWN, True),
+            (MammogramType.FFDM, MammogramType.UNKNOWN, False),
+            (MammogramType.SYNTH, MammogramType.UNKNOWN, False),
+            (MammogramType.TOMO, MammogramType.UNKNOWN, False),
+            (MammogramType.SFM, MammogramType.UNKNOWN, False),
+            (MammogramType.UNKNOWN, MammogramType.FFDM, True),
         ],
     )
     def test_ge(self, t1, t2, exp):

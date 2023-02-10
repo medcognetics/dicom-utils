@@ -103,25 +103,38 @@ class MammogramType(EnumMixin):
     SFM = 4
 
     def __lt__(self, other: "MammogramType") -> bool:
+        return self.is_preferred_to(other)
+
+    def __le__(self, other: "MammogramType") -> bool:
+        return self.is_preferred_to(other) or self == other
+
+    def __bool__(self) -> bool:
+        return self != MammogramType.UNKNOWN
+
+    # TODO: MammogramType ordering uses the convention that x < y means x is more preferred than y
+    # We may want to change this to x > y means x is more preferred than y. This would be more intuitive
+    # but would mean `sorted(vals)` would return the values in the opposite order.
+    def is_preferred_to(self, other: "MammogramType") -> bool:
+        r"""Returns whether the current mammogram type is preferred to another.
+
+        Args:
+            other: The other mammogram type.
+
+        Returns:
+            Whether the current mammogram type is preferred to the other.
+        """
         if self.is_unknown:
             return False
         elif other.is_unknown:
             return True
         return self.value < other.value
 
-    def __gt__(self, other: "MammogramType") -> bool:
-        if self.is_unknown and not other.is_unknown:
-            return True
-        return self.value > other.value
-
-    def __le__(self, other: "MammogramType") -> bool:
-        return self < other or self == other
-
-    def __ge__(self, other: "MammogramType") -> bool:
-        return self > other or self == other
-
-    def __bool__(self) -> bool:
-        return self != MammogramType.UNKNOWN
+    @staticmethod
+    def get_best(types: List["MammogramType"]) -> "MammogramType":
+        r"""Returns the best mammogram type from a list of types."""
+        if not types:
+            raise ValueError("types must not be empty")
+        return min(types)
 
     @property
     def is_unknown(self) -> bool:
