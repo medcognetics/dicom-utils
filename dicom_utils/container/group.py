@@ -63,6 +63,7 @@ class Grouper:
     jobs: Optional[int] = None
     chunksize: int = 8
     use_bar: bool = True
+    timeout: Optional[int] = None
 
     _group_fns: Sequence[GroupFunction] = field(init=False)
     _helper_fns: Sequence[CollectionHelper] = field(init=False)
@@ -74,6 +75,10 @@ class Grouper:
         self._group_fns = [GROUP_REGISTRY.get(g).instantiate_with_metadata().fn for g in self.groups]
         self._helper_fns = list(self._build_collection_helpers())
         logger.info(f"Collection helpers: {self._helper_fns}")
+
+        # Using processes seems to result in deadlocks. This is a workaround.
+        if not self.threads:
+            self.threads = True
 
     def _build_collection_helpers(self) -> Iterator[CollectionHelper]:
         for h in self.helpers:
@@ -88,7 +93,7 @@ class Grouper:
         start_len = len(collection)
         result: Dict[Key, RecordCollection] = {tuple(): collection}
 
-        with ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize) as mapper:
+        with ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize, timeout=self.timeout) as mapper:
             for i, group_fn in list(enumerate(self._group_fns)):
                 # run the group function
                 total = sum(len(v) for v in result.values())
@@ -102,6 +107,7 @@ class Grouper:
                 needs_grouping: Iterator[Tuple[Key, FileRecord]] = (
                     (key, record) for key, collection in result.items() for record in collection
                 )
+                # TODO: This can deadlock. Only seems to happen on Optimam full dataset.
                 for key, record in mapper(self._group, needs_grouping, group_fn=group_fn):
                     _result.setdefault(key, RecordCollection()).add(record)
                 result = _result

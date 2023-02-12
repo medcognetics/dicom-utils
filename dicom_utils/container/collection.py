@@ -223,6 +223,8 @@ def record_iterator(
     ignore_exceptions: bool = False,
     filters: Iterable[str] = [],
     max_files: Optional[int] = None,
+    timeout: Optional[int] = None,
+    chunksize: int = 128,
     **kwargs,
 ) -> Iterator[FileRecord]:
     r"""Produces :class:`FileRecord` instances by iterating over an input list of files. If a
@@ -274,15 +276,15 @@ def record_iterator(
     func = partial(creator.precheck_file, filter_funcs=filter_funcs)
     bar_suffix = get_bar_description_suffix(jobs, threads)
     files = files if max_files else islice(files, max_files)
-    with ConcurrentMapper(threads, jobs, ignore_exceptions, chunksize=128) as mapper:
+    with ConcurrentMapper(threads, jobs, ignore_exceptions, timeout=timeout, chunksize=chunksize) as mapper:
         mapper.create_bar(
             desc=f"Scanning sources ({bar_suffix})",
             disable=(not use_bar),
         )
         file_set = {Path(path) for path in mapper(func, files) if path is not None}
+        mapper.close_bar()
 
-    # create and yield records
-    with ConcurrentMapper(threads, jobs, ignore_exceptions, chunksize=32) as mapper:
+        # create and yield records
         mapper.create_bar(
             desc=f"Building records ({bar_suffix})",
             total=len(file_set),

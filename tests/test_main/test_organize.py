@@ -60,8 +60,14 @@ class TestSymlinkPipeline:
         dest = Path(tmp_path, "symlinks")
         dest.mkdir()
         # set use_bar = True to help debugging
-        organize(tmp_path, dest, use_bar=False, jobs=jobs, threads=threads)
-        assert spy.call_count == 4
+        timeout = 2
+        organize(tmp_path, dest, use_bar=False, jobs=jobs, threads=threads, timeout=timeout)
+        assert spy.call_count == 3
         for i, call in enumerate(spy.call_args_list):
-            assert call.args[0].threads == threads, f"call {i} failed"
+            if i not in (1, 2):
+                assert call.args[0].threads == threads, f"call {i} failed"
+            else:
+                # Grouper has thread override because of deadlocks
+                assert call.args[0].threads, f"call {i} failed"
             assert call.args[0].jobs == jobs, f"call {i} failed"
+            assert call.args[0].timeout == timeout, f"call {i} failed"

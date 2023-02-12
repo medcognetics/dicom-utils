@@ -111,7 +111,8 @@ class Output(ABC):
         use_bar: bool = True,
         threads: bool = False,
         jobs: Optional[int] = None,
-        chunksize: int = 8,
+        chunksize: int = 1,
+        timeout: Optional[int] = None,
     ):
         self.root = Path(root)
         if not self.root.is_dir():
@@ -124,6 +125,7 @@ class Output(ABC):
         self.threads = threads
         self.jobs = jobs
         self.chunksize = chunksize
+        self.timeout = timeout
         helpers = [HELPER_REGISTRY.get(h).instantiate_with_metadata().fn for h in helpers]
         self.record_helpers: List[RecordHelper] = [h for h in helpers if isinstance(h, RecordHelper)]
         self.collection_helpers: List[CollectionHelper] = [h for h in helpers if isinstance(h, CollectionHelper)]
@@ -133,7 +135,7 @@ class Output(ABC):
         return self.root / self.output_subdir
 
     def mapper(self, **kwargs) -> ConcurrentMapper:
-        mapper = ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize)
+        mapper = ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize, timeout=self.timeout)
         kwargs.setdefault("disable", not self.use_bar)
         kwargs.setdefault("leave", False)
         mapper.create_bar(**kwargs)
