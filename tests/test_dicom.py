@@ -12,7 +12,14 @@ from numpy.random import default_rng
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
-from dicom_utils.dicom import data_handlers, default_data_handlers, image_is_uint16, is_inverted, set_pixels
+from dicom_utils.dicom import (
+    data_handlers,
+    default_data_handlers,
+    image_is_uint16,
+    is_inverted,
+    nvjpeg2k_is_available,
+    set_pixels,
+)
 
 
 class TestReadDicomImage:
@@ -118,8 +125,40 @@ class TestReadDicomImage:
         assert array.shape[-2:] == (100, 100)
         assert array.dtype == np.uint8
 
+    @pytest.mark.parametrize(
+        "use_nvjpeg,available,exp",
+        [
+            pytest.param(
+                True, True, True, marks=pytest.mark.skipif(not nvjpeg2k_is_available(), reason="nvJPEG not available")
+            ),
+            pytest.param(
+                None, True, True, marks=pytest.mark.skipif(not nvjpeg2k_is_available(), reason="nvJPEG not available")
+            ),
+            pytest.param(True, False, False, marks=pytest.mark.xfail(raises=ImportError)),
+            pytest.param(None, False, False),
+            pytest.param(False, False, False),
+        ],
+    )
+    def test_nvjpeg_autoselect(self, request, mocker, dicom_file_j2k: str, use_nvjpeg, available, exp):
+        # patch methods
+        a = mocker.patch("dicom_utils.dicom.nvjpeg2k_is_available", return_value=available)
+
+        def new(dcm, *args, **kwargs):
+            if not a():
+                raise ImportError("nvJPEG not available")
+            return dcm.pixel_array
+
+        m = mocker.patch("dicom_utils.dicom.nvjpeg_decompress", side_effect=new)
+
+        # read and check
+        with pydicom.dcmread(dicom_file_j2k) as dcm:
+            read_dicom_image(dcm, use_nvjpeg=use_nvjpeg, nvjpeg_batch_size=1)
+        # NOTE: we won't call on int16 data
+        is_uint16 = any(r.endswith("uint16") for r in request.fixturenames)
+        assert m.called == (exp if is_uint16 else False)
+
     @pytest.mark.ci_skip  # CircleCI will not have a GPU
-    @pytest.importorskip("pynvjpeg", reason="pynvjpeg is not installed")
+    @pytest.mark.skipif(not nvjpeg2k_is_available(), reason="nvJPEG not available")
     def test_nvjpeg(self, dicom_file_j2k: str, mocker):
         BATCH_SIZE: Final[int] = 1
         mocked_get_batch_size = mocker.patch("dicom_utils.dicom._nvjpeg_get_batch_size")
