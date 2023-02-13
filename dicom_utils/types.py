@@ -61,6 +61,16 @@ def iterate_view_modifier_codes(dcm: Dataset) -> Iterator[Dataset]:
             yield modifier
 
 
+def iterate_shared_functional_groups(dcm: Dataset) -> Iterator[Dataset]:
+    r"""Iterates over all view modifier codes in an input."""
+    # view modifier code can be at top level of dicom, or nested in view codes
+    functional_group_seq = (
+        (get_value(dcm, Tag.SharedFunctionalGroupsSequence, []) or []) if isinstance(dcm, Dataset) else dcm
+    )
+    for seq in functional_group_seq:
+        yield seq
+
+
 T = TypeVar("T")
 
 

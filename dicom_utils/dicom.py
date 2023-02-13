@@ -11,14 +11,15 @@ from warnings import warn
 import numpy as np
 import pydicom
 from numpy import ndarray
-from pydicom import FileDataset
+from pydicom import DataElement, FileDataset
 from pydicom.encaps import encapsulate
 from pydicom.pixel_data_handlers.util import apply_voi_lut
 from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian
 
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
-from .types import Dicom, PhotometricInterpretation
+from .tags import Tag
+from .types import Dicom, PhotometricInterpretation, iterate_shared_functional_groups
 from .volume import KeepVolume, VolumeHandler
 
 
@@ -93,6 +94,23 @@ def is_compressed(dcm: Dicom) -> bool:
     r"""Checks if a DICOM is using a compressed transfer syntax"""
     syntax = dcm.file_meta.TransferSyntaxUID
     return syntax.is_compressed
+
+
+def convert_frame_voi_lut(dcm: Dicom) -> Dicom:
+    r"""Copies frame VOILUT information into the top level of a Dicom object."""
+    for ds in iterate_shared_functional_groups(dcm):
+        if Tag.FrameVOILUTSequence in ds:
+            # set VOILUTSequence
+            value = ds[Tag.FrameVOILUTSequence].value
+            elem = DataElement(Tag.VOILUTSequence, "SQ", value)
+            dcm[Tag.VOILUTSequence] = elem
+
+            # set window tags
+            window_c = value[0].WindowCenter
+            window_w = value[0].WindowWidth
+            dcm[Tag.WindowCenter] = DataElement(Tag.WindowCenter, "DS", window_c)
+            dcm[Tag.WindowWidth] = DataElement(Tag.WindowWidth, "DS", window_w)
+    return dcm
 
 
 def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
