@@ -9,6 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property, partial
 from io import BytesIO, IOBase
+from itertools import chain
 from os import PathLike
 from pathlib import Path, PosixPath
 from statistics import mode
@@ -30,7 +31,7 @@ from typing import (
 )
 
 import pydicom
-from pydicom import Dataset, Sequence
+from pydicom import DataElement, Dataset, Sequence
 from pydicom.multival import MultiValue
 from pydicom.uid import SecondaryCaptureImageStorage
 
@@ -298,6 +299,10 @@ class FileRecord:
 
     @staticmethod
     def from_dict(target: Union[Path, Dict[str, Any]]) -> "FileRecord":
+        r"""Create a :class:`FileRecord` from a dictionary. The dictionary should have been
+        created with :meth:`FileRecord.to_dict`. Keys ``record_type`` and ``record_type_import``
+        are used to determine the class to instantiate.
+        """
         if isinstance(target, Path):
             with open(target) as f:
                 target = json.load(f)
@@ -311,22 +316,26 @@ class FileRecord:
             # get the class to be instantiated
             mod = importlib.import_module(import_path)
             cls: Type[FileRecord] = getattr(mod, class_name)
-
-            # find dataclass attributes that exist in the dict
-            kwargs: Dict[str, Any] = {}
-            dest_fields = set(f.name for f in fields(cls))
-            for k, v in target.items():
-                if k in dest_fields:
-                    kwargs[k] = v
-            record_path = kwargs.pop("path")
-            rec = cls(record_path, **kwargs)
-            return rec
+            # run classmethod for instantiation
+            return cls._from_dict(target)
 
         except Exception as ex:
             logger.warn("Failed to create FileRecord from dict")
             logger.warn("Exception info", exc_info=ex)
             record_path = Path(target["path"])
             return FileRecord(record_path)
+
+    @classmethod
+    def _from_dict(cls: Type[R], target: Dict[str, Any]) -> R:
+        # find dataclass attributes that exist in the dict
+        kwargs: Dict[str, Any] = {}
+        dest_fields = set(f.name for f in fields(cls))
+        for k, v in target.items():
+            if k in dest_fields:
+                kwargs[k] = v
+        record_path = kwargs.pop("path")
+        rec = cls(record_path, **kwargs)
+        return rec
 
 
 # NOTE: record contents should follow this naming scheme:
@@ -656,18 +665,31 @@ class DicomImageFileRecord(DicomFileRecord):
         )
 
     @property
+    def view_codes(self) -> Iterator[Dataset]:
+        r"""Returns an iterator over all view codes"""
+        if self.ViewCodeSequence is not None:
+            yield from iterate_view_modifier_codes(self.ViewCodeSequence)
+
+    @property
+    def view_code_meanings(self) -> List[str]:
+        r"""Returns a list of view code meanings"""
+        return [get_value(modifier, Tag.CodeMeaning, "").strip().lower() for modifier in self.view_codes]
+
+    @property
     def view_modifier_codes(self) -> Iterator[Dataset]:
         r"""Returns an iterator over all view modifier codes"""
-        if self.ViewCodeSequence is not None:
-            for modifier in iterate_view_modifier_codes(self.ViewCodeSequence):
-                yield modifier
         if self.ViewModifierCodeSequence is not None:
-            for modifier in iterate_view_modifier_codes(self.ViewModifierCodeSequence):
-                yield modifier
+            yield from iterate_view_modifier_codes(self.ViewModifierCodeSequence)
+
+    @property
+    def view_modifier_code_meanings(self) -> List[str]:
+        r"""Returns a list of view modifier code meanings"""
+        return [get_value(modifier, Tag.CodeMeaning, "").strip().lower() for modifier in self.view_modifier_codes]
 
     @cached_property
-    def view_modifier_code_meanings(self) -> Set[str]:
-        return {get_value(modifier, Tag.CodeMeaning, "").strip().lower() for modifier in self.view_modifier_codes}
+    def all_view_code_meanings(self) -> Set[str]:
+        r"""Returns a set of code meanings for all view or view modifier codes"""
+        return {meaning for meaning in chain(self.view_code_meanings, self.view_modifier_code_meanings)}
 
     @classmethod
     def from_dicom(
@@ -698,8 +720,37 @@ class DicomImageFileRecord(DicomFileRecord):
     def to_dict(self) -> Dict[str, Any]:
         result = super().to_dict()
         result["magnified"] = self.is_magnified
-        result["view_modifier_code_meanings"] = list(self.view_modifier_code_meanings)
+        if self.ViewCodeSequence is not None:
+            result["ViewCodeSequence"] = self.view_code_meanings
+        if self.ViewModifierCodeSequence is not None:
+            result["ViewCodeModifierSequence"] = self.view_modifier_code_meanings
         return result
+
+    @classmethod
+    def _from_dict(cls: Type[R], target: Dict[str, Any]) -> R:
+        result = super()._from_dict(target)
+
+        # convert view code meaning strings in dict to Sequence
+        view_codes = target.get("ViewCodeSequence", [])
+        if view_codes:
+            result = replace(result, ViewCodeSequence=DicomImageFileRecord.make_view_code_sequence(view_codes))
+        view_modifier_codes = target.get("ViewCodeModifierSequence", [])
+        if view_modifier_codes:
+            result = replace(
+                result, ViewModifierCodeSequence=DicomImageFileRecord.make_view_code_sequence(view_modifier_codes)
+            )
+
+        return cast(R, result)
+
+    @staticmethod
+    def make_view_code(meaning: str) -> Dataset:
+        vc = Dataset()
+        vc[Tag.CodeMeaning] = DataElement(Tag.CodeMeaning, "ST", meaning)
+        return vc
+
+    @staticmethod
+    def make_view_code_sequence(meanings: Iterable[str]) -> Sequence:
+        return Sequence([DicomImageFileRecord.make_view_code(meaning) for meaning in meanings])
 
 
 @RECORD_REGISTRY(name="mammogram", suffixes=[".dcm"])
@@ -795,35 +846,35 @@ class MammogramFileRecord(DicomImageFileRecord):
             return True
         if "spot" in (self.ViewPosition or "").lower():
             return True
-        return "spot compression" in self.view_modifier_code_meanings
+        return "spot compression" in self.all_view_code_meanings
 
     @cached_property
     def is_implant_displaced(self) -> bool:
-        return "implant displaced" in self.view_modifier_code_meanings
+        return "implant displaced" in self.all_view_code_meanings
 
     @cached_property
     def is_tangential(self) -> bool:
         if "tan" in (self.ViewPosition or "").lower():
             return True
-        return "tangential" in self.view_modifier_code_meanings
+        return "tangential" in self.all_view_code_meanings
 
     @cached_property
     def is_nipple_in_profile(self) -> bool:
         if "np" in (self.ViewPosition or "").lower():
             return True
-        return "nipple in profile" in self.view_modifier_code_meanings
+        return "nipple in profile" in self.all_view_code_meanings
 
     @cached_property
     def is_infra_mammary_fold(self) -> bool:
         if "imf" in (self.ViewPosition or "").lower():
             return True
-        return "infra-mammary fold" in self.view_modifier_code_meanings
+        return "infra-mammary fold" in self.all_view_code_meanings
 
     @cached_property
     def is_anterior_compression(self) -> bool:
         if "ac" in (self.ViewPosition or "").lower():
             return True
-        return "anterior compression" in self.view_modifier_code_meanings
+        return "anterior compression" in self.all_view_code_meanings
 
     @cached_property
     def is_stereo(self) -> bool:

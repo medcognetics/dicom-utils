@@ -234,6 +234,9 @@ class TestFileRecord:
         assert rec_dict["record_type"] == rec.__class__.__name__
         assert rec_dict["path"] == str(rec.path.absolute())
         assert rec_dict["resolved_path"] == str(rec.path.resolve().absolute())
+        restored = FileRecord.from_dict(rec_dict)
+        assert isinstance(restored, type(rec))
+        assert restored == rec
 
 
 def make_view_modifier_code(meaning: str) -> Dataset:
@@ -365,11 +368,9 @@ class TestDicomFileRecord(TestFileRecord):
         assert rec.year == exp
 
     def test_to_dict(self, record_factory):
+        super().test_to_dict(record_factory)
         rec = record_factory("a.dcm")
         rec_dict = rec.to_dict()
-        assert rec_dict["record_type"] == rec.__class__.__name__
-        assert rec_dict["path"] == str(rec.path.absolute())
-        assert rec_dict["resolved_path"] == str(rec.path.resolve().absolute())
         assert rec_dict["Modality"] == rec.Modality
 
     def test_hash(self, record_factory):
@@ -632,6 +633,14 @@ class TestDicomImageFileRecord(TestDicomFileRecord):
     def test_pixel_spacing(self, spacing, imager_spacing, exp, record_factory):
         rec = record_factory(PixelSpacing=spacing, ImagerPixelSpacing=imager_spacing)
         assert rec.pixel_spacing == exp
+
+    def test_to_dict(self, record_factory):
+        super().test_to_dict(record_factory)
+        rec = record_factory("a.txt", view_modifier_code="code")
+        rec_dict = rec.to_dict()
+        restored = FileRecord.from_dict(rec_dict)
+        assert isinstance(restored, DicomImageFileRecord)
+        assert list(restored.view_modifier_code_meanings) == ["code"]
 
 
 class TestMammogramFileRecord(TestDicomFileRecord):
@@ -1598,3 +1607,10 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             assert act.path == exp
         else:
             assert result[to_check] is None
+
+    def test_restore_from_view_codes(self, record_factory):
+        record = record_factory(view_modifier_code="spot compression")
+        rec_dict = record.to_dict()
+        restored = FileRecord.from_dict(rec_dict)
+        assert isinstance(restored, MammogramFileRecord)
+        assert restored.is_spot_compression
