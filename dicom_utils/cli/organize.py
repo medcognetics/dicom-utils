@@ -23,13 +23,33 @@ def organize(
     namers: Iterable[str] = ["patient-id", "study-uid"],
     outputs: Iterable[str] = ["symlink-cases"],
     use_bar: bool = True,
+    jobs: Optional[int] = None,
+    threads: bool = False,
+    timeout: Optional[int] = None,
     **kwargs,
 ) -> Dict[Output, Dict[str, RecordCollection]]:
-    inp = Input(sources, records, groups, helpers, namers, use_bar=use_bar, **kwargs)
+    inp = Input(
+        sources,
+        records,
+        groups,
+        helpers,
+        namers,
+        use_bar=use_bar,
+        jobs=jobs,
+        threads=threads,
+        timeout=timeout,
+        **kwargs,
+    )
 
     result: Dict[Output, Dict[str, RecordCollection]] = {}
     for output_name in tqdm(outputs, desc="Writing outputs", disable=not use_bar):
-        output = OUTPUT_REGISTRY.get(output_name).instantiate_with_metadata(root=dest, use_bar=use_bar)
+        output = OUTPUT_REGISTRY.get(output_name).instantiate_with_metadata(
+            root=dest,
+            use_bar=use_bar,
+            jobs=jobs,
+            threads=True,
+            timeout=timeout,
+        )
         result[output_name] = output(inp)
 
     return result

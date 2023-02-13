@@ -31,6 +31,7 @@ from tqdm_multiprocessing import ConcurrentMapper
 from ..types import MammogramType
 from .collection import CollectionHelper, RecordCollection
 from .collection import apply_helpers as apply_collection_helpers
+from .collection import get_bar_description_suffix
 from .input import Input
 from .protocols import SupportsGenerated
 from .record import HELPER_REGISTRY, FileRecord, MammogramFileRecord, RecordHelper, apply_helpers
@@ -110,7 +111,8 @@ class Output(ABC):
         use_bar: bool = True,
         threads: bool = False,
         jobs: Optional[int] = None,
-        chunksize: int = 8,
+        chunksize: int = 1,
+        timeout: Optional[int] = None,
     ):
         self.root = Path(root)
         if not self.root.is_dir():
@@ -123,6 +125,7 @@ class Output(ABC):
         self.threads = threads
         self.jobs = jobs
         self.chunksize = chunksize
+        self.timeout = timeout
         helpers = [HELPER_REGISTRY.get(h).instantiate_with_metadata().fn for h in helpers]
         self.record_helpers: List[RecordHelper] = [h for h in helpers if isinstance(h, RecordHelper)]
         self.collection_helpers: List[CollectionHelper] = [h for h in helpers if isinstance(h, CollectionHelper)]
@@ -132,7 +135,7 @@ class Output(ABC):
         return self.root / self.output_subdir
 
     def mapper(self, **kwargs) -> ConcurrentMapper:
-        mapper = ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize)
+        mapper = ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize, timeout=self.timeout)
         kwargs.setdefault("disable", not self.use_bar)
         kwargs.setdefault("leave", False)
         mapper.create_bar(**kwargs)
@@ -141,7 +144,8 @@ class Output(ABC):
     def __call__(self, inp: Union[Input, Dict[str, Iterable[WriteResult]]]) -> Dict[str, Iterable[WriteResult]]:
         result: Dict[str, Iterable[WriteResult]] = {}
         iterable = inp if isinstance(inp, Input) else inp.items()
-        with self.mapper(total=len(iterable), desc=f"Writing {self.__class__.__name__}") as mapper:
+        desc = get_bar_description_suffix(self.jobs, self.threads)
+        with self.mapper(total=len(iterable), desc=f"Writing {self.__class__.__name__} ({desc})") as mapper:
             it = mapper(
                 self._process,
                 iterable,

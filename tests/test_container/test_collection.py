@@ -292,3 +292,13 @@ class TestRecordCollection:
         rec2 = DicomFileRecord(path=Path("bar.dcm"), SOPInstanceUID=SOPUID("123"), StudyInstanceUID=StudyUID("123"))
         col = RecordCollection([rec1, rec2])
         assert len(col) == 1
+
+    def test_repr(self, tmp_path, collection):
+        result = repr(collection)
+        expected_start = f"RecordCollection(length=9, types={{'DicomImageFileRecord': 9}}, parent={tmp_path}"
+        assert result.startswith(expected_start)
+
+    def test_repr_empty(self):
+        result = repr(RecordCollection())
+        expected_start = "RecordCollection(length=0, types={}, parent=None"
+        assert result.startswith(expected_start)

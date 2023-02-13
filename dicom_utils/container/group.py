@@ -7,12 +7,12 @@ import warnings
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, Hashable, Iterator, List, Optional, Sequence, Tuple, TypeVar, cast
+from typing import Callable, Dict, Hashable, Iterator, Optional, Sequence, Tuple, TypeVar, cast
 
 from registry import Registry
 from tqdm_multiprocessing import ConcurrentMapper
 
-from .collection import CollectionHelper, RecordCollection, apply_helpers
+from .collection import CollectionHelper, RecordCollection, apply_helpers, get_bar_description_suffix
 
 # Type checking fails when dataclass attr name matches a type alias.
 # Import types under a different alias
@@ -63,6 +63,7 @@ class Grouper:
     jobs: Optional[int] = None
     chunksize: int = 8
     use_bar: bool = True
+    timeout: Optional[int] = None
 
     _group_fns: Sequence[GroupFunction] = field(init=False)
     _helper_fns: Sequence[CollectionHelper] = field(init=False)
@@ -74,6 +75,10 @@ class Grouper:
         self._group_fns = [GROUP_REGISTRY.get(g).instantiate_with_metadata().fn for g in self.groups]
         self._helper_fns = list(self._build_collection_helpers())
         logger.info(f"Collection helpers: {self._helper_fns}")
+
+        # Using processes seems to result in deadlocks. This is a workaround.
+        if not self.threads:
+            self.threads = True
 
     def _build_collection_helpers(self) -> Iterator[CollectionHelper]:
         for h in self.helpers:
@@ -88,19 +93,32 @@ class Grouper:
         start_len = len(collection)
         result: Dict[Key, RecordCollection] = {tuple(): collection}
 
-        with ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize) as mapper:
+        with ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize, timeout=self.timeout) as mapper:
             for i, group_fn in list(enumerate(self._group_fns)):
                 # run the group function
+                total = sum(len(v) for v in result.values())
                 mapper.create_bar(
-                    desc=f"Running grouper {self.groups[i]}", disable=(not self.use_bar), leave=False, total=len(result)
+                    desc=f"Running grouper {self.groups[i]} ({get_bar_description_suffix(self.jobs, self.threads)})",
+                    disable=(not self.use_bar),
+                    leave=True,
+                    total=total,
                 )
-                mapped = mapper(self._group, list(result.items()), group_fn=group_fn)
-                result = {k: v for group_result in mapped for k, v in group_result}
+                _result: Dict[Key, RecordCollection] = {}
+                needs_grouping: Iterator[Tuple[Key, FileRecord]] = (
+                    (key, record) for key, collection in result.items() for record in collection
+                )
+                # TODO: This can deadlock. Only seems to happen on Optimam full dataset.
+                for key, record in mapper(self._group, needs_grouping, group_fn=group_fn):
+                    _result.setdefault(key, RecordCollection()).add(record)
+                result = _result
                 mapper.close_bar()
 
                 # run helpers for this stage in the grouping process
                 mapper.create_bar(
-                    desc="Running group helpers", disable=(not self.use_bar), leave=False, total=len(result)
+                    desc=f"Running group helpers ({get_bar_description_suffix(self.jobs, self.threads)})",
+                    disable=(not self.use_bar),
+                    leave=True,
+                    total=len(result),
                 )
                 mapped = mapper(self._apply_helpers, list(result.items()), index=i)
                 result = {k: v for k, v in mapped}
@@ -109,19 +127,16 @@ class Grouper:
         end_len = sum(len(collection) for collection in result.values())
         if start_len != end_len:
             warnings.warn(
-                "Grouping began with {start_len} records and ended with {end_len} records. "
+                f"Grouping began with {start_len} records and ended with {end_len} records. "
                 "This may be expected behavior depending on what helpers are being used."
             )
         return cast(Dict[Hashable, RecordCollection], result)
 
     @classmethod
-    def _group(cls, inp: Tuple[Key, RecordCollection], group_fn: GroupFunction) -> List[Tuple[Key, RecordCollection]]:
+    def _group(cls, inp: Tuple[Key, FileRecord], group_fn: GroupFunction) -> Tuple[Key, FileRecord]:
         key, entry = inp
-        result: List[Tuple[Key, RecordCollection]] = []
-        for subkey, subgroup in entry.group_by(group_fn).items():
-            new_key = key + (subkey,)
-            result.append((new_key, subgroup))
-        return result
+        key = key + (group_fn(entry),)
+        return key, entry
 
     def _apply_helpers(self, inp: Tuple[Key, RecordCollection], index: int) -> Tuple[Key, RecordCollection]:
         k, col = inp
