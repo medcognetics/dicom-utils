@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import functools
 import os
 import sys
 from os import PathLike
@@ -198,7 +197,7 @@ def read_dicom_image(
     strict_interp: bool = False,
     volume_handler: VolumeHandler = KeepVolume(),
     as_uint8: bool = False,
-    use_nvjpeg: Optional[bool] = False,
+    use_nvjpeg: Optional[bool] = None,
     nvjpeg_batch_size: Optional[int] = None,
 ) -> ndarray:
     r"""
@@ -384,7 +383,12 @@ def decompress(
 
     if use_nvjpeg:
         batch_size = batch_size or int(os.environ.get("NVJPEG2K_BATCH_SIZE", 1))
-        pixels = nvjpeg_decompress(dcm, batch_size, verbose)
+        try:
+            pixels = nvjpeg_decompress(dcm, batch_size, verbose)
+        except Exception as e:
+            # fall back to CPU
+            logger.warning(f"Failed to decompress with nvjpeg: {e}")
+            pixels = dcm.pixel_array
     else:
         pixels = dcm.pixel_array
     assert isinstance(dcm, FileDataset)
@@ -439,7 +443,8 @@ def nvjpeg_decompress(
     # This approach seems to be about as fast, but might be faster if batch_size was used.
     # The optimal approach would probably be to leverage pydicom.encaps.get_frame_offsets
     # and let pynvjpeg create the frame stack.
-    frame_stack = functools.reduce(lambda a, b: a + b, VolumeHandler.iterate_frames(dcm))
-    decoded_frames = pynvjpeg.decode_jpeg2k(frame_stack, len(frame_stack), rows, cols)
+    decoded_frames = np.empty((1, dcm.NumberOfFrames, rows, cols), dtype=np.uint16)
+    for i, frame in enumerate(VolumeHandler.iterate_frames(dcm)):
+        decoded_frames[0, i] = pynvjpeg.decode_jpeg2k(frame, len(frame), rows, cols)
 
     return decoded_frames

@@ -12,14 +12,12 @@ from numpy.random import default_rng
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
-from dicom_utils.dicom import (
-    data_handlers,
-    default_data_handlers,
-    image_is_uint16,
-    is_inverted,
-    nvjpeg2k_is_available,
-    set_pixels,
-)
+from dicom_utils.dicom import data_handlers, default_data_handlers, image_is_uint16, is_inverted, set_pixels
+
+
+@pytest.fixture
+def pynvjpeg():
+    return pytest.importorskip("pynvjpeg", reason="pynvjpeg is not installed")
 
 
 class TestReadDicomImage:
@@ -44,7 +42,7 @@ class TestReadDicomImage:
 
     def test_invalid_TransferSyntaxUID_loose_interpretation(self, dicom_object):
         dicom_object.file_meta.TransferSyntaxUID = "1.2.840.10008.1.2.4.90"  # Assign random invalid TransferSyntaxUID
-        array = read_dicom_image(dicom_object)
+        array = read_dicom_image(dicom_object, use_nvjpeg=False)
         assert isinstance(array, np.ndarray)
         assert array.min() == 128, "min pixel value 128"
         assert array.max() == 2191, "max pixel value 2191"
@@ -52,13 +50,13 @@ class TestReadDicomImage:
     def test_invalid_TransferSyntaxUID_exception(self, dicom_object):
         dicom_object.file_meta.TransferSyntaxUID = "1.2.840.10008.1.2.4.90"  # Assign random invalid TransferSyntaxUID
         with pytest.raises(ValueError) as e:
-            read_dicom_image(dicom_object, strict_interp=True)
+            read_dicom_image(dicom_object, strict_interp=True, use_nvjpeg=False)
         assert "does not appear to be correct" in str(e), "The expected exception message was not returned."
 
     def test_invalid_PixelData(self, dicom_object):
         dicom_object.PixelData = b""
         with pytest.raises(ValueError) as e:
-            read_dicom_image(dicom_object)
+            read_dicom_image(dicom_object, use_nvjpeg=False)
         expected_msg = "Unable to parse the pixel array after trying all possible TransferSyntaxUIDs."
         assert expected_msg in str(e), "The expected exception message was not returned."
 
@@ -128,13 +126,10 @@ class TestReadDicomImage:
     @pytest.mark.parametrize(
         "use_nvjpeg,available,exp",
         [
-            pytest.param(
-                True, True, True, marks=pytest.mark.skipif(not nvjpeg2k_is_available(), reason="nvJPEG not available")
-            ),
-            pytest.param(
-                None, True, True, marks=pytest.mark.skipif(not nvjpeg2k_is_available(), reason="nvJPEG not available")
-            ),
-            pytest.param(True, False, False, marks=pytest.mark.xfail(raises=ImportError)),
+            pytest.param(True, True, True, marks=pytest.mark.usefixtures("pynvjpeg")),
+            pytest.param(None, True, True, marks=pytest.mark.usefixtures("pynvjpeg")),
+            # call will be attempted, ImportError raised, then fallback to CPU
+            pytest.param(True, False, True),
             pytest.param(None, False, False),
             pytest.param(False, False, False),
         ],
@@ -142,6 +137,9 @@ class TestReadDicomImage:
     def test_nvjpeg_autoselect(self, request, mocker, dicom_file_j2k: str, use_nvjpeg, available, exp):
         # patch methods
         a = mocker.patch("dicom_utils.dicom.nvjpeg2k_is_available", return_value=available)
+        from dicom_utils.dicom import nvjpeg2k_is_available
+
+        assert nvjpeg2k_is_available() == available
 
         def new(dcm, *args, **kwargs):
             if not a():
@@ -158,7 +156,7 @@ class TestReadDicomImage:
         assert m.called == (exp if is_uint16 else False)
 
     @pytest.mark.ci_skip  # CircleCI will not have a GPU
-    @pytest.mark.skipif(not nvjpeg2k_is_available(), reason="nvJPEG not available")
+    @pytest.mark.usefixtures("pynvjpeg")
     def test_nvjpeg(self, dicom_file_j2k: str, mocker):
         BATCH_SIZE: Final[int] = 1
         mocked_get_batch_size = mocker.patch("dicom_utils.dicom._nvjpeg_get_batch_size")
