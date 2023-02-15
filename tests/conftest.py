@@ -56,6 +56,14 @@ def dicom_file_j2k_3d_uint16() -> str:
     return filename
 
 
+@pytest.fixture
+def dicom_file_jpl14() -> str:
+    # JPEG lossless non-hierarchical (Process 14)
+    filename = get_testdata_file("JPEG-LL.dcm")
+    assert isinstance(filename, str)
+    return filename
+
+
 @pytest.fixture(params=["dicom_file_j2k_uint16", "dicom_file_j2k_int16", "dicom_file_j2k_3d_uint16"])
 def dicom_file_j2k(request):
     return request.getfixturevalue(request.param)
