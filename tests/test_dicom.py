@@ -3,7 +3,6 @@
 
 
 import time
-from typing import Final
 
 import numpy as np
 import pydicom
@@ -12,7 +11,12 @@ from numpy.random import default_rng
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
-from dicom_utils.dicom import data_handlers, default_data_handlers, image_is_uint16, is_inverted, set_pixels
+from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted, nvjpeg_decompress, set_pixels
+
+
+@pytest.fixture
+def pynvjpeg():
+    return pytest.importorskip("pynvjpeg", reason="pynvjpeg is not installed")
 
 
 class TestReadDicomImage:
@@ -37,7 +41,7 @@ class TestReadDicomImage:
 
     def test_invalid_TransferSyntaxUID_loose_interpretation(self, dicom_object):
         dicom_object.file_meta.TransferSyntaxUID = "1.2.840.10008.1.2.4.90"  # Assign random invalid TransferSyntaxUID
-        array = read_dicom_image(dicom_object)
+        array = read_dicom_image(dicom_object, use_nvjpeg=False)
         assert isinstance(array, np.ndarray)
         assert array.min() == 128, "min pixel value 128"
         assert array.max() == 2191, "max pixel value 2191"
@@ -45,13 +49,13 @@ class TestReadDicomImage:
     def test_invalid_TransferSyntaxUID_exception(self, dicom_object):
         dicom_object.file_meta.TransferSyntaxUID = "1.2.840.10008.1.2.4.90"  # Assign random invalid TransferSyntaxUID
         with pytest.raises(ValueError) as e:
-            read_dicom_image(dicom_object, strict_interp=True)
+            read_dicom_image(dicom_object, strict_interp=True, use_nvjpeg=False)
         assert "does not appear to be correct" in str(e), "The expected exception message was not returned."
 
     def test_invalid_PixelData(self, dicom_object):
         dicom_object.PixelData = b""
         with pytest.raises(ValueError) as e:
-            read_dicom_image(dicom_object)
+            read_dicom_image(dicom_object, use_nvjpeg=False)
         expected_msg = "Unable to parse the pixel array after trying all possible TransferSyntaxUIDs."
         assert expected_msg in str(e), "The expected exception message was not returned."
 
@@ -118,26 +122,97 @@ class TestReadDicomImage:
         assert array.shape[-2:] == (100, 100)
         assert array.dtype == np.uint8
 
+    @pytest.mark.parametrize(
+        "dicom_fixture,use_nvjpeg,available,exp",
+        [
+            # 3D JPEG2000
+            pytest.param("dicom_file_j2k_3d_uint16", True, True, True, marks=pytest.mark.usefixtures("pynvjpeg")),
+            pytest.param("dicom_file_j2k_3d_uint16", None, True, True, marks=pytest.mark.usefixtures("pynvjpeg")),
+            pytest.param("dicom_file_j2k_3d_uint16", True, False, True, id="cpu-fallback"),
+            pytest.param("dicom_file_j2k_3d_uint16", None, False, False),
+            pytest.param("dicom_file_j2k_3d_uint16", False, False, False),
+            # 2D JPEG2000
+            pytest.param("dicom_file_j2k_uint16", True, True, True, marks=pytest.mark.usefixtures("pynvjpeg")),
+            pytest.param("dicom_file_j2k_uint16", None, True, True, marks=pytest.mark.usefixtures("pynvjpeg")),
+            pytest.param("dicom_file_j2k_uint16", True, False, True, id="cpu-fallback"),
+            pytest.param("dicom_file_j2k_uint16", None, False, False),
+            pytest.param("dicom_file_j2k_uint16", False, False, False),
+            # not JPEG2000, we should not attempt nvJPEG2K
+            pytest.param("dicom_file_jpl14", True, True, False),
+            pytest.param("dicom_file_jpl14", None, True, False),
+            pytest.param("dicom_file_jpl14", True, False, False),
+            pytest.param("dicom_file_jpl14", None, False, False),
+            pytest.param("dicom_file_jpl14", False, False, False),
+            # We should never run on int16 because it's not supported
+            pytest.param("dicom_file_j2k_int16", True, True, False),
+            pytest.param("dicom_file_j2k_int16", None, True, False),
+            pytest.param("dicom_file_j2k_int16", True, False, False),
+            pytest.param("dicom_file_j2k_int16", None, False, False),
+            pytest.param("dicom_file_j2k_int16", False, False, False),
+        ],
+    )
+    def test_nvjpeg_autoselect(self, request, mocker, dicom_fixture, use_nvjpeg, available, exp):
+        dicom_file = request.getfixturevalue(dicom_fixture)
+
+        # patch methods
+        a = mocker.patch("dicom_utils.dicom.nvjpeg2k_is_available", return_value=available)
+
+        # patch to use CPU instead of GPU
+        def new(dcm, *args, **kwargs):
+            if not a():
+                raise ImportError("nvJPEG not available")
+            return dcm.pixel_array
+
+        m = mocker.patch("dicom_utils.dicom.nvjpeg_decompress", side_effect=new)
+
+        # read and check
+        with pydicom.dcmread(dicom_file) as dcm:
+            read_dicom_image(dcm, use_nvjpeg=use_nvjpeg, nvjpeg_batch_size=1)
+        assert m.called == exp
+
     @pytest.mark.ci_skip  # CircleCI will not have a GPU
-    @pytest.importorskip("pynvjpeg", reason="pynvjpeg is not installed")
-    def test_nvjpeg(self, dicom_file_j2k: str, mocker):
-        BATCH_SIZE: Final[int] = 1
-        mocked_get_batch_size = mocker.patch("dicom_utils.dicom._nvjpeg_get_batch_size")
+    @pytest.mark.usefixtures("pynvjpeg")
+    @pytest.mark.parametrize(
+        "dicom_fixture",
+        [
+            "dicom_file_j2k_3d_uint16",
+            "dicom_file_j2k_uint16",
+            "dicom_file_jpl14",
+            "dicom_file_j2k_int16",
+        ],
+    )
+    def test_nvjpeg(self, request, dicom_fixture):
+        dicom_file_j2k = request.getfixturevalue(dicom_fixture)
 
-        def read_image(use_nvjpeg: bool):
-            ds = pydicom.dcmread(dicom_file_j2k)
-            image = read_dicom_image(ds, use_nvjpeg=use_nvjpeg, nvjpeg_batch_size=BATCH_SIZE)
-            if use_nvjpeg and image_is_uint16(ds):
-                mocked_get_batch_size.assert_called_with(BATCH_SIZE, ds.get("NumberOfFrames", 1))
-            else:
-                mocked_get_batch_size.assert_not_called
-            return image
-
-        cpu_image = read_image(False)
-        gpu_image = read_image(True)
+        ds = pydicom.dcmread(dicom_file_j2k)
+        gpu_image = read_dicom_image(ds, use_nvjpeg=True, nvjpeg_batch_size=1)
+        cpu_image = read_dicom_image(ds, use_nvjpeg=False)
 
         assert cpu_image.shape == gpu_image.shape
         assert (cpu_image == gpu_image).all()
+
+
+@pytest.mark.ci_skip  # CircleCI will not have a GPU
+@pytest.mark.usefixtures("pynvjpeg")
+@pytest.mark.parametrize(
+    "dicom_fixture",
+    [
+        "dicom_file_j2k_3d_uint16",
+        "dicom_file_j2k_uint16",
+        pytest.param("dicom_file_jpl14", marks=pytest.mark.xfail(raises=ValueError)),
+        pytest.param("dicom_file_j2k_int16", marks=pytest.mark.xfail(raises=ValueError)),
+    ],
+)
+def test_nvjpeg_decompress(request, dicom_fixture):
+    dicom_file_j2k = request.getfixturevalue(dicom_fixture)
+
+    ds = pydicom.dcmread(dicom_file_j2k)
+    gpu_image = nvjpeg_decompress(ds, batch_size=1)
+    ds = pydicom.dcmread(dicom_file_j2k)
+    cpu_image = ds.pixel_array
+
+    assert cpu_image.shape == gpu_image.shape
+    assert (cpu_image == gpu_image).all()
 
 
 def test_deprecated_is_inverted(dicom_object):

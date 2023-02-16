@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import functools
 import os
 import sys
 from os import PathLike
@@ -14,7 +13,7 @@ from numpy import ndarray
 from pydicom import DataElement, FileDataset
 from pydicom.encaps import encapsulate
 from pydicom.pixel_data_handlers.util import apply_voi_lut
-from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian
+from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian, JPEG2000TransferSyntaxes
 
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
@@ -198,7 +197,7 @@ def read_dicom_image(
     strict_interp: bool = False,
     volume_handler: VolumeHandler = KeepVolume(),
     as_uint8: bool = False,
-    use_nvjpeg: Optional[bool] = False,
+    use_nvjpeg: Optional[bool] = None,
     nvjpeg_batch_size: Optional[int] = None,
 ) -> ndarray:
     r"""
@@ -384,7 +383,12 @@ def decompress(
 
     if use_nvjpeg:
         batch_size = batch_size or int(os.environ.get("NVJPEG2K_BATCH_SIZE", 1))
-        pixels = nvjpeg_decompress(dcm, batch_size, verbose)
+        try:
+            pixels = nvjpeg_decompress(dcm, batch_size, verbose)
+        except Exception as e:
+            # fall back to CPU
+            logger.warning(f"Failed to decompress with nvjpeg: {e}")
+            pixels = dcm.pixel_array
     else:
         pixels = dcm.pixel_array
     assert isinstance(dcm, FileDataset)
@@ -422,24 +426,33 @@ def nvjpeg_decompress(
     """
     if not nvjpeg2k_is_available():
         raise ImportError('pynvjpeg is not available. Install with: pip install -e ".[j2k]"')
+    elif (tsuid := dcm.file_meta.TransferSyntaxUID) not in JPEG2000TransferSyntaxes:
+        raise ValueError(f"TransferSyntaxUID {tsuid} is not supported for decompression")
 
     num_frames = dcm.get("NumberOfFrames", 1)
 
     # In case number of frames is present in "dcm" but stored as "None"
     dcm.NumberOfFrames = int(1 if num_frames is None else num_frames)
-
     rows = dcm.Rows
     cols = dcm.Columns
 
-    batch_size = _nvjpeg_get_batch_size(batch_size, dcm.NumberOfFrames)
+    # Peek first frame for validation. Reject invalid JPEG2000 or signed JPEG2000
+    encoded_frame = next(iter(VolumeHandler.iterate_frames(dcm)))
+    if not pynvjpeg.is_valid_jpeg2k(encoded_frame, len(encoded_frame)):
+        raise ValueError("First frame is not a valid JPEG2000 image")
+    image_info = pynvjpeg.get_image_info_jpeg2k(encoded_frame, len(encoded_frame))
+    for c in image_info.get("component_info", []):
+        if c["sign"] != 0:
+            raise ValueError("Signed images are not supported")
+
+    batch_size = _nvjpeg_get_batch_size(batch_size, num_frames)
     assert pynvjpeg is not None  # To fix a type error on the next line even though we already checked for this
 
-    # NOTE: pynvjpeg.decode_frames_jpeg2k should be faster, but it's not as reliable.
-    # For example, pynvjpeg.decode_frames_jpeg2k doesn't work with Pydicom's test file "RG1_J2KR.dcm"
-    # This approach seems to be about as fast, but might be faster if batch_size was used.
-    # The optimal approach would probably be to leverage pydicom.encaps.get_frame_offsets
-    # and let pynvjpeg create the frame stack.
-    frame_stack = functools.reduce(lambda a, b: a + b, VolumeHandler.iterate_frames(dcm))
-    decoded_frames = pynvjpeg.decode_jpeg2k(frame_stack, len(frame_stack), rows, cols)
+    # For multi-frame images, we can use the batched decoder
+    if num_frames > 1:
+        decoded_frames = pynvjpeg.decode_frames_jpeg2k(dcm.PixelData, len(dcm.PixelData), rows, cols, batch_size)
+    # Otherwise, we must call the single-frame decoder
+    else:
+        decoded_frames = pynvjpeg.decode_jpeg2k(encoded_frame, len(encoded_frame), rows, cols)
 
     return decoded_frames
