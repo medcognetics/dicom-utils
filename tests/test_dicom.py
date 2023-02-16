@@ -208,6 +208,7 @@ def test_nvjpeg_decompress(request, dicom_fixture):
 
     ds = pydicom.dcmread(dicom_file_j2k)
     gpu_image = nvjpeg_decompress(ds, batch_size=1)
+    ds = pydicom.dcmread(dicom_file_j2k)
     cpu_image = ds.pixel_array
 
     assert cpu_image.shape == gpu_image.shape
