@@ -11,7 +11,14 @@ from numpy.random import default_rng
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
-from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted, nvjpeg_decompress, set_pixels
+from dicom_utils.dicom import (
+    ALGORITHM_PRESENTATION_TYPE,
+    data_handlers,
+    default_data_handlers,
+    is_inverted,
+    nvjpeg_decompress,
+    set_pixels,
+)
 
 
 @pytest.fixture
@@ -190,6 +197,20 @@ class TestReadDicomImage:
 
         assert cpu_image.shape == gpu_image.shape
         assert (cpu_image == gpu_image).all()
+
+    @pytest.mark.parametrize(
+        "presentation,exp",
+        [
+            ("FOR PROCESSING", True),
+            ("FOR PRESENTATION", True),
+            (ALGORITHM_PRESENTATION_TYPE, False),
+        ],
+    )
+    def test_for_algorithm_presentation_handling(self, mocker, dicom_object, presentation, exp):
+        m = mocker.patch("dicom_utils.dicom.apply_voi_lut", return_value=dicom_object.pixel_array)
+        dicom_object.PresentationIntentType = presentation
+        read_dicom_image(dicom_object)
+        assert m.called == exp
 
 
 @pytest.mark.ci_skip  # CircleCI will not have a GPU
