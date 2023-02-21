@@ -303,7 +303,7 @@ def read_dicom_image(
         pixels = pixels.newbyteorder("=")
 
     # in some dicoms, pixel value of 0 indicates white
-    if pm.is_inverted:
+    if pm.is_inverted and get_value(dcm, Tag.PresentationIntentType, "") != ALGORITHM_PRESENTATION_TYPE:
         pixels = invert_color(pixels)
 
     # convert to uint8 if requested

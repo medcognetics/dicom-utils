@@ -207,10 +207,13 @@ class TestReadDicomImage:
         ],
     )
     def test_for_algorithm_presentation_handling(self, mocker, dicom_object, presentation, exp):
-        m = mocker.patch("dicom_utils.dicom.apply_voi_lut", return_value=dicom_object.pixel_array)
+        m1 = mocker.patch("dicom_utils.dicom.apply_voi_lut", return_value=dicom_object.pixel_array)
+        m2 = mocker.patch("dicom_utils.dicom.invert_color", return_value=dicom_object.pixel_array)
         dicom_object.PresentationIntentType = presentation
+        dicom_object.PhotometricInterpretation = "MONOCHROME1"
         read_dicom_image(dicom_object)
-        assert m.called == exp
+        assert m1.called == exp, "apply_voi_lut not called as expected"
+        assert m2.called == exp, "invert_color not called as expected"
 
 
 @pytest.mark.ci_skip  # CircleCI will not have a GPU
