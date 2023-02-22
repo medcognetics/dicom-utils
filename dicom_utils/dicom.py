@@ -50,7 +50,7 @@ TransferSyntaxUIDs: Final[Dict[str, str]] = {
 
 
 # Used to indicate preprocessed DICOMs
-ALGORITHM_PRESENTATION_TYPE: Final = "FOR MEDCOG ALGORITHM"
+ALGORITHM_PRESENTATION_TYPE: Final = "FOR ALGORITHM"
 
 
 # Pillow is relatively slow so we want to make sure that other handlers are used instead
