@@ -18,7 +18,7 @@ from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian, JPE
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
 from .tags import Tag
-from .types import Dicom, PhotometricInterpretation, iterate_shared_functional_groups
+from .types import Dicom, PhotometricInterpretation, get_value, iterate_shared_functional_groups
 from .volume import KeepVolume, VolumeHandler
 
 
@@ -47,6 +47,10 @@ TransferSyntaxUIDs: Final[Dict[str, str]] = {
     "1.2.840.10008.1.2.4.92": "JPEG2000 Multi-component Lossless",
     "1.2.840.10008.1.2.4.93": "JPEG2000 Multi-component",
 }
+
+
+# Used to indicate preprocessed DICOMs
+ALGORITHM_PRESENTATION_TYPE: Final = "FOR ALGORITHM"
 
 
 # Pillow is relatively slow so we want to make sure that other handlers are used instead
@@ -95,6 +99,11 @@ def is_compressed(dcm: Dicom) -> bool:
     return syntax.is_compressed
 
 
+def has_algorithm_intent(dcm: Dicom) -> bool:
+    r"""Checks if the DICOM is preprocessed or intented for algorithm use."""
+    return get_value(dcm, Tag.PresentationIntentType, "") == ALGORITHM_PRESENTATION_TYPE
+
+
 def convert_frame_voi_lut(dcm: Dicom) -> Dicom:
     r"""Copies frame VOILUT information into the top level of a Dicom object."""
     for ds in iterate_shared_functional_groups(dcm):
@@ -125,9 +134,14 @@ def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     Returns:
         Numpy ndarray of pixel data
     """
-    try:
-        pixels = apply_voi_lut(dcm.pixel_array, dcm)
-    except Exception:
+    # Preprocessed images will set a specific PresentationIntentType.
+    # Check this to ensure we don't reapply the VOI LUT or other pixel adjustment operations
+    if not has_algorithm_intent(dcm):
+        try:
+            pixels = apply_voi_lut(dcm.pixel_array, dcm)
+        except Exception:
+            pixels = dcm.pixel_array
+    else:
         pixels = dcm.pixel_array
     return pixels.reshape(dims)
 
@@ -294,7 +308,7 @@ def read_dicom_image(
         pixels = pixels.newbyteorder("=")
 
     # in some dicoms, pixel value of 0 indicates white
-    if pm.is_inverted:
+    if pm.is_inverted and not has_algorithm_intent(dcm):
         pixels = invert_color(pixels)
 
     # convert to uint8 if requested
