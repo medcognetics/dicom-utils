@@ -236,6 +236,7 @@ class TestFileRecord:
         assert rec_dict["resolved_path"] == str(rec.path.resolve().absolute())
         restored = FileRecord.from_dict(rec_dict)
         assert isinstance(restored, type(rec))
+        assert isinstance(restored.path, Path)
         assert restored == rec
 
 

@@ -333,7 +333,7 @@ class FileRecord:
         for k, v in target.items():
             if k in dest_fields:
                 kwargs[k] = v
-        record_path = kwargs.pop("path")
+        record_path = Path(kwargs.pop("path"))
         rec = cls(record_path, **kwargs)
         return rec
 
