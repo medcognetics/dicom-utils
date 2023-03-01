@@ -135,9 +135,8 @@ class RecordCreator:
                     "It may be still used elsewhere"
                 )
 
-    def __call__(self, path: Path) -> FileRecord:
+    def __call__(self, path: Path, dcm: Optional[Dicom] = None) -> FileRecord:
         result = FileRecord.from_file(path)
-        dcm: Optional[Dicom] = None
 
         for dtype in self.iterate_types_to_try(path):
             try:
@@ -182,10 +181,8 @@ class RecordCreator:
         dicom_candidates = set(self.filter_dicom_types(candidates))
         non_dicom_candidates = set(candidates) - dicom_candidates
 
-        for c in self.sort_by_subclass_level(dicom_candidates):
-            yield c
-        for c in self.sort_by_subclass_level(non_dicom_candidates):
-            yield c
+        yield from self.sort_by_subclass_level(dicom_candidates)
+        yield from self.sort_by_subclass_level(non_dicom_candidates)
 
     @classmethod
     def sort_by_subclass_level(cls, types: Iterable[Type[FileRecord]]) -> List[Type[FileRecord]]:
