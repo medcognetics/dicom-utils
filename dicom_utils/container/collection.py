@@ -136,7 +136,7 @@ class RecordCreator:
                 )
 
     def __call__(self, path: Path, dcm: Optional[Dicom] = None) -> FileRecord:
-        result = FileRecord.from_file(path)
+        result = FileRecord(path)
 
         for dtype in self.iterate_types_to_try(path):
             try:
