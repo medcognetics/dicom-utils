@@ -450,23 +450,29 @@ def nvjpeg_decompress(
     rows = dcm.Rows
     cols = dcm.Columns
 
-    # Peek first frame for validation. Reject invalid JPEG2000 or signed JPEG2000
-    encoded_frame = next(iter(VolumeHandler.iterate_frames(dcm)))
-    if not pynvjpeg.is_valid_jpeg2k(encoded_frame, len(encoded_frame)):
-        raise ValueError("First frame is not a valid JPEG2000 image")
-    image_info = pynvjpeg.get_image_info_jpeg2k(encoded_frame, len(encoded_frame))
-    for c in image_info.get("component_info", []):
-        if c["sign"] != 0:
-            raise ValueError("Signed images are not supported")
+    # Build and validate a list of frames. Reject invalid JPEG2000 or signed JPEG2000
+    # TODO: See if this can be done using only views into the original buffer. We are currently
+    #   calling copy operations on the encoded frames.
+    encoded_frames: List[bytes] = []
+    for i, encoded_frame in enumerate(VolumeHandler.iterate_frames(dcm)):
+        if not pynvjpeg.is_valid_jpeg2k(encoded_frame, len(encoded_frame)):
+            raise ValueError(f"Frame {i} is not a valid JPEG2000 image")
+        image_info = pynvjpeg.get_image_info_jpeg2k(encoded_frame, len(encoded_frame))
+        for c in image_info.get("component_info", []):
+            if c["sign"] != 0:
+                raise ValueError(f"Signed images (frame {i}) are not supported")
+        encoded_frames.append(encoded_frame)
 
     batch_size = _nvjpeg_get_batch_size(batch_size, num_frames)
     assert pynvjpeg is not None  # To fix a type error on the next line even though we already checked for this
 
-    # For multi-frame images, we can use the batched decoder
-    if num_frames > 1:
-        decoded_frames = pynvjpeg.decode_frames_jpeg2k(dcm.PixelData, len(dcm.PixelData), rows, cols, batch_size)
-    # Otherwise, we must call the single-frame decoder
-    else:
-        decoded_frames = pynvjpeg.decode_jpeg2k(encoded_frame, len(encoded_frame), rows, cols)
+    decoded_frames = pynvjpeg.decode_framelist_jpeg2k(
+        b"".join(encoded_frames), [len(f) for f in encoded_frames], rows, cols, batch_size
+    )
+
+    # Squeeze extra dims for 2D inputs
+    if num_frames == 1:
+        H, W = decoded_frames.shape[-2:]
+        decoded_frames = decoded_frames.reshape(H, W)
 
     return decoded_frames
