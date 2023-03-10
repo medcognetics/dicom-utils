@@ -30,6 +30,6 @@ multi_line_output = 3
 use_parentheses = false
 src_paths = ["project", "tests"]
 
-[tool.pyright]
-venvPath = "."
-venv = "env"
+#[tool.pyright]
+#venvPath = "."
+#venv = "env"

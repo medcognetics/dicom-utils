@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "63c3de6b7ddad67f1d1199ef2996bbe7f5d1548491518c4c73600d1a40ac73ec"
+            "sha256": "58eb6330652c5b56cad2114d594ea0c4d99714e7d00741bd1cb3645c55ddf208"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -480,7 +480,6 @@
             "version": "==2.8.2"
         },
         "registry": {
-            "editable": true,
             "git": "https://github.com/TidalPaladin/callable-registry.git",
             "ref": "aaf5566d727f6b502c0793ff6e6620cc4aea638c"
         },
@@ -501,7 +500,6 @@
             "version": "==4.65.0"
         },
         "tqdm-multiprocessing": {
-            "editable": true,
             "git": "https://github.com/TidalPaladin/tqdm-multiprocessing.git",
             "ref": "3c1bf9fa7b494b5342779f4125a1593ed4854f97"
         },
