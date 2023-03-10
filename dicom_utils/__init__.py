@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import importlib.metadata
+
 # avoid BrokenPipeError, KeyboardInterrupt
 import os
 import warnings
-import importlib.metadata
 from typing import Final, Iterable
 
 from .anonymize import anonymize

@@ -44,12 +44,12 @@ endif
 quality:
 	$(MAKE) clean
 	$(PYTHON) -m black --check $(QUALITY_DIRS)
-	$(PYTHON) -m autopep8 -a $(QUALITY_DIRS)
+	$(PYTHON) -m autopep8 -a -i $(QUALITY_DIRS)
 
 style:
 	$(PYTHON) -m autoflake -r -i $(QUALITY_DIRS)
 	$(PYTHON) -m isort $(QUALITY_DIRS)
-	$(PYTHON) -m autopep8 -a $(QUALITY_DIRS)
+	$(PYTHON) -m autopep8 -a -i $(QUALITY_DIRS)
 	$(PYTHON) -m black $(QUALITY_DIRS)
 
 test: ## run unit tests
