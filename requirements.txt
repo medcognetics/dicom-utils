@@ -1,3 +1,5 @@
+-e git+https://github.com/TidalPaladin/callable-registry.git#egg=registry
+-e git+https://github.com/TidalPaladin/tqdm-multiprocessing.git#egg=tqdm_multiprocessing
 -e .
 
 # -e .[j2k]  # Run this manually if you wish to install pynvjpeg2k (not required)

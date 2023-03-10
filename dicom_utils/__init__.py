@@ -4,6 +4,7 @@
 # avoid BrokenPipeError, KeyboardInterrupt
 import os
 import warnings
+import importlib.metadata
 from typing import Final, Iterable
 
 from .anonymize import anonymize
@@ -20,7 +21,7 @@ except ImportError:
     raise
 
 try:
-    from .version import __version__
+    __version__ = importlib.metadata.version("dicom_utils")
 except ImportError:
     __version__ = "Unknown"
 
