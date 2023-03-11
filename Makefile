@@ -1,16 +1,9 @@
 .PHONY: clean clean-env check quality style tag-version test env upload upload-test
 
 PROJECT=dicom_utils
-PY_VER=python3.10
-QUALITY_DIRS=$(PROJECT) tests setup.py
+QUALITY_DIRS=$(PROJECT) tests
 CLEAN_DIRS=$(PROJECT) tests
-VENV=$(shell pipenv --venv)
-PYTHON=pipenv run python
-
-CONFIG_FILE := config.mk
-ifneq ($(wildcard $(CONFIG_FILE)),)
-include $(CONFIG_FILE)
-endif
+PYTHON=pdm run python
 
 check: ## run quality checks and unit tests
 	$(MAKE) style
@@ -31,8 +24,8 @@ clean-env: ## remove the virtual environment directory
 
 init: ## pulls submodules and initializes virtual environment
 	git submodule update --init --recursive
-	which pipenv || pip install --user pipenv
-	pipenv install --dev
+	which pdm || pip install --user pdm
+	pdm install -d
 
 node_modules: 
 ifeq (, $(shell which npm))
@@ -44,12 +37,12 @@ endif
 quality:
 	$(MAKE) clean
 	$(PYTHON) -m black --check $(QUALITY_DIRS)
-	$(PYTHON) -m autopep8 -a -i $(QUALITY_DIRS)
+	$(PYTHON) -m autopep8 -a $(QUALITY_DIRS)
 
 style:
 	$(PYTHON) -m autoflake -r -i $(QUALITY_DIRS)
 	$(PYTHON) -m isort $(QUALITY_DIRS)
-	$(PYTHON) -m autopep8 -a -i $(QUALITY_DIRS)
+	$(PYTHON) -m autopep8 -a $(QUALITY_DIRS)
 	$(PYTHON) -m black $(QUALITY_DIRS)
 
 test: ## run unit tests
@@ -75,7 +68,7 @@ test-ci: ## runs CI-only tests
 		./tests/
 
 types: node_modules
-	pipenv run npx --no-install pyright tests $(PROJECT)
+	pdm run npx --no-install pyright tests $(PROJECT)
 
 help: ## display this help message
 	@echo "Please use \`make <target>' where <target> is one of"
