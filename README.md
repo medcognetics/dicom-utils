@@ -32,8 +32,8 @@ with the exception of fields which are affected by additional rules located
 
 ## pynvjpeg
 
-To install [pynvjpeg](https://github.com/medcognetics/pynvjpeg2k) for accelerated JPEG200 decoding,
-intall the `j2k` extra.
+To install [pynvjpeg](https://github.com/medcognetics/pynvjpeg2k) for accelerated JPEG2000 decoding,
+install the `j2k` extra.
 
 ```bash
 $ pip install -e ".[j2k,dev]"
