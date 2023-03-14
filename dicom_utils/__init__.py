@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import importlib.metadata
+
 # avoid BrokenPipeError, KeyboardInterrupt
 import os
 import warnings
@@ -20,7 +22,7 @@ except ImportError:
     raise
 
 try:
-    from .version import __version__
+    __version__ = importlib.metadata.version("dicom_utils")
 except ImportError:
     __version__ = "Unknown"
 

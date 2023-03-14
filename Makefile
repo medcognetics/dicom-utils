@@ -1,22 +1,9 @@
 .PHONY: clean clean-env check quality style tag-version test env upload upload-test
 
 PROJECT=dicom_utils
-PY_VER=python3.10
-PY_VER_SHORT=py$(shell echo $(PY_VER) | sed 's/[^0-9]*//g')
-QUALITY_DIRS=$(PROJECT) tests setup.py tag_enum.py
+QUALITY_DIRS=$(PROJECT) tests
 CLEAN_DIRS=$(PROJECT) tests
-VENV=$(shell pwd)/env
-PYTHON=$(VENV)/bin/python
-
-LINE_LEN=120
-DOC_LEN=120
-
-VERSION := $(shell cat version.txt)
-
-CONFIG_FILE := Makefile.config
-ifneq ($(wildcard $(CONFIG_FILE)),)
-include $(CONFIG_FILE)
-endif
+PYTHON=pdm run python
 
 check: ## run quality checks and unit tests
 	$(MAKE) style
@@ -33,16 +20,12 @@ clean: ## remove cache files
 	find $(CLEAN_DIRS) -name '*.orig' -type f -delete
 
 clean-env: ## remove the virtual environment directory
-	rm -rf $(VENV)
+	pipenv --rm
 
 init: ## pulls submodules and initializes virtual environment
 	git submodule update --init --recursive
-	$(MAKE) $(VENV)/bin/activate
-
-package: env
-	rm -rf dist
-	$(PYTHON) -m pip install --upgrade setuptools wheel
-	export $(PROJECT)_BUILD_VERSION=$(VERSION) && $(PYTHON) setup.py sdist bdist_wheel
+	which pdm || pip install --user pdm
+	pdm install -d
 
 node_modules: 
 ifeq (, $(shell which npm))
@@ -51,21 +34,18 @@ else
 	npm install
 endif
 
-quality: $(VENV)/bin/activate-quality
+quality:
 	$(MAKE) clean
-	$(PYTHON) -m black --check --line-length $(LINE_LEN) --target-version $(PY_VER_SHORT) $(QUALITY_DIRS)
-	$(PYTHON) -m flake8 --max-doc-length $(DOC_LEN) --max-line-length $(LINE_LEN) $(QUALITY_DIRS) 
+	$(PYTHON) -m black --check $(QUALITY_DIRS)
+	$(PYTHON) -m autopep8 -a -i $(QUALITY_DIRS)
 
-style: $(VENV)/bin/activate-quality
-	$(PYTHON) -m autoflake -r -i --remove-all-unused-imports --remove-unused-variables $(QUALITY_DIRS)
+style:
+	$(PYTHON) -m autoflake -r -i $(QUALITY_DIRS)
 	$(PYTHON) -m isort $(QUALITY_DIRS)
-	$(PYTHON) -m autopep8 -a -r -i --max-line-length=$(LINE_LEN) $(QUALITY_DIRS)
-	$(PYTHON) -m black --line-length $(LINE_LEN) --target-version $(PY_VER_SHORT) $(QUALITY_DIRS)
+	$(PYTHON) -m autopep8 -a -i $(QUALITY_DIRS)
+	$(PYTHON) -m black $(QUALITY_DIRS)
 
-tag-version: 
-	git tag -a "$(VERSION)"
-
-test: $(VENV)/bin/activate-test ## run unit tests
+test: ## run unit tests
 	$(PYTHON) -m pytest \
 		-rs \
 		--cov=./$(PROJECT) \
@@ -73,13 +53,13 @@ test: $(VENV)/bin/activate-test ## run unit tests
 		--cov-report=term \
 		./tests/
 
-test-%: $(VENV)/bin/activate-test ## run unit tests matching a pattern
-	$(PYTHON) -m pytest -rs -k $* -s -v ./tests/ 
+test-%: ## run unit tests matching a pattern
+	$(PYTHON) -m pytest -rs -k $* -v ./tests/ 
 
-test-pdb-%: $(VENV)/bin/activate-test ## run unit tests matching a pattern with PDB fallback
-	$(PYTHON) -m pytest -rs --pdb -k $* -s -v ./tests/ 
+test-pdb-%: ## run unit tests matching a pattern with PDB fallback
+	$(PYTHON) -m pytest -rs --pdb -k $* -v ./tests/ 
 
-test-ci: $(VENV)/bin/activate $(VENV)/bin/activate-test ## runs CI-only tests
+test-ci: ## runs CI-only tests
 	$(PYTHON) -m pytest \
 		--cov=./$(PROJECT) \
 		--cov-report=xml \
@@ -87,42 +67,9 @@ test-ci: $(VENV)/bin/activate $(VENV)/bin/activate-test ## runs CI-only tests
 		-m "not ci_skip" \
 		./tests/
 
-types: $(VENV)/bin/activate $(VENV)/bin/activate-test node_modules pyrightconfig.json
-	npx --no-install pyright tests $(PROJECT) -p pyrightconfig.json
-
-$(PROJECT)/_tag_enum.py: $(VENV)/bin/activate tag_enum.py
-	$(PYTHON) tag_enum.py $@
-
-upload: package
-	$(PYTHON) -m pip install --upgrade twine
-	$(PYTHON) -m twine upload --repository pypi dist/*
-
-upload-test: package
-	$(PYTHON) -m pip install --upgrade twine
-	$(PYTHON) -m twine upload --repository testpypi dist/*
-
-env: $(VENV)/bin/activate ## create a virtual environment for the project
-
-$(VENV)/bin/activate: setup.py requirements.txt
-	test -d $(VENV) || $(PY_VER) -m venv $(VENV)
-	$(PYTHON) -m pip install -U pip 
-	$(PYTHON) -m pip install -r requirements.txt
-	$(PYTHON) -m pip install -e .
-	touch $(VENV)/bin/activate
-
-$(VENV)/bin/activate-%: requirements.%.txt $(VENV)/bin/activate 
-	test -d $(VENV) || $(PY_VER) -m venv $(VENV)
-	$(PYTHON) -m pip install -U pip 
-	$(PYTHON) -m pip install -r $<
-	touch $(VENV)/bin/activate-$*
+types: node_modules
+	pdm run npx --no-install pyright tests $(PROJECT)
 
 help: ## display this help message
 	@echo "Please use \`make <target>' where <target> is one of"
 	@perl -nle'print $& if m{^[a-zA-Z_-]+:.*?## .*$$}' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m  %-25s\033[0m %s\n", $$1, $$2}'
-
-reset:
-	$(MAKE) clean
-	$(MAKE) clean-env
-	$(MAKE) init
-	$(MAKE) $(VENV)/bin/activate-test
-	$(MAKE) check

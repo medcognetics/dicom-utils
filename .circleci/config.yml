@@ -19,6 +19,9 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Install dependencies
+          command: make init
+      - run:
           name: Run quality tests
           command: make quality
 

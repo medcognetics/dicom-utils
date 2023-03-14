@@ -29,3 +29,26 @@ If anonymization is enabled when running `dicomphi`, fields defined in
 are anonymized
 with the exception of fields which are affected by additional rules located 
 [here](https://github.com/medcognetics/dicom-utils/blob/master/dicom_utils/anonymize.py).
+
+## pynvjpeg
+
+To install [pynvjpeg](https://github.com/medcognetics/pynvjpeg2k) for accelerated JPEG2000 decoding,
+install the `j2k` extra.
+
+```bash
+$ pip install -e ".[j2k,dev]"
+```
+
+The following steps may be required:
+
+1. `apt install cmake`
+
+2. Add CUDA tools to path
+
+```bash
+CUDA_FOLDER="cuda-12.0"
+export PATH="/usr/local/$CUDA_FOLDER/bin:$PATH"
+export LD_LIBRARY_PATH="/usr/local/$CUDA_FOLDER/lib64:$LD_LIBRARY_PATH"
+```
+
+3. `apt -y install python3-pybind11`
