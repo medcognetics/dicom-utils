@@ -21,10 +21,8 @@ except ImportError:
     print("DICOM operations require pydicom package")
     raise
 
-try:
-    __version__ = importlib.metadata.version("dicom_utils")
-except ImportError:
-    __version__ = "Unknown"
+
+__version__ = importlib.metadata.version("dicom-utils")
 
 
 SPAM_WARNING_PATTERNS: Final = {

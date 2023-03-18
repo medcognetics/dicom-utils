@@ -5,6 +5,11 @@ QUALITY_DIRS=$(PROJECT) tests
 CLEAN_DIRS=$(PROJECT) tests
 PYTHON=pdm run python
 
+CONFIG_FILE := config.mk
+ifneq ($(wildcard $(CONFIG_FILE)),)
+include $(CONFIG_FILE)
+endif
+
 check: ## run quality checks and unit tests
 	$(MAKE) style
 	$(MAKE) quality
@@ -20,11 +25,20 @@ clean: ## remove cache files
 	find $(CLEAN_DIRS) -name '*.orig' -type f -delete
 
 clean-env: ## remove the virtual environment directory
-	pipenv --rm
+	pdm venv remove $(PROJECT)
+
+
+deploy: ## installs from lockfile
+	git submodule update --init --recursive
+	which pdm || pip install --user pdm
+	pdm venv create -n $(PROJECT)-deploy
+	pdm install --production --no-lock
+
 
 init: ## pulls submodules and initializes virtual environment
 	git submodule update --init --recursive
 	which pdm || pip install --user pdm
+	pdm venv create -n $(PROJECT)
 	pdm install -d
 
 node_modules: 
@@ -37,19 +51,18 @@ endif
 quality:
 	$(MAKE) clean
 	$(PYTHON) -m black --check $(QUALITY_DIRS)
-	$(PYTHON) -m autopep8 -a -i $(QUALITY_DIRS)
+	$(PYTHON) -m autopep8 -a $(QUALITY_DIRS)
 
 style:
 	$(PYTHON) -m autoflake -r -i $(QUALITY_DIRS)
 	$(PYTHON) -m isort $(QUALITY_DIRS)
-	$(PYTHON) -m autopep8 -a -i $(QUALITY_DIRS)
+	$(PYTHON) -m autopep8 -a $(QUALITY_DIRS)
 	$(PYTHON) -m black $(QUALITY_DIRS)
 
 test: ## run unit tests
 	$(PYTHON) -m pytest \
 		-rs \
 		--cov=./$(PROJECT) \
-		--cov-report=xml \
 		--cov-report=term \
 		./tests/
 
