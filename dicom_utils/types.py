@@ -490,13 +490,13 @@ CV_STRINGS: Final = {"cleavage view", "valley-view"}
 class ViewPosition(EnumMixin):
     UNKNOWN = UNKNOWN
 
+    XCCL = auto()
+    XCCM = auto()
     CC = auto()
     MLO = auto()
     ML = auto()
     LMO = auto()
     LM = auto()
-    XCCL = auto()
-    XCCM = auto()
     AT = auto()
     CV = auto()
 
@@ -521,6 +521,8 @@ class ViewPosition(EnumMixin):
         }
         for value, keywords in strict_mapping.items():
             if string in keywords:
+                return value
+            elif value.simple_name == string:
                 return value
 
         if strict:

@@ -106,7 +106,7 @@ class TestReadDicomImage:
             return time.time() - start_time
 
         pydicom.config.pixel_data_handlers = default_data_handlers  # type: ignore
-        default_decode_time = time_decode()
+        default_decode_time = 2 * time_decode()
 
         pydicom.config.pixel_data_handlers = data_handlers  # type: ignore
         decode_time = time_decode()

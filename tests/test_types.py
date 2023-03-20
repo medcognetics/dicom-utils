@@ -575,6 +575,10 @@ class TestViewPosition:
             ("???", ViewPosition.UNKNOWN),
             ("foo", ViewPosition.UNKNOWN),
             ("", ViewPosition.UNKNOWN),
+            ("rxccl", ViewPosition.XCCL),
+            ("lxccl", ViewPosition.XCCL),
+            ("rxccm", ViewPosition.XCCM),
+            ("lxccm", ViewPosition.XCCM),
         ],
     )
     def test_from_str(self, string, expected):
