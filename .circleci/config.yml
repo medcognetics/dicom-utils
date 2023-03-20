@@ -1,61 +1,73 @@
 version: 2.1
 
-orbs:
-  codecov: codecov/codecov@1.0.2
 
-commands:
-  install_npm:
-    steps:
-      - run: sudo apt update
-      - run: sudo apt install -y npm
-      - run: sudo npm cache clean -f
-      - run: sudo npm install -g n
-      - run: sudo n stable
+orbs:
+  codecov: codecov/codecov@3.2.4
+
 
 jobs:
-  check_code_quality:
-    docker:
-      - image: circleci/python:3.10
-    steps:
-      - checkout
-      - run:
-          name: Install dependencies
-          command: make init
-      - run:
-          name: Run quality tests
-          command: make quality
+    check_code_quality:
+        docker:
+            - image: cimg/python:3.10-node
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                  - v1-dependencies-{{ checksum "pdm.lock" }}
+            - run:
+                name: Install pdm
+                command: pip install --user pdm
+            - run:
+                name: Install dependencies
+                command: pdm install -G quality --no-default --no-self
+            - save_cache:
+                paths:
+                  - ~/.cache/pip
+                  - ~/.cache/pdm
+                key: v1-dependencies-{{ checksum "pdm.lock" }}
+            - run: 
+                name: Run quality tests
+                command: make quality
 
-  run_tests:
-    docker:
-      - image: circleci/python:3.10
-    steps:
-      - checkout
-      - run:
-          name: Install dependencies
-          command: make init
-      - save_cache:
-          paths:
-            - ~/.cache/pip
-          key: v1-dependencies-{{ checksum "setup.py" }}
-      - run:
-          name: Run tests
-          command: make test-ci
-      - install_npm
-      - run:
-          name: Run static type checking
-          command: make types
-      - codecov/upload:
-          file: coverage.xml
+    run_tests:
+        docker:
+            - image: cimg/python:3.10-node
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                  - v1-dependencies-{{ checksum "pdm.lock" }}
+            - run:
+                name: Install dependencies
+                command: make init
+            - save_cache:
+                paths:
+                  - ~/.cache/pip
+                  - ~/.cache/pdm
+                key: v1-dependencies-{{ checksum "pdm.lock" }}
+            - run:
+                name: Run tests
+                command: make test-ci
+            - run:
+                name: Install static type checker
+                command: npm ci
+            - run:
+                name: Run static type checking
+                command: make types
+            - codecov/upload:
+                file: coverage.xml
+
 
 workflow_filters: &workflow_filters
-  filters:
-    branches:
-      only:
-        - master
-        - feat/circleci
+    filters:
+        branches:
+            only:
+                - master
+                - feat/circleci
+
 
 workflows:
-  build_and_test:
-    jobs:
-      - check_code_quality
-      - run_tests
+    build_and_test:
+        jobs:
+            - check_code_quality
+            - run_tests

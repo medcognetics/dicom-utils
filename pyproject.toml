@@ -4,7 +4,6 @@ build-backend = "pdm.pep517.api"
 
 [project]
 name = "dicom-utils"
-version = "0.1.0"
 description = ""
 authors = [
     {name = "Scott Chase Waggener", email = "tidalpaladin@protonmail.com"},
@@ -27,6 +26,7 @@ dependencies = [
 requires-python = ">=3.8"
 readme = "README.md"
 license = {text = "Apache"}
+dynamic = ["version"]
 
 [project.optional-dependencies]
 j2k = [
@@ -42,6 +42,7 @@ max_line_length = 120
 ignore = "E203,E231,E305,E402,E721,E722,E741,F401,F403,F405,F821,F841,F999,W503"
 recursive = true
 aggressive = 3
+in-place = true
 
 [tool.black]
 line-length = 120
@@ -59,6 +60,7 @@ use_parentheses = false
 [tool.pyright]
 
 [tool.pdm]
+version = { source = "scm" }
 
 [tool.pdm.dev-dependencies]
 test = [
@@ -66,6 +68,7 @@ test = [
   "pytest-mock",
   "pytest-cov",
   "coverage",
+  "pdbpp",
 ]
 quality = [
   "autoflake",
@@ -73,6 +76,16 @@ quality = [
   "black",
   "flake8",
   "isort",
+]
+
+[tool.pytest.ini_options]
+markers = [
+  "ci_skip",
+]
+filterwarnings = [
+  "ignore:.*Invalid value for VR.*:UserWarning",
+  "ignore:.*in the dataset does not match the component precision.*:UserWarning",
+  "ignore:.*doesn't match the JPEG 2000 data.*:UserWarning",
 ]
 
 [project.scripts]
