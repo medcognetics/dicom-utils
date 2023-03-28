@@ -206,7 +206,8 @@ class DicomFactory(BaseFactory):
         # an error when reading `dcm.pixel_array`. Try reading pixel_array and if it fails
         # update pixels with new data of the correct shape. We will only perform the pixel update
         # if requested because it can be slow.
-        if self.pixels if pixels is None else pixels:
+        pixels = self.pixels if pixels is None else pixels
+        if pixels:
             try:
                 dcm.pixel_array
             except ValueError:
