@@ -140,6 +140,9 @@ class DicomFactory(BaseFactory):
         seed:
             Seed for random number generation
 
+        pixels:
+            Whether to include pixel data in the generated DICOM. If False, ``dcm.PixelData`` will be set to ``None``.
+
     Keyword Args:
         Tag value overrides
     """
@@ -150,11 +153,13 @@ class DicomFactory(BaseFactory):
         proto: Proto = DEFAULT_PROTO,
         seed: int = 42,
         allow_nonproto_tags: bool = True,
+        pixels: bool = True,
         **kwargs,
     ):
         self.seed = int(seed)
         self.rng = default_rng(self.seed)
         self.allow_nonproto_tags = allow_nonproto_tags
+        self.pixels = pixels
         self.overrides = kwargs
         if isinstance(proto, (PathLike, str)):
             self.path = Path(proto)
@@ -181,7 +186,7 @@ class DicomFactory(BaseFactory):
         result.rng = default_rng(self.seed)
         return result
 
-    def __call__(self, seed: Optional[int] = None, **kwargs) -> FileDataset:
+    def __call__(self, seed: Optional[int] = None, pixels: Optional[bool] = None, **kwargs) -> FileDataset:
         self.rng if seed is None else default_rng(seed)
         dcm = deepcopy(self.dicom)
 
@@ -199,20 +204,25 @@ class DicomFactory(BaseFactory):
 
         # Rows/Columns may have been changed without changing PixelData. This will cause
         # an error when reading `dcm.pixel_array`. Try reading pixel_array and if it fails
-        # update pixels with new data of the correct shape
-        try:
-            dcm.pixel_array
-        except ValueError:
-            arr = self.pixel_array(
-                dcm.Rows,
-                dcm.Columns,
-                dcm.NumberOfFrames,
-                dcm.BitsStored,
-                dcm.BitsAllocated,
-                dcm.PhotometricInterpretation,
-                seed=self.seed,
-            )
-            dcm = set_pixels(dcm, arr, dcm.file_meta.TransferSyntaxUID)
+        # update pixels with new data of the correct shape. We will only perform the pixel update
+        # if requested because it can be slow.
+        pixels = self.pixels if pixels is None else pixels
+        if pixels:
+            try:
+                dcm.pixel_array
+            except ValueError:
+                arr = self.pixel_array(
+                    dcm.Rows,
+                    dcm.Columns,
+                    dcm.NumberOfFrames,
+                    dcm.BitsStored,
+                    dcm.BitsAllocated,
+                    dcm.PhotometricInterpretation,
+                    seed=self.seed,
+                )
+                dcm = set_pixels(dcm, arr, dcm.file_meta.TransferSyntaxUID)
+        elif hasattr(dcm, "PixelData"):
+            del dcm.PixelData
 
         # if requested, delete any tags not in the proto
         if not self.allow_nonproto_tags:
@@ -244,10 +254,10 @@ class ConcatFactory(BaseFactory):
         result.factories = self.factories + other.factories
         return result
 
-    def __call__(self, seed: Optional[int] = None, **kwargs) -> List[FileDataset]:
+    def __call__(self, seed: Optional[int] = None, pixels: Optional[bool] = None, **kwargs) -> List[FileDataset]:
         result: List[FileDataset] = []
         for factory in self.factories:
-            _result = factory(seed=seed, **kwargs)
+            _result = factory(seed=seed, pixels=pixels, **kwargs)
             if isinstance(_result, FileDataset):
                 result.append(_result)
             else:
