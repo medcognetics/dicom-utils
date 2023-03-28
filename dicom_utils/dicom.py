@@ -393,7 +393,7 @@ def decompress(
 
     # The GPU NVJPEG decoder doesn't seem to work with int16 pixel data
     # But this hasn't been thoroughly investigated
-    use_nvjpeg = use_nvjpeg and image_is_uint16(dcm)
+    use_nvjpeg = use_nvjpeg and image_is_uint16(dcm) and is_jpeg2k(dcm)
 
     if use_nvjpeg:
         batch_size = batch_size or int(os.environ.get("NVJPEG2K_BATCH_SIZE", 1))
@@ -423,6 +423,11 @@ def _nvjpeg_get_batch_size(batch_size: int, num_frames: int) -> int:  # pragma: 
     return batch_size
 
 
+def is_jpeg2k(dcm: Dicom) -> bool:
+    tsuid = dcm.file_meta.TransferSyntaxUID
+    return tsuid in JPEG2000TransferSyntaxes
+
+
 def nvjpeg_decompress(
     dcm: Dicom,
     batch_size: int = 4,
@@ -440,8 +445,8 @@ def nvjpeg_decompress(
     """
     if not nvjpeg2k_is_available():
         raise ImportError('pynvjpeg is not available. Install with: pip install -e ".[j2k]"')
-    elif (tsuid := dcm.file_meta.TransferSyntaxUID) not in JPEG2000TransferSyntaxes:
-        raise ValueError(f"TransferSyntaxUID {tsuid} is not supported for decompression")
+    elif not is_jpeg2k(dcm):
+        raise ValueError(f"TransferSyntaxUID {dcm.file_meta.TransferSyntaxUID} is not supported for decompression")
 
     num_frames = dcm.get("NumberOfFrames", 1)
 
