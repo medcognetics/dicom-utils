@@ -257,29 +257,6 @@ requires_python = ">=3.6"
 summary = "plugin and hook calling mechanisms for python"
 
 [[package]]
-name = "pybind11"
-version = "2.10.3"
-requires_python = ">=3.6"
-summary = "Seamless operability between C++11 and Python"
-
-[[package]]
-name = "pybind11-global"
-version = "2.10.3"
-requires_python = ">=3.6"
-summary = "Seamless operability between C++11 and Python"
-
-[[package]]
-name = "pybind11"
-version = "2.10.3"
-extras = ["global"]
-requires_python = ">=3.6"
-summary = "Seamless operability between C++11 and Python"
-dependencies = [
-    "pybind11-global==2.10.3",
-    "pybind11==2.10.3",
-]
-
-[[package]]
 name = "pycodestyle"
 version = "2.10.0"
 requires_python = ">=3.6"
@@ -334,14 +311,13 @@ dependencies = [
 
 [[package]]
 name = "pynvjpeg2k"
-version = "0.1.0"
-requires_python = ">=3.7"
+version = "0.1.dev14+g580220a"
+requires_python = ">=3.8"
 git = "ssh://git@github.com/medcognetics/pynvjpeg2k.git"
-revision = "fbb70ca3a6d42beb77201de1889cfdb4a4848e36"
-summary = "Library for GPU accelerated JPEG2000 decompression"
+revision = "580220a92cd4979b70297bb677cd222578e5790e"
+summary = ""
 dependencies = [
     "numpy",
-    "pybind11[global]",
 ]
 
 [[package]]
@@ -405,10 +381,10 @@ dependencies = [
 
 [[package]]
 name = "registry"
-version = "0.1.1.dev12+gcc59ff8"
+version = "0.1.1.dev14+g6eb5108"
 requires_python = ">=3.7"
 git = "https://github.com/TidalPaladin/callable-registry.git"
-revision = "cc59ff84194b76d9450e3dfb1facb31601730f17"
+revision = "6eb5108eddacd304e1258c650917e89060a29f78"
 summary = ""
 dependencies = [
     "typing-extensions; python_version < \"3.11\"",
@@ -416,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "setuptools"
-version = "67.6.0"
+version = "67.6.1"
 requires_python = ">=3.7"
 summary = "Easily download, build, install, upgrade, and uninstall Python packages"
 
@@ -926,14 +902,6 @@ content_hash = "sha256:48f318b39a5be91a4825bda1ec09896b310efb709bc36bb75a79237f1
     {url = "https://files.pythonhosted.org/packages/9e/01/f38e2ff29715251cf25532b9082a1589ab7e4f571ced434f98d0139336dc/pluggy-1.0.0-py2.py3-none-any.whl", hash = "sha256:74134bbf457f031a36d68416e1509f34bd5ccc019f0bcc952c7b909d06b37bd3"},
     {url = "https://files.pythonhosted.org/packages/a1/16/db2d7de3474b6e37cbb9c008965ee63835bba517e22cdb8c35b5116b5ce1/pluggy-1.0.0.tar.gz", hash = "sha256:4224373bacce55f955a878bf9cfa763c1e360858e330072059e10bad68531159"},
 ]
-"pybind11 2.10.3" = [
-    {url = "https://files.pythonhosted.org/packages/17/4e/9b2f39b5d0ae5f81541e03a98379462871ccfbadfa315d24b3d8854c6a9f/pybind11-2.10.3-py3-none-any.whl", hash = "sha256:123e303f39ad5de97ddfa4f1f473cb85881a0a94ee5714eb3c37e2405371fc12"},
-    {url = "https://files.pythonhosted.org/packages/56/d3/ebc2ad811d192b91d97a45d30b4d5bcb148275db668eada4b6f55781fdc7/pybind11-2.10.3.tar.gz", hash = "sha256:08cfe6d4f73746447cc85a400c8169a91608b8a00c5feecd8ff251a70565d12f"},
-]
-"pybind11-global 2.10.3" = [
-    {url = "https://files.pythonhosted.org/packages/23/6b/942a7e505882d6fb37fc0adb4cb39eb0cfda3ba57b1d4908f4b4e3e95110/pybind11_global-2.10.3-py3-none-any.whl", hash = "sha256:0185118804f11349007989e9fab9d346b2d9997166b8ff90915419c528ba8690"},
-    {url = "https://files.pythonhosted.org/packages/28/18/668ff505929ad33a8c9637183247f7ce38d7dc7dae7ac7ce106de3c3c0b9/pybind11_global-2.10.3.tar.gz", hash = "sha256:9982149e0859e7a8496397b7dcdf083a37b87cbc1cac6e5dbe453eb3f3f22db1"},
-]
 "pycodestyle 2.10.0" = [
     {url = "https://files.pythonhosted.org/packages/06/6b/5ca0d12ef7dcf7d20dfa35287d02297f3e0f9e515da5183654c03a9636ce/pycodestyle-2.10.0.tar.gz", hash = "sha256:347187bdb476329d98f695c213d7295a846d1152ff4fe9bacb8a9590b8ee7053"},
     {url = "https://files.pythonhosted.org/packages/a2/54/001fdc0d69e8d0bb86c3423a6fa6dfada8cc26317c2635ab543e9ac411bd/pycodestyle-2.10.0-py2.py3-none-any.whl", hash = "sha256:8a4eaf0d0495c7395bdab3589ac2db602797d76207242c17d470186815706610"},
@@ -1050,9 +1018,9 @@ content_hash = "sha256:48f318b39a5be91a4825bda1ec09896b310efb709bc36bb75a79237f1
     {url = "https://files.pythonhosted.org/packages/36/7a/87837f39d0296e723bb9b62bbb257d0355c7f6128853c78955f57342a56d/python_dateutil-2.8.2-py2.py3-none-any.whl", hash = "sha256:961d03dc3453ebbc59dbdea9e4e11c5651520a876d0f4db161e8674aae935da9"},
     {url = "https://files.pythonhosted.org/packages/4c/c4/13b4776ea2d76c115c1d1b84579f3764ee6d57204f6be27119f13a61d0a9/python-dateutil-2.8.2.tar.gz", hash = "sha256:0123cacc1627ae19ddf3c27a5de5bd67ee4586fbdd6440d9748f8abb483d3e86"},
 ]
-"setuptools 67.6.0" = [
-    {url = "https://files.pythonhosted.org/packages/25/f3/d68c20919bc774c6cb127f1762f2f2f999d700a58198556e883dd3700e58/setuptools-67.6.0.tar.gz", hash = "sha256:2ee892cd5f29f3373097f5a814697e397cf3ce313616df0af11231e2ad118077"},
-    {url = "https://files.pythonhosted.org/packages/c3/9e/8a7ba2c9984a060daa6c6f9fff4d576b7ace3936239d6b771541eab972ed/setuptools-67.6.0-py3-none-any.whl", hash = "sha256:b78aaa36f6b90a074c1fa651168723acbf45d14cb1196b6f02c0fd07f17623b2"},
+"setuptools 67.6.1" = [
+    {url = "https://files.pythonhosted.org/packages/0b/fc/8781442def77b0aa22f63f266d4dadd486ebc0c5371d6290caf4320da4b7/setuptools-67.6.1-py3-none-any.whl", hash = "sha256:e728ca814a823bf7bf60162daf9db95b93d532948c4c0bea762ce62f60189078"},
+    {url = "https://files.pythonhosted.org/packages/cb/46/22ec35f286a77e6b94adf81b4f0d59f402ed981d4251df0ba7b992299146/setuptools-67.6.1.tar.gz", hash = "sha256:257de92a9d50a60b8e22abfcbb771571fde0dbf3ec234463212027a4eeecbe9a"},
 ]
 "six 1.16.0" = [
     {url = "https://files.pythonhosted.org/packages/71/39/171f1c67cd00715f190ba0b100d606d440a28c93c7714febeca8b79af85e/six-1.16.0.tar.gz", hash = "sha256:1e61c37477a1626458e36f7b1d82aa5c9b094fa4802892072e49de9c60c4c926"},

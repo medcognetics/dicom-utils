@@ -108,3 +108,8 @@ class TestDicomFactory:
             assert dcm.SeriesDescription == "foo"
         else:
             assert Tag.SeriesDescription not in dcm
+
+    def test_skip_pixels(self):
+        factory = FACTORY_REGISTRY.get("ffdm")()
+        dcm = factory(pixels=False)
+        assert not hasattr(dcm, "PixelData")
