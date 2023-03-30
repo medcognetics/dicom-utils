@@ -638,6 +638,10 @@ class DicomImageFileRecord(DicomFileRecord):
     def is_volume(self) -> bool:
         return self.is_valid_image and ((self.NumberOfFrames or 1) > 1)
 
+    @cached_property
+    def is_specimen(self) -> bool:
+        return "specimen" in (self.StudyDescription or "").lower()
+
     @property
     def image_area(self) -> Optional[int]:
         if self.Rows is not None and self.Columns is not None:
@@ -751,6 +755,12 @@ class DicomImageFileRecord(DicomFileRecord):
     @staticmethod
     def make_view_code_sequence(meanings: Iterable[str]) -> Sequence:
         return Sequence([DicomImageFileRecord.make_view_code(meaning) for meaning in meanings])
+
+    def standardized_filename(self, file_id: Optional[str] = None) -> StandardizedFilename:
+        path = super().standardized_filename(file_id)
+        if self.is_specimen:
+            path = path.add_modifier("specimen")
+        return path
 
 
 @RECORD_REGISTRY(name="mammogram", suffixes=[".dcm"])

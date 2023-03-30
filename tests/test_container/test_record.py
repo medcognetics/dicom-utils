@@ -643,6 +643,19 @@ class TestDicomImageFileRecord(TestDicomFileRecord):
         assert isinstance(restored, DicomImageFileRecord)
         assert list(restored.view_modifier_code_meanings) == ["code"]
 
+    @pytest.mark.parametrize(
+        "tag,val,exp",
+        [
+            pytest.param(Tag.StudyDescription, None, False),
+            pytest.param(Tag.StudyDescription, "foo", False),
+            pytest.param(Tag.StudyDescription, "XR Soft tissue specimen", True),
+        ],
+    )
+    def test_is_specimen(self, tag, val, exp, record_factory):
+        rec = record_factory()
+        rec = rec.replace(**{tag.name: val})
+        assert rec.is_specimen == exp
+
 
 class TestMammogramFileRecord(TestDicomFileRecord):
     @pytest.fixture
@@ -804,7 +817,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         assert actual == expected
 
     @pytest.mark.parametrize(
-        "mtype,spot,mag,id,laterality,view_pos,uid,secondary,for_proc,stereo,exp",
+        "mtype,spot,mag,id,laterality,view_pos,uid,secondary,for_proc,stereo,specimen,exp",
         [
             pytest.param(
                 MammogramType.FFDM,
@@ -814,6 +827,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.LEFT,
                 ViewPosition.MLO,
                 "1",
+                False,
                 False,
                 False,
                 False,
@@ -830,6 +844,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 False,
                 False,
                 False,
+                False,
                 "ffdm_rcc_2.dcm",
             ),
             pytest.param(
@@ -840,6 +855,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 Laterality.RIGHT,
                 ViewPosition.XCCL,
                 "1",
+                False,
                 False,
                 False,
                 False,
@@ -856,6 +872,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 False,
                 False,
                 False,
+                False,
                 "ffdm_2.dcm",
             ),
             pytest.param(
@@ -868,6 +885,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 "1",
                 True,
                 True,
+                False,
                 False,
                 "synth_rxccl_secondary_proc_spot_mag_id_1.dcm",
             ),
@@ -882,12 +900,40 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 False,
                 False,
                 True,
+                False,
                 "ffdm_rcc_stereo_1.dcm",
+            ),
+            pytest.param(
+                MammogramType.FFDM,
+                False,
+                False,
+                False,
+                Laterality.RIGHT,
+                ViewPosition.CC,
+                "1",
+                False,
+                False,
+                False,
+                True,
+                "ffdm_rcc_specimen_1.dcm",
             ),
         ],
     )
     def test_standardized_filename(
-        self, mtype, spot, mag, id, laterality, view_pos, uid, secondary, for_proc, stereo, exp, record_factory
+        self,
+        mtype,
+        spot,
+        mag,
+        id,
+        laterality,
+        view_pos,
+        uid,
+        secondary,
+        for_proc,
+        stereo,
+        exp,
+        record_factory,
+        specimen,
     ):
         seq = []
         if spot:
@@ -910,6 +956,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             SOPClassUID=SecondaryCaptureImageStorage if secondary else None,
             PresentationIntentType="FOR PROCESSING" if for_proc else None,
             PerformedProcedureStepDescription="Stereo, CC" if stereo else None,
+            StudyDescription="specimen" if specimen else None,
         )
         actual = record.standardized_filename(uid)
         assert isinstance(actual, StandardizedFilename)
