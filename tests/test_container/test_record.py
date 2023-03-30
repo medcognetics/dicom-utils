@@ -790,6 +790,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             pytest.param("is_tangential", True, False),
             # Implant displaced views are standard
             pytest.param("is_implant_displaced", True, True),
+            pytest.param("is_specimen", True, False),
         ],
     )
     def test_is_standard_mammo_view_modifiers(self, record_factory, attr_name, val, exp):

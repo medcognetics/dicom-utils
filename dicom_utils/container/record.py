@@ -920,6 +920,7 @@ class MammogramFileRecord(DicomImageFileRecord):
             and not self.is_nipple_in_profile
             and not self.is_infra_mammary_fold
             and not self.is_tangential
+            and not self.is_specimen
         )
 
     @property
