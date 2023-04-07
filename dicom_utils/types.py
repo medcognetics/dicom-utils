@@ -339,6 +339,14 @@ class Laterality(EnumMixin):
     BILATERAL = 3
 
     @property
+    def opposite(self) -> "Laterality":
+        if self == Laterality.LEFT:
+            return Laterality.RIGHT
+        elif self == Laterality.RIGHT:
+            return Laterality.LEFT
+        return Laterality.UNKNOWN
+
+    @property
     def is_unilateral(self) -> bool:
         return self in (Laterality.LEFT, Laterality.RIGHT)
 

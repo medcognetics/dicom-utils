@@ -1018,7 +1018,7 @@ class MammogramFileRecord(DicomImageFileRecord):
             return
 
         # Target laterality is opposite of this view
-        target_laterality = Laterality.LEFT if self.laterality == Laterality.RIGHT else Laterality.RIGHT
+        target_laterality = cast(Laterality, self.laterality).opposite
         # Target view is same as this view
         target_view = cast(ViewPosition, self.view_position)
 

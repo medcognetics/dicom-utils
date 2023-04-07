@@ -524,6 +524,19 @@ class TestLaterality:
         x = Laterality.from_dicom(dicom_object)
         assert x == Laterality.UNKNOWN
 
+    @pytest.mark.parametrize(
+        "lat,expected",
+        [
+            (Laterality.RIGHT, Laterality.LEFT),
+            (Laterality.LEFT, Laterality.RIGHT),
+            (Laterality.BILATERAL, Laterality.UNKNOWN),
+            (Laterality.UNKNOWN, Laterality.UNKNOWN),
+            (Laterality.NONE, Laterality.UNKNOWN),
+        ],
+    )
+    def test_opposite(self, lat, expected):
+        assert lat.opposite == expected
+
 
 class TestViewPosition:
     @pytest.mark.parametrize(
