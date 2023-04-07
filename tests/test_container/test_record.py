@@ -1663,3 +1663,78 @@ class TestMammogramFileRecord(TestDicomFileRecord):
         restored = FileRecord.from_dict(rec_dict)
         assert isinstance(restored, MammogramFileRecord)
         assert restored.is_spot_compression
+
+    @pytest.mark.parametrize(
+        "src,others,exp",
+        [
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                    MammogramFileRecord(Path("foo3.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("foo4.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.CC),
+                ],
+                MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.MLO),
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                    MammogramFileRecord(Path("foo3.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("foo4.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.CC),
+                ],
+                MammogramFileRecord(Path("foo4.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.CC),
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                None,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.CC),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.XCCL),
+                ],
+                None,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.CC),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.XCCL),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.UNKNOWN, view_position=ViewPosition.CC),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.XCCL),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                None,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.BILATERAL, view_position=ViewPosition.CC),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.XCCL),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                None,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.UNKNOWN),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.XCCL),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                None,
+            ),
+        ],
+    )
+    def test_get_opposing_laterality(self, src, others, exp):
+        assert src.get_opposing_laterality(others) == exp

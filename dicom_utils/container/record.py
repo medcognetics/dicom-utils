@@ -1002,6 +1002,38 @@ class MammogramFileRecord(DicomImageFileRecord):
             result[mammo_view] = selection
         return result
 
+    def get_opposing_laterality(self, col: Iterable["MammogramFileRecord"]) -> Optional["MammogramFileRecord"]:
+        r"""Selects a complementary view of the opposing laterality from a collection of :class:`MammogramFileRecord`s.
+        For example, the complementary view of a left MLO is a right MLO.
+
+        Args:
+            col: Collection to select from
+
+        Returns:
+            The selected view (or `None` if a view could not be found).
+        """
+        valid_laterality = self.laterality in {Laterality.LEFT, Laterality.RIGHT}
+        valid_view = not (self.view_position is None or self.view_position.is_unknown)
+        if not (valid_laterality and valid_view):
+            return
+
+        # Target laterality is opposite of this view
+        target_laterality = cast(Laterality, self.laterality).opposite
+        # Target view is same as this view
+        target_view = cast(ViewPosition, self.view_position)
+
+        candidates = self.get_preferred_views(
+            {
+                rec
+                for rec in col
+                if isinstance(rec, MammogramFileRecord)
+                and rec.laterality == target_laterality
+                and rec.view_position == target_view
+            }
+        )
+        result = candidates.get(MammogramView(target_laterality, target_view), None)
+        return cast(Optional[MammogramFileRecord], result)
+
     def standardized_filename(self, file_id: Optional[str] = None) -> StandardizedFilename:
         r"""Returns a standardized filename for the DICOM represented by this :class:`DicomFileRecord`.
         File name will be of the form ``{file_type}_{modifiers}_{view}_{file_id}.dcm``.
