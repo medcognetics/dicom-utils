@@ -1710,6 +1710,30 @@ class TestMammogramFileRecord(TestDicomFileRecord):
                 ],
                 MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
             ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.UNKNOWN, view_position=ViewPosition.CC),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.XCCL),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                None,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.BILATERAL, view_position=ViewPosition.CC),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.XCCL),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                None,
+            ),
+            (
+                MammogramFileRecord(Path("foo.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.UNKNOWN),
+                [
+                    MammogramFileRecord(Path("foo1.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.XCCL),
+                    MammogramFileRecord(Path("foo2.dcm"), laterality=Laterality.RIGHT, view_position=ViewPosition.CC),
+                ],
+                None,
+            ),
         ],
     )
     def test_get_opposing_laterality(self, src, others, exp):
