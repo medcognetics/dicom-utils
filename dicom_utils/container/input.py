@@ -65,7 +65,11 @@ class PatientIDNamer(CaseRenamer[Optional[str]]):
     @classmethod
     def get_patient_id(cls, collection: RecordCollection) -> Optional[str]:
         pids = {pid for rec in collection if isinstance(rec, SupportsPatientID) and (pid := rec.PatientID) is not None}
-        return next(iter(pids)) if len(pids) == 1 else None
+        pid = next(iter(pids)) if len(pids) == 1 else None
+        # Replace slashes with underscores because they are not allowed in filenames
+        if pid is not None:
+            pid = pid.replace("/", "_")
+        return pid
 
 
 @NAME_REGISTRY(name="study-date")
