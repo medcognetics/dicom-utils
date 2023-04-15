@@ -4,6 +4,7 @@
 import numpy as np
 import pytest
 
+import dicom_utils
 from dicom_utils import KeepVolume, ReduceVolume, SliceAtLocation, UniformSample
 
 
@@ -162,3 +163,14 @@ class TestReduceVolume:
         assert type(result) == type(dcm)
         assert result.NumberOfFrames == N - 4
         assert (result.pixel_array == expected).all()
+
+    @pytest.mark.parametrize("use_nvjpeg", [False, None])
+    def test_decompress(self, mocker, use_nvjpeg, dicom_object_3d, transfer_syntax):
+        spy = mocker.spy(dicom_utils.dicom, "decompress")
+        N = 8
+        dcm = dicom_object_3d(N, syntax=transfer_syntax)
+        sampler = ReduceVolume()
+        sampler(dcm, use_nvjpeg=use_nvjpeg)
+        spy.assert_called()
+        for call in spy.mock_calls:
+            assert call.kwargs["use_nvjpeg"] == use_nvjpeg

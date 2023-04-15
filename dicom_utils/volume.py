@@ -298,6 +298,7 @@ class ReduceVolume(VolumeHandler):
         assert len(chunks) == self.output_frames
 
         dcm = self.update_pixel_data(dcm, chunks, preserve_compression=False)
+        assert not dcm.file_meta.TransferSyntaxUID.is_compressed, "DICOM should be decompressed after ReduceVolume"
         return dcm
 
     def handle_array(self, x: T) -> T:
@@ -305,7 +306,7 @@ class ReduceVolume(VolumeHandler):
 
     def iterate_chunks(
         self,
-        dcm: U,
+        dcm: Dataset,
         reduction: Optional[Callable[..., np.ndarray]],
         use_nvjpeg: Optional[bool] = None,
         **kwargs,
