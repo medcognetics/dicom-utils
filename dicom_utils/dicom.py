@@ -4,7 +4,7 @@ import os
 import sys
 from os import PathLike
 from pathlib import Path
-from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union
+from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union, cast
 from warnings import warn
 
 import numpy as np
@@ -14,6 +14,7 @@ from pydicom import DataElement, FileDataset
 from pydicom.encaps import encapsulate
 from pydicom.pixel_data_handlers.util import apply_voi_lut
 from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian, JPEG2000TransferSyntaxes
+from registry import bind_relevant_kwargs
 
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
@@ -280,15 +281,19 @@ def read_dicom_image(
 
     # apply volume handling for 3D data
     if len(dims) == 4:
+        volume_handler = cast(
+            VolumeHandler,
+            bind_relevant_kwargs(
+                cast(Callable, volume_handler),
+                use_nvjpeg=use_nvjpeg,
+                batch_size=nvjpeg_batch_size,
+            ),
+        )
         dcm = volume_handler(dcm)
         D: int = int(dcm.get("NumberOfFrames", 1))
         dims = (C, D, *dims[-2:]) if D > 1 else (C, *dims[-2:])
 
-    # decompress with GPU if requested
-    # TODO If the volume handler is ReduceVolume, we should be decompressing
-    # before the handler is applied instead of after.
-    # But for every other handler we should decompress after.
-    # We need to figure out the best way to deal with this.
+    # Decompress with GPU if requested. ReduceVolume will decompress within the handler.
     if use_nvjpeg is None or use_nvjpeg:
         dcm = decompress(dcm, use_nvjpeg=use_nvjpeg, batch_size=nvjpeg_batch_size)
 

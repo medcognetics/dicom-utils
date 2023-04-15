@@ -252,7 +252,9 @@ class UniformSample(VolumeHandler):
 
 
 class ReduceVolume(VolumeHandler):
-    r"""Reduces the input volume to a subset of frames by applying a reduction function.
+    r"""Reduces the input volume to a subset of frames by applying a reduction function. This volume handler
+    will need to decompress frames in order to apply the reduction function. To support this, NVJPEG parameters
+    are accepted by :func:`__call__` and passed to :func:`dicom_utils.dicom.decompress`.
 
     Args:
         reduction:
@@ -280,11 +282,17 @@ class ReduceVolume(VolumeHandler):
         self.output_frames = output_frames
         self.skip_edge_frames = skip_edge_frames
 
+    def __call__(self, x: Union[T, U], use_nvjpeg: Optional[bool] = None, **kwargs) -> Union[T, U]:
+        if isinstance(x, Dataset):
+            return self.handle_dicom(x, use_nvjpeg=use_nvjpeg, **kwargs)
+        else:
+            return self.handle_array(x)
+
     def get_indices(self, total_frames: Optional[int]) -> Tuple[int, int, int]:
         raise NotImplementedError
 
-    def handle_dicom(self, dcm: U) -> U:
-        chunks = [chunk.tobytes() for chunk in self.iterate_chunks(dcm, reduction=self.reduction)]
+    def handle_dicom(self, dcm: U, use_nvjpeg: Optional[bool] = None, **kwargs) -> U:
+        chunks = [chunk.tobytes() for chunk in self.iterate_chunks(dcm, self.reduction, use_nvjpeg, **kwargs)]
         if not chunks:
             raise RuntimeError("No frames remain in the sliced DICOM")
         assert len(chunks) == self.output_frames
@@ -295,10 +303,19 @@ class ReduceVolume(VolumeHandler):
     def handle_array(self, x: T) -> T:
         raise NotImplementedError
 
-    def iterate_chunks(self, dcm: U, reduction: Optional[Callable[..., np.ndarray]]) -> Iterator[np.ndarray]:
+    def iterate_chunks(
+        self,
+        dcm: U,
+        reduction: Optional[Callable[..., np.ndarray]],
+        use_nvjpeg: Optional[bool] = None,
+        **kwargs,
+    ) -> Iterator[np.ndarray]:
         r"""Iterates through the DICOM volume, yielding chunks based on the reduction parameters.
         If a reduction is given, each chunk will be reduced before being yielded.
         """
+        # TODO: This is a bit of a hack to avoid circular imports. Fixing it will require a larger refactor.
+        from .dicom import decompress
+
         start = self.skip_edge_frames
         stop = dcm.NumberOfFrames - self.skip_edge_frames
         chunk_size = (stop - start) // self.output_frames
@@ -309,7 +326,9 @@ class ReduceVolume(VolumeHandler):
             is_last_chunk = yield_count == self.output_frames - 1
             chunk_end = min(start + chunk_size, stop) if is_last_chunk else stop
 
+            # Slice the chunk and decompress if necessary
             sliced = self.slice_dicom(dcm, start, chunk_end, stride=1)
+            sliced = decompress(sliced, use_nvjpeg=use_nvjpeg, **kwargs)
 
             # If no reduction is given, just yield the chunk
             if reduction is None or chunk_size == 1:
