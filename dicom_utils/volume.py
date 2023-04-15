@@ -252,29 +252,79 @@ class UniformSample(VolumeHandler):
 
 
 class ReduceVolume(VolumeHandler):
-    r"""Base class for classes that manipulate 3D Volumes"""
+    r"""Reduces the input volume to a subset of frames by applying a reduction function.
+
+    Args:
+        reduction:
+            A function that takes two frames and an ``out`` argument and returns the reduced frame.
+            The ``out`` argument is used to avoid allocating new memory for the reduced frame.
+
+        output_frames:
+            The number of frames to output. Defaults to ``1``, meaning the entire volume is reduced to a single frame.
+
+        skip_edge_frames:
+            The number of frames to skip at the beginning and end of the volume. This is useful for removing
+            artifacts from the beginning and end of the volume.
+
+    Raises:
+        RuntimeError: If no frames remain in the sliced DICOM
+    """
 
     def __init__(
         self,
-        reduction: Callable[..., np.ndarray] = np.maximum,
+        reduction: Callable[..., np.ndarray] = cast(Any, np.maximum),
+        output_frames: int = 1,
+        skip_edge_frames: int = 0,
     ):
         self.reduction = reduction
+        self.output_frames = output_frames
+        self.skip_edge_frames = skip_edge_frames
 
     def get_indices(self, total_frames: Optional[int]) -> Tuple[int, int, int]:
         raise NotImplementedError
 
     def handle_dicom(self, dcm: U) -> U:
-        # slice dicom at index 0 and read the associated numpy array
-        sliced = self.slice_dicom(dcm, 0, 1, 1)
-        arr = sliced.pixel_array
+        chunks = [chunk.tobytes() for chunk in self.iterate_chunks(dcm, reduction=self.reduction)]
+        if not chunks:
+            raise RuntimeError("No frames remain in the sliced DICOM")
+        assert len(chunks) == self.output_frames
 
-        # iterate through remaining slices, applying reduction in-place
-        for i in range(1, dcm.NumberOfFrames):
-            other = self.slice_dicom(dcm, i, i + 1, 1).pixel_array
-            arr = self.reduction(arr, other, out=arr)
-        dcm = self.update_pixel_data(sliced, [arr.tobytes()], preserve_compression=False)
-        dcm.pixel_array
+        dcm = self.update_pixel_data(dcm, chunks, preserve_compression=False)
         return dcm
 
     def handle_array(self, x: T) -> T:
         raise NotImplementedError
+
+    def iterate_chunks(self, dcm: U, reduction: Optional[Callable[..., np.ndarray]]) -> Iterator[np.ndarray]:
+        r"""Iterates through the DICOM volume, yielding chunks based on the reduction parameters.
+        If a reduction is given, each chunk will be reduced before being yielded.
+        """
+        start = self.skip_edge_frames
+        stop = dcm.NumberOfFrames - self.skip_edge_frames
+        chunk_size = (stop - start) // self.output_frames
+
+        yield_count = 0
+        while start < stop and yield_count < self.output_frames:
+            # If this is the last chunk, make sure it includes all remaining frames
+            is_last_chunk = yield_count == self.output_frames - 1
+            chunk_end = min(start + chunk_size, stop) if is_last_chunk else stop
+
+            sliced = self.slice_dicom(dcm, start, chunk_end, stride=1)
+
+            # If no reduction is given, just yield the chunk
+            if reduction is None or chunk_size == 1:
+                yield sliced.pixel_array
+
+            # Iterate through the chunk, applying the reduction in-place.
+            # We never want to store more of the volume than is needed to conserve memory.
+            else:
+                arr = self.slice_dicom(sliced, 0, 1, stride=1).pixel_array
+                for i in range(1, sliced.NumberOfFrames):
+                    other = self.slice_dicom(sliced, i, i + 1, 1).pixel_array
+                    arr = reduction(arr, other, out=arr)
+                yield arr
+
+            yield_count += 1
+            start += chunk_size
+
+        assert yield_count <= self.output_frames
