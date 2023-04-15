@@ -11,7 +11,7 @@ from numpy.random import default_rng
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 import dicom_utils
-from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
+from dicom_utils import KeepVolume, ReduceVolume, SliceAtLocation, UniformSample, read_dicom_image
 from dicom_utils.dicom import (
     ALGORITHM_PRESENTATION_TYPE,
     data_handlers,
@@ -87,6 +87,7 @@ class TestReadDicomImage:
             KeepVolume(),
             SliceAtLocation(4),
             UniformSample(4, method="count"),
+            ReduceVolume(output_frames=4),
         ],
     )
     def test_volume_handling(self, dicom_object_3d, handler, mocker, transfer_syntax):
