@@ -325,7 +325,7 @@ class ReduceVolume(VolumeHandler):
         while start < stop and yield_count < self.output_frames:
             # If this is the last chunk, make sure it includes all remaining frames
             is_last_chunk = yield_count == self.output_frames - 1
-            chunk_end = min(start + chunk_size, stop) if is_last_chunk else stop
+            chunk_end = min(start + chunk_size, stop) if not is_last_chunk else stop
 
             # Slice the chunk and decompress if necessary
             sliced = self.slice_dicom(dcm, start, chunk_end, stride=1)
