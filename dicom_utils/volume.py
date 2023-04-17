@@ -319,7 +319,19 @@ class ReduceVolume(VolumeHandler):
 
         start = self.skip_edge_frames
         stop = dcm.NumberOfFrames - self.skip_edge_frames
-        chunk_size = (stop - start) // self.output_frames
+
+        # If the chunk size is less than 1, we need to adjust the start and stop indices.
+        # We do this by widening the range between start and stop until we have a chunk size of 1
+        # or until we reach the end of the volume. Since we are widening symetrically, we clip
+        # the start index to a minimum of 0 so every possible frame is tried.
+        while (chunk_size := (stop - start) // self.output_frames) < 1:
+            start = max(start - 1, 0)
+            stop += 1
+            if stop > dcm.NumberOfFrames:
+                raise RuntimeError("Could not find a valid chunk size")
+        if chunk_size < 1:
+            # TODO: consider returning the original volume + duplicating frames to fill the output
+            raise RuntimeError("Could not find a valid chunk size")
 
         yield_count = 0
         while start < stop and yield_count < self.output_frames:
@@ -328,6 +340,7 @@ class ReduceVolume(VolumeHandler):
             chunk_end = min(start + chunk_size, stop) if not is_last_chunk else stop
 
             # Slice the chunk and decompress if necessary
+            assert start < chunk_end <= stop, f"Invalid chunk start/end: {start}, {chunk_end}, {stop}"
             sliced = self.slice_dicom(dcm, start, chunk_end, stride=1)
             sliced = decompress(sliced, use_nvjpeg=use_nvjpeg, **kwargs)
 
