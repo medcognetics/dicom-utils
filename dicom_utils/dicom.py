@@ -281,6 +281,8 @@ def read_dicom_image(
 
     # apply volume handling for 3D data
     if len(dims) == 4:
+        if not isinstance(volume_handler, VolumeHandler):
+            raise TypeError(f"volume_handler must be a VolumeHandler, not {type(volume_handler)}")
         volume_handler = cast(
             VolumeHandler,
             bind_relevant_kwargs(
