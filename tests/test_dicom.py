@@ -10,6 +10,7 @@ import pytest
 from numpy.random import default_rng
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
+import dicom_utils
 from dicom_utils import KeepVolume, ReduceVolume, SliceAtLocation, UniformSample, VolumeHandler, read_dicom_image
 from dicom_utils.dicom import (
     ALGORITHM_PRESENTATION_TYPE,
@@ -103,6 +104,20 @@ class TestReadDicomImage:
         spy.assert_called_once()
         assert spy.mock_calls[0].args[0] == dcm, "handler should be called with DICOM object"
         assert array1.ndim < 4 or array1.shape[1] != 1, "3D dim should be squeezed when D=1"
+
+    @pytest.mark.parametrize("has_voi_lut", [True, False])
+    def test_convert_3d_voi_lut(self, mocker, dicom_object_3d, has_voi_lut):
+        dcm = dicom_object_3d(num_frames=8)
+        if has_voi_lut:
+            dcm.WindowCenter = 512
+            dcm.WindowWidth = 512
+
+        spy = mocker.spy(dicom_utils.dicom, "convert_frame_voi_lut")
+        read_dicom_image(dcm, strict_interp=True)
+        if has_voi_lut:
+            spy.assert_not_called()
+        else:
+            spy.assert_called_once()
 
     def test_decoding_speed(self, dicom_file_j2k: str) -> None:
         # Make sure that our set of pixel data handlers is actually faster than the default set
