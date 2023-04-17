@@ -125,8 +125,10 @@ class TestReduceVolume:
         N = 8
         dcm = dicom_object_3d(N)
         sampler = ReduceVolume(output_frames=output_frames)
+        expected = dcm.pixel_array.reshape(output_frames, N // output_frames, *dcm.pixel_array.shape[1:]).max(axis=1)
         result = sampler(dcm)
         assert type(result) == type(dcm)
+        assert (result.pixel_array == expected).all()
         assert result.NumberOfFrames == output_frames
 
     def test_multi_frame_noop(self, dicom_object_3d):
