@@ -145,7 +145,10 @@ class TestReduceVolume:
         [
             (0, 1),
             (2, 3),
-            pytest.param(4, 3, marks=pytest.mark.xfail(raises=RuntimeError, strict=True)),
+            # In this case we widen the range of the output frames to include the edge frames
+            (4, 3),
+            # In this case we can't satisfy 9 output frames from 8 total frames
+            pytest.param(4, 9, marks=pytest.mark.xfail(raises=RuntimeError, strict=True)),
         ],
     )
     def test_skip_edge_frames(self, dicom_object_3d, skip, output_frames):
