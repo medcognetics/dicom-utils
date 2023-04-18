@@ -3,6 +3,7 @@
 
 
 import time
+from multiprocessing import Lock
 
 import numpy as np
 import pydicom
@@ -182,6 +183,9 @@ class TestReadDicomImage:
     )
     def test_nvjpeg_autoselect(self, request, mocker, dicom_fixture, use_nvjpeg, available, exp):
         dicom_file = request.getfixturevalue(dicom_fixture)
+        lock = Lock()
+        acquire = mocker.spy(lock, "acquire")
+        release = mocker.spy(lock, "release")
 
         # patch methods
         a = mocker.patch("dicom_utils.dicom.nvjpeg2k_is_available", return_value=available)
@@ -196,8 +200,12 @@ class TestReadDicomImage:
 
         # read and check
         with pydicom.dcmread(dicom_file) as dcm:
-            read_dicom_image(dcm, use_nvjpeg=use_nvjpeg, nvjpeg_batch_size=1)
+            read_dicom_image(dcm, use_nvjpeg=use_nvjpeg, nvjpeg_batch_size=1, lock=lock)
         assert m.called == exp
+
+        if exp:
+            acquire.assert_called_once()
+            release.assert_called_once()
 
     @pytest.mark.ci_skip  # CircleCI will not have a GPU
     @pytest.mark.usefixtures("pynvjpeg")
@@ -210,7 +218,7 @@ class TestReadDicomImage:
             "dicom_file_j2k_int16",
         ],
     )
-    def test_nvjpeg(self, request, dicom_fixture):
+    def test_nvjpeg(self, mocker, request, dicom_fixture):
         dicom_file_j2k = request.getfixturevalue(dicom_fixture)
 
         ds = pydicom.dcmread(dicom_file_j2k)

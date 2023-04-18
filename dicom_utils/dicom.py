@@ -414,12 +414,14 @@ def decompress(
     if use_nvjpeg:
         batch_size = batch_size or int(os.environ.get("NVJPEG2K_BATCH_SIZE", 1))
         try:
-            with lock:
-                pixels = nvjpeg_decompress(dcm, batch_size, verbose)
+            lock.acquire()
+            pixels = nvjpeg_decompress(dcm, batch_size, verbose)
         except Exception as e:
             # fall back to CPU
             logger.warning(f"Failed to decompress with nvjpeg: {e}")
             pixels = dcm.pixel_array
+        finally:
+            lock.release()
     else:
         pixels = dcm.pixel_array
     assert isinstance(dcm, FileDataset)
