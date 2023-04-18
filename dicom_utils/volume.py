@@ -333,8 +333,7 @@ class ReduceVolume(VolumeHandler):
             # TODO: consider returning the original volume + duplicating frames to fill the output
             raise RuntimeError("Could not find a valid chunk size")
 
-        yield_count = 0
-        while start < stop and yield_count < self.output_frames:
+        for yield_count in range(self.output_frames):
             # If this is the last chunk, make sure it includes all remaining frames
             is_last_chunk = yield_count == self.output_frames - 1
             chunk_end = min(start + chunk_size, stop) if not is_last_chunk else stop
@@ -357,7 +356,4 @@ class ReduceVolume(VolumeHandler):
                     arr = reduction(arr, other, out=arr)
                 yield arr
 
-            yield_count += 1
             start += chunk_size
-
-        assert yield_count <= self.output_frames
