@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+from multiprocessing import Lock
+from multiprocessing.synchronize import Lock as LockType
 from os import PathLike
 from pathlib import Path
 from typing import Callable, Dict, Final, Iterator, List, Optional, Tuple, Union, cast
@@ -214,6 +216,7 @@ def read_dicom_image(
     as_uint8: bool = False,
     use_nvjpeg: Optional[bool] = None,
     nvjpeg_batch_size: Optional[int] = None,
+    lock: LockType = Lock(),
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -302,7 +305,7 @@ def read_dicom_image(
 
     # Decompress with GPU if requested. ReduceVolume will decompress within the handler.
     if use_nvjpeg is None or use_nvjpeg:
-        dcm = decompress(dcm, use_nvjpeg=use_nvjpeg, batch_size=nvjpeg_batch_size)
+        dcm = decompress(dcm, use_nvjpeg=use_nvjpeg, batch_size=nvjpeg_batch_size, lock=lock)
 
     # DICOM is channels last, so permute dims
     channels_last_dims = *dims[1:], dims[0]
@@ -381,6 +384,7 @@ def decompress(
     use_nvjpeg: Optional[bool] = None,
     batch_size: Optional[int] = None,
     verbose: bool = False,
+    lock: LockType = Lock(),
 ) -> Dicom:
     r"""Decompress pixel data of a DICOM object
 
@@ -410,7 +414,8 @@ def decompress(
     if use_nvjpeg:
         batch_size = batch_size or int(os.environ.get("NVJPEG2K_BATCH_SIZE", 1))
         try:
-            pixels = nvjpeg_decompress(dcm, batch_size, verbose)
+            with lock:
+                pixels = nvjpeg_decompress(dcm, batch_size, verbose)
         except Exception as e:
             # fall back to CPU
             logger.warning(f"Failed to decompress with nvjpeg: {e}")
