@@ -284,6 +284,11 @@ def read_dicom_image(
         D: int = int(dcm.get("NumberOfFrames", 1))
         dims = (C, D, *dims[-2:]) if D > 1 else (C, *dims[-2:])
 
+        # Some 3D dicoms have window information in a different location.
+        # If no window information is found in the standard location, run a function to copy it from the other location.
+        if not hasattr(dcm, "WindowCenter") or not hasattr(dcm, "WindowWidth"):
+            dcm = convert_frame_voi_lut(dcm)
+
     # decompress with GPU if requested
     # TODO If the volume handler is ReduceVolume, we should be decompressing
     # before the handler is applied instead of after.

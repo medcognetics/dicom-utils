@@ -138,4 +138,4 @@ coverage.xml
 dicom_utils/version.py
 tmp
 **/*.orig
-.pdm.toml
+.pdm-python
