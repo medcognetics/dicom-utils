@@ -336,15 +336,15 @@ class ReduceVolume(VolumeHandler):
         for yield_count in range(self.output_frames):
             # If this is the last chunk, make sure it includes all remaining frames
             is_last_chunk = yield_count == self.output_frames - 1
-            chunk_end = min(start + chunk_size, stop) if not is_last_chunk else stop
+            chunk_end = stop if is_last_chunk else start + chunk_size
 
-            # Slice the chunk and decompress if necessary
+            # Slice the chunk
             assert start < chunk_end <= stop, f"Invalid chunk start/end: {start}, {chunk_end}, {stop}"
             sliced = self.slice_dicom(dcm, start, chunk_end, stride=1)
-            sliced = decompress(sliced, use_nvjpeg=use_nvjpeg, **kwargs)
 
-            # If no reduction is given, just yield the chunk
+            # If no reduction is given, just yield the decompressed chunk
             if reduction is None or chunk_size == 1:
+                sliced = decompress(sliced, use_nvjpeg=use_nvjpeg, **kwargs)
                 yield sliced.pixel_array
 
             # Iterate through the chunk, applying the reduction in-place.
@@ -352,8 +352,12 @@ class ReduceVolume(VolumeHandler):
             else:
                 arr = self.slice_dicom(sliced, 0, 1, stride=1).pixel_array
                 for i in range(1, sliced.NumberOfFrames):
-                    other = self.slice_dicom(sliced, i, i + 1, 1).pixel_array
-                    arr = reduction(arr, other, out=arr)
+                    # TODO: it is less computationally efficient to decompress each frame individually,
+                    # but it is more memory efficient. Memory efficiency is more important given the limitations
+                    # of the deployment environment. Consider a better solution.
+                    other = self.slice_dicom(sliced, i, i + 1, 1)
+                    other = decompress(other, use_nvjpeg=use_nvjpeg, **kwargs)
+                    arr = reduction(arr, other.pixel_array, out=arr)
                 yield arr
 
             start += chunk_size
