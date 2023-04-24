@@ -4,6 +4,7 @@
 import numpy as np
 import pytest
 
+import dicom_utils
 from dicom_utils import KeepVolume, ReduceVolume, SliceAtLocation, UniformSample
 
 
@@ -113,8 +114,68 @@ class TestReduceVolume:
         N = 8
         dcm = dicom_object_3d(N, syntax=transfer_syntax)
         sampler = ReduceVolume()
-        result = sampler(dcm)
         expected = np.max(dcm.pixel_array, axis=0)
+        result = sampler(dcm)
         assert type(result) == type(dcm)
         assert result.NumberOfFrames == 1
         assert (result.pixel_array == expected).all()
+
+    @pytest.mark.parametrize("output_frames", [1, 2, 4, 8])
+    def test_multi_frame(self, dicom_object_3d, output_frames):
+        N = 8
+        dcm = dicom_object_3d(N)
+        sampler = ReduceVolume(output_frames=output_frames)
+        expected = dcm.pixel_array.reshape(output_frames, N // output_frames, *dcm.pixel_array.shape[1:]).max(axis=1)
+        result = sampler(dcm)
+        assert type(result) == type(dcm)
+        assert (result.pixel_array == expected).all()
+        assert result.NumberOfFrames == output_frames
+
+    def test_multi_frame_noop(self, dicom_object_3d):
+        N = 8
+        dcm = dicom_object_3d(N)
+        sampler = ReduceVolume(output_frames=N)
+        result = sampler(dcm)
+        assert type(result) == type(dcm)
+        assert result.NumberOfFrames == N
+        assert (result.pixel_array == dcm.pixel_array).all()
+
+    @pytest.mark.parametrize(
+        "skip,output_frames",
+        [
+            (0, 1),
+            (2, 3),
+            # In this case we widen the range of the output frames to include the edge frames
+            (4, 3),
+            # In this case we can't satisfy 9 output frames from 8 total frames
+            pytest.param(4, 9, marks=pytest.mark.xfail(raises=RuntimeError, strict=True)),
+        ],
+    )
+    def test_skip_edge_frames(self, dicom_object_3d, skip, output_frames):
+        N = 8
+        dcm = dicom_object_3d(N)
+        sampler = ReduceVolume(output_frames=output_frames, skip_edge_frames=skip)
+        result = sampler(dcm)
+        assert type(result) == type(dcm)
+        assert result.NumberOfFrames == output_frames
+
+    def test_skip_edge_frames_noop_reduction(self, dicom_object_3d):
+        N = 8
+        dcm = dicom_object_3d(N)
+        sampler = ReduceVolume(output_frames=N - 4, skip_edge_frames=2)
+        expected = dcm.pixel_array[2:-2]
+        result = sampler(dcm)
+        assert type(result) == type(dcm)
+        assert result.NumberOfFrames == N - 4
+        assert (result.pixel_array == expected).all()
+
+    @pytest.mark.parametrize("use_nvjpeg", [False, None])
+    def test_decompress(self, mocker, use_nvjpeg, dicom_object_3d, transfer_syntax):
+        spy = mocker.spy(dicom_utils.dicom, "decompress")
+        N = 8
+        dcm = dicom_object_3d(N, syntax=transfer_syntax)
+        sampler = ReduceVolume()
+        sampler(dcm, use_nvjpeg=use_nvjpeg)
+        spy.assert_called()
+        for call in spy.mock_calls:
+            assert call.kwargs["use_nvjpeg"] == use_nvjpeg

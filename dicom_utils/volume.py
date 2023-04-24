@@ -252,29 +252,112 @@ class UniformSample(VolumeHandler):
 
 
 class ReduceVolume(VolumeHandler):
-    r"""Base class for classes that manipulate 3D Volumes"""
+    r"""Reduces the input volume to a subset of frames by applying a reduction function. This volume handler
+    will need to decompress frames in order to apply the reduction function. To support this, NVJPEG parameters
+    are accepted by :func:`__call__` and passed to :func:`dicom_utils.dicom.decompress`.
+
+    Args:
+        reduction:
+            A function that takes two frames and an ``out`` argument and returns the reduced frame.
+            The ``out`` argument is used to avoid allocating new memory for the reduced frame.
+
+        output_frames:
+            The number of frames to output. Defaults to ``1``, meaning the entire volume is reduced to a single frame.
+
+        skip_edge_frames:
+            The number of frames to skip at the beginning and end of the volume. This is useful for removing
+            artifacts from the beginning and end of the volume.
+
+    Raises:
+        RuntimeError: If no frames remain in the sliced DICOM
+    """
 
     def __init__(
         self,
-        reduction: Callable[..., np.ndarray] = np.maximum,
+        reduction: Callable[..., np.ndarray] = cast(Any, np.maximum),
+        output_frames: int = 1,
+        skip_edge_frames: int = 0,
     ):
         self.reduction = reduction
+        self.output_frames = output_frames
+        self.skip_edge_frames = skip_edge_frames
+
+    def __call__(self, x: Union[T, U], use_nvjpeg: Optional[bool] = None, **kwargs) -> Union[T, U]:
+        if isinstance(x, Dataset):
+            return self.handle_dicom(x, use_nvjpeg=use_nvjpeg, **kwargs)
+        else:
+            return self.handle_array(x)
 
     def get_indices(self, total_frames: Optional[int]) -> Tuple[int, int, int]:
         raise NotImplementedError
 
-    def handle_dicom(self, dcm: U) -> U:
-        # slice dicom at index 0 and read the associated numpy array
-        sliced = self.slice_dicom(dcm, 0, 1, 1)
-        arr = sliced.pixel_array
+    def handle_dicom(self, dcm: U, use_nvjpeg: Optional[bool] = None, **kwargs) -> U:
+        chunks = [chunk.tobytes() for chunk in self.iterate_chunks(dcm, self.reduction, use_nvjpeg, **kwargs)]
+        if not chunks:
+            raise RuntimeError("No frames remain in the sliced DICOM")
+        assert len(chunks) == self.output_frames
 
-        # iterate through remaining slices, applying reduction in-place
-        for i in range(1, dcm.NumberOfFrames):
-            other = self.slice_dicom(dcm, i, i + 1, 1).pixel_array
-            arr = self.reduction(arr, other, out=arr)
-        dcm = self.update_pixel_data(sliced, [arr.tobytes()], preserve_compression=False)
-        dcm.pixel_array
+        dcm = self.update_pixel_data(dcm, chunks, preserve_compression=False)
+        assert not dcm.file_meta.TransferSyntaxUID.is_compressed, "DICOM should be decompressed after ReduceVolume"
         return dcm
 
     def handle_array(self, x: T) -> T:
         raise NotImplementedError
+
+    def iterate_chunks(
+        self,
+        dcm: Dataset,
+        reduction: Optional[Callable[..., np.ndarray]],
+        use_nvjpeg: Optional[bool] = None,
+        **kwargs,
+    ) -> Iterator[np.ndarray]:
+        r"""Iterates through the DICOM volume, yielding chunks based on the reduction parameters.
+        If a reduction is given, each chunk will be reduced before being yielded.
+        """
+        # TODO: This is a bit of a hack to avoid circular imports. Fixing it will require a larger refactor.
+        from .dicom import decompress
+
+        start = self.skip_edge_frames
+        stop = dcm.NumberOfFrames - self.skip_edge_frames
+
+        # If the chunk size is less than 1, we need to adjust the start and stop indices.
+        # We do this by widening the range between start and stop until we have a chunk size of 1
+        # or until we reach the end of the volume. Since we are widening symetrically, we clip
+        # the start index to a minimum of 0 so every possible frame is tried.
+        while (chunk_size := (stop - start) // self.output_frames) < 1:
+            start = max(start - 1, 0)
+            stop += 1
+            if stop > dcm.NumberOfFrames:
+                raise RuntimeError("Could not find a valid chunk size")
+        if chunk_size < 1:
+            # TODO: consider returning the original volume + duplicating frames to fill the output
+            raise RuntimeError("Could not find a valid chunk size")
+
+        for yield_count in range(self.output_frames):
+            # If this is the last chunk, make sure it includes all remaining frames
+            is_last_chunk = yield_count == self.output_frames - 1
+            chunk_end = stop if is_last_chunk else start + chunk_size
+
+            # Slice the chunk
+            assert start < chunk_end <= stop, f"Invalid chunk start/end: {start}, {chunk_end}, {stop}"
+            sliced = self.slice_dicom(dcm, start, chunk_end, stride=1)
+
+            # If no reduction is given, just yield the decompressed chunk
+            if reduction is None or chunk_size == 1:
+                sliced = decompress(sliced, use_nvjpeg=use_nvjpeg, **kwargs)
+                yield sliced.pixel_array
+
+            # Iterate through the chunk, applying the reduction in-place.
+            # We never want to store more of the volume than is needed to conserve memory.
+            else:
+                arr = self.slice_dicom(sliced, 0, 1, stride=1).pixel_array
+                for i in range(1, sliced.NumberOfFrames):
+                    # TODO: it is less computationally efficient to decompress each frame individually,
+                    # but it is more memory efficient. Memory efficiency is more important given the limitations
+                    # of the deployment environment. Consider a better solution.
+                    other = self.slice_dicom(sliced, i, i + 1, 1)
+                    other = decompress(other, use_nvjpeg=use_nvjpeg, **kwargs)
+                    arr = reduction(arr, other.pixel_array, out=arr)
+                yield arr
+
+            start += chunk_size

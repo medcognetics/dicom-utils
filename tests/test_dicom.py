@@ -11,7 +11,7 @@ from numpy.random import default_rng
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 import dicom_utils
-from dicom_utils import KeepVolume, SliceAtLocation, UniformSample, read_dicom_image
+from dicom_utils import KeepVolume, ReduceVolume, SliceAtLocation, UniformSample, VolumeHandler, read_dicom_image
 from dicom_utils.dicom import (
     ALGORITHM_PRESENTATION_TYPE,
     data_handlers,
@@ -84,16 +84,23 @@ class TestReadDicomImage:
     @pytest.mark.parametrize(
         "handler",
         [
+            pytest.param(lambda x: x, marks=pytest.mark.xfail(raises=TypeError)),
             KeepVolume(),
             SliceAtLocation(4),
             UniformSample(4, method="count"),
+            ReduceVolume(output_frames=4),
         ],
     )
     def test_volume_handling(self, dicom_object_3d, handler, mocker, transfer_syntax):
-        spy = mocker.spy(handler, "__call__")
+        # NOTE: we need to patch handle_dicom for VolumeHandlers, and __call__ for other cases
+        # There's an issue with mocking __call__ in all cases, possibly due to the use of a functools.partial
+        if isinstance(handler, VolumeHandler):
+            spy = mocker.patch.object(handler, "handle_dicom", wraps=handler.handle_dicom)
+        else:
+            spy = mocker.patch.object(handler, "__call__", wraps=handler)
         F = 8
         dcm = dicom_object_3d(num_frames=F, syntax=transfer_syntax)
-        array1 = read_dicom_image(dcm, volume_handler=spy, strict_interp=True)
+        array1 = read_dicom_image(dcm, volume_handler=handler, strict_interp=True)
         spy.assert_called_once()
         assert spy.mock_calls[0].args[0] == dcm, "handler should be called with DICOM object"
         assert array1.ndim < 4 or array1.shape[1] != 1, "3D dim should be squeezed when D=1"
