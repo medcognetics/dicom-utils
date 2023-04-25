@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import random
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from itertools import islice
@@ -361,3 +362,20 @@ class ReduceVolume(VolumeHandler):
                 yield arr
 
             start += chunk_size
+
+
+class RandomSlice(VolumeHandler):
+    r"""Samples the input volume at a random slice
+
+    Args:
+        seed: The random seed to use
+    """
+
+    def __init__(self, seed: int = 42):
+        self.rng = random.Random(seed)
+
+    def get_indices(self, total_frames: Optional[int]) -> Tuple[int, int, int]:
+        if total_frames is None:
+            raise ValueError("`total_frames` cannot be `None`")
+        index = self.rng.randint(0, total_frames - 1)
+        return index, index + 1, 1

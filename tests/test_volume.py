@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import dicom_utils
-from dicom_utils import KeepVolume, ReduceVolume, SliceAtLocation, UniformSample
+from dicom_utils import KeepVolume, RandomSlice, ReduceVolume, SliceAtLocation, UniformSample
 
 
 class TestKeepVolume:
@@ -179,3 +179,30 @@ class TestReduceVolume:
         spy.assert_called()
         for call in spy.mock_calls:
             assert call.kwargs["use_nvjpeg"] == use_nvjpeg
+
+
+class TestRandomSlice:
+    def test_array(self):
+        x = np.random.rand(10, 10)
+        sampler = RandomSlice()
+        result = sampler(x)
+        assert result.shape == (1, 10)
+
+    def test_dicom(self, dicom_object_3d, transfer_syntax):
+        N = 8
+        dcm = dicom_object_3d(N, syntax=transfer_syntax)
+        sampler = RandomSlice()
+        result = sampler(dcm)
+        assert type(result) == type(dcm)
+        assert result.NumberOfFrames == 1
+
+    def test_seed(self):
+        x = np.random.rand(10, 10)
+        sampler1 = RandomSlice(seed=42)
+        sampler2 = RandomSlice(seed=42)
+        sampler3 = RandomSlice(seed=0)
+        result1 = sampler1(x)
+        result2 = sampler2(x)
+        result3 = sampler3(x)
+        assert (result1 == result2).all()
+        assert not (result1 == result3).all()
