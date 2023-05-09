@@ -237,6 +237,16 @@ class TestReadDicomImage:
         assert m1.called == exp, "apply_voi_lut not called as expected"
         assert m2.called == exp, "invert_color not called as expected"
 
+    def test_voi_lut_control(self, mocker, dicom_object):
+        np.random.seed(42)
+        spy = mocker.spy(dicom_utils.dicom, "apply_voi_lut")
+        dicom_object.WindowCenter = 512
+        dicom_object.WindowWidth = 512
+        array1 = read_dicom_image(dicom_object, voi_lut=True)
+        array2 = read_dicom_image(dicom_object, voi_lut=False)
+        assert (array1 != array2).any()
+        assert spy.call_count == 1
+
 
 @pytest.mark.ci_skip  # CircleCI will not have a GPU
 @pytest.mark.usefixtures("pynvjpeg")

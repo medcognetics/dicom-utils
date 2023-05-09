@@ -122,7 +122,7 @@ def convert_frame_voi_lut(dcm: Dicom) -> Dicom:
     return dcm
 
 
-def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
+def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], voi_lut: bool = True) -> ndarray:
     """
     Interpret pixel data according to the TransferSyntaxUID stored in the DICOM dataset object.
 
@@ -131,6 +131,8 @@ def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
             DICOM object with pixel data
         dims:
             Tuple containing expected image shape
+        voi_lut:
+            Whether to apply VOI LUT transformation
 
     Returns:
         Numpy ndarray of pixel data
@@ -139,7 +141,7 @@ def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     # Check this to ensure we don't reapply the VOI LUT or other pixel adjustment operations
     if not has_algorithm_intent(dcm):
         try:
-            pixels = apply_voi_lut(dcm.pixel_array, dcm)
+            pixels = apply_voi_lut(dcm.pixel_array, dcm) if voi_lut else dcm.pixel_array
         except Exception:
             pixels = dcm.pixel_array
     else:
@@ -147,7 +149,7 @@ def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     return pixels.reshape(dims)
 
 
-def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
+def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], *args, **kwargs) -> ndarray:
     """
     Try all supported TransferSyntaxUIDs until one succeeds.
     Some mammograms have a mismatch between the TransferSyntaxUID and how the pixel data is actually encoded.
@@ -164,7 +166,7 @@ def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     for transfer_syntax_uid in TransferSyntaxUIDs.keys():
         try:
             dcm.file_meta.TransferSyntaxUID = UID(transfer_syntax_uid)
-            pixels = strict_dcm_to_pixels(dcm, dims)
+            pixels = strict_dcm_to_pixels(dcm, dims, *args, **kwargs)
             logger.warning(
                 f"Able to parse pixels according to '{dcm.file_meta.TransferSyntaxUID}' "
                 f"({TransferSyntaxUIDs[dcm.file_meta.TransferSyntaxUID]})"
@@ -175,7 +177,7 @@ def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...]) -> ndarray:
     raise ValueError("Unable to parse the pixel array after trying all possible TransferSyntaxUIDs.")
 
 
-def dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], strict_interp: bool) -> ndarray:
+def dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], strict_interp: bool, *args, **kwargs) -> ndarray:
     """
     Try to parse pixel data according to a conformant interpretation,
     and if that fails then try to parse according to an alternative method if strict_interp==False.
@@ -192,7 +194,7 @@ def dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], strict_interp: bool) -> nda
         Numpy ndarray of pixel data
     """
     try:
-        return strict_dcm_to_pixels(dcm, dims)
+        return strict_dcm_to_pixels(dcm, dims, *args, **kwargs)
     except Exception as e:
         msg = (
             f"TransferSyntaxUID (0002, 0010) '{dcm.file_meta.TransferSyntaxUID}' "
@@ -202,7 +204,7 @@ def dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], strict_interp: bool) -> nda
         if strict_interp:
             raise ValueError(msg)
         logger.warning(msg)
-        return loose_dcm_to_pixels(dcm, dims)
+        return loose_dcm_to_pixels(dcm, dims, *args, **kwargs)
 
 
 def read_dicom_image(
@@ -214,6 +216,7 @@ def read_dicom_image(
     as_uint8: bool = False,
     use_nvjpeg: Optional[bool] = None,
     nvjpeg_batch_size: Optional[int] = None,
+    voi_lut: bool = True,
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -235,6 +238,8 @@ def read_dicom_image(
             If ``True``, decompress JPEG2000 images via GPU
         nvjpeg_batch_size:
             Batch size for GPU JPEG2000 decompression
+        voi_lut:
+            Whether to apply VOI LUT transformation
 
     Shape:
         - Output: :math:`(C, H, W)` or :math:`(C, D, H, W)`
@@ -297,7 +302,7 @@ def read_dicom_image(
 
         # Some 3D dicoms have window information in a different location.
         # If no window information is found in the standard location, run a function to copy it from the other location.
-        if not hasattr(dcm, "WindowCenter") or not hasattr(dcm, "WindowWidth"):
+        if voi_lut and not hasattr(dcm, "WindowCenter") or not hasattr(dcm, "WindowWidth"):
             dcm = convert_frame_voi_lut(dcm)
 
     # Decompress with GPU if requested. ReduceVolume will decompress within the handler.
@@ -306,7 +311,7 @@ def read_dicom_image(
 
     # DICOM is channels last, so permute dims
     channels_last_dims = *dims[1:], dims[0]
-    pixels = dcm_to_pixels(dcm, channels_last_dims, strict_interp)
+    pixels = dcm_to_pixels(dcm, channels_last_dims, strict_interp, voi_lut=voi_lut)
     pixels = np.moveaxis(pixels, -1, 0)
     assert tuple(pixels.shape) == dims
 
