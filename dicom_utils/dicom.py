@@ -137,14 +137,9 @@ def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], voi_lut: bool = True
     Returns:
         Numpy ndarray of pixel data
     """
-    # Preprocessed images will set a specific PresentationIntentType.
-    # Check this to ensure we don't reapply the VOI LUT or other pixel adjustment operations
-    if not has_algorithm_intent(dcm):
-        try:
-            pixels = apply_voi_lut(dcm.pixel_array, dcm) if voi_lut else dcm.pixel_array
-        except Exception:
-            pixels = dcm.pixel_array
-    else:
+    try:
+        pixels = apply_voi_lut(dcm.pixel_array, dcm) if voi_lut else dcm.pixel_array
+    except Exception:
         pixels = dcm.pixel_array
     return pixels.reshape(dims)
 
