@@ -19,7 +19,7 @@ from registry import bind_relevant_kwargs
 from .basic_offset_table import BasicOffsetTable
 from .logging import logger
 from .tags import Tag
-from .types import Dicom, PhotometricInterpretation, get_value, iterate_shared_functional_groups
+from .types import Dicom, PhotometricInterpretation, iterate_shared_functional_groups
 from .volume import KeepVolume, VolumeHandler
 
 
@@ -48,10 +48,6 @@ TransferSyntaxUIDs: Final[Dict[str, str]] = {
     "1.2.840.10008.1.2.4.92": "JPEG2000 Multi-component Lossless",
     "1.2.840.10008.1.2.4.93": "JPEG2000 Multi-component",
 }
-
-
-# Used to indicate preprocessed DICOMs
-ALGORITHM_PRESENTATION_TYPE: Final = "FOR ALGORITHM"
 
 
 # Pillow is relatively slow so we want to make sure that other handlers are used instead
@@ -98,11 +94,6 @@ def is_compressed(dcm: Dicom) -> bool:
     r"""Checks if a DICOM is using a compressed transfer syntax"""
     syntax = dcm.file_meta.TransferSyntaxUID
     return syntax.is_compressed
-
-
-def has_algorithm_intent(dcm: Dicom) -> bool:
-    r"""Checks if the DICOM is preprocessed or intented for algorithm use."""
-    return get_value(dcm, Tag.PresentationIntentType, "") == ALGORITHM_PRESENTATION_TYPE
 
 
 def convert_frame_voi_lut(dcm: Dicom) -> Dicom:
@@ -212,6 +203,7 @@ def read_dicom_image(
     use_nvjpeg: Optional[bool] = None,
     nvjpeg_batch_size: Optional[int] = None,
     voi_lut: bool = True,
+    inversion: bool = True,
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -235,6 +227,8 @@ def read_dicom_image(
             Batch size for GPU JPEG2000 decompression
         voi_lut:
             Whether to apply VOI LUT transformation
+        inversion:
+            Whether to apply correction for pixel value inversion
 
     Shape:
         - Output: :math:`(C, H, W)` or :math:`(C, D, H, W)`
@@ -320,7 +314,7 @@ def read_dicom_image(
         pixels = pixels.newbyteorder("=")
 
     # in some dicoms, pixel value of 0 indicates white
-    if pm.is_inverted and not has_algorithm_intent(dcm):
+    if pm.is_inverted and inversion:
         pixels = invert_color(pixels)
 
     # convert to uint8 if requested

@@ -12,14 +12,7 @@ from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 import dicom_utils
 from dicom_utils import KeepVolume, ReduceVolume, SliceAtLocation, UniformSample, VolumeHandler, read_dicom_image
-from dicom_utils.dicom import (
-    ALGORITHM_PRESENTATION_TYPE,
-    data_handlers,
-    default_data_handlers,
-    is_inverted,
-    nvjpeg_decompress,
-    set_pixels,
-)
+from dicom_utils.dicom import data_handlers, default_data_handlers, is_inverted, nvjpeg_decompress, set_pixels
 
 
 @pytest.fixture
@@ -225,17 +218,14 @@ class TestReadDicomImage:
         [
             ("FOR PROCESSING", True),
             ("FOR PRESENTATION", True),
-            (ALGORITHM_PRESENTATION_TYPE, False),
         ],
     )
     def test_for_algorithm_presentation_handling(self, mocker, dicom_object, presentation, exp):
-        m1 = mocker.patch("dicom_utils.dicom.apply_voi_lut", return_value=dicom_object.pixel_array)
-        m2 = mocker.patch("dicom_utils.dicom.invert_color", return_value=dicom_object.pixel_array)
+        m1 = mocker.patch("dicom_utils.dicom.invert_color", return_value=dicom_object.pixel_array)
         dicom_object.PresentationIntentType = presentation
         dicom_object.PhotometricInterpretation = "MONOCHROME1"
         read_dicom_image(dicom_object)
-        assert m1.called == exp, "apply_voi_lut not called as expected"
-        assert m2.called == exp, "invert_color not called as expected"
+        assert m1.called == exp, "invert_color not called as expected"
 
     def test_voi_lut_control(self, mocker, dicom_object):
         np.random.seed(42)
@@ -244,6 +234,15 @@ class TestReadDicomImage:
         dicom_object.WindowWidth = 512
         array1 = read_dicom_image(dicom_object, voi_lut=True)
         array2 = read_dicom_image(dicom_object, voi_lut=False)
+        assert (array1 != array2).any()
+        assert spy.call_count == 1
+
+    def test_inversion_control(self, mocker, dicom_object):
+        np.random.seed(42)
+        spy = mocker.spy(dicom_utils.dicom, "invert_color")
+        dicom_object.PhotometricInterpretation = "MONOCHROME1"
+        array1 = read_dicom_image(dicom_object, inversion=True)
+        array2 = read_dicom_image(dicom_object, inversion=False)
         assert (array1 != array2).any()
         assert spy.call_count == 1
 
