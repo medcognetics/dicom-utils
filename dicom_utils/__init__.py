@@ -12,7 +12,15 @@ from .anonymize import anonymize
 from .dicom import NoImageError, read_dicom_image
 from .dicom_factory import DicomFactory
 from .metadata import add_patient_age, dicom_to_json, drop_fields_by_length, get_date
-from .volume import KeepVolume, RandomSlice, ReduceVolume, SliceAtLocation, UniformSample, VolumeHandler
+from .volume import (
+    VOLUME_HANDLERS,
+    KeepVolume,
+    RandomSlice,
+    ReduceVolume,
+    SliceAtLocation,
+    UniformSample,
+    VolumeHandler,
+)
 
 
 try:
@@ -63,4 +71,5 @@ __all__ = [
     "UniformSample",
     "ReduceVolume",
     "RandomSlice",
+    "VOLUME_HANDLERS",
 ]

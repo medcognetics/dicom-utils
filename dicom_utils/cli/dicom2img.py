@@ -14,7 +14,7 @@ from PIL import Image
 from ..dicom import path_to_dicoms
 from ..types import Dicom
 from ..visualize import DicomImage, chw_to_hwc, dcms_to_annotated_images, to_collage
-from ..volume import SliceAtLocation
+from ..volume import VOLUME_HANDLERS, KeepVolume, VolumeHandler
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
@@ -24,13 +24,17 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
     parser.add_argument(
         "-s", "--split", default=False, action="store_true", help="split multi-frame inputs into separate files"
     )
-    parser.add_argument(
-        "-v", "--volume", default=False, action="store_true", help="render 3D data as an animation or frame sequence"
-    )
     parser.add_argument("-f", "--fps", default=5, type=int, help="framerate for animated outputs")
     parser.add_argument("-q", "--quality", default=95, type=int, help="quality of outputs, from 1 to 100")
     parser.add_argument("--noblock", default=False, action="store_true", help="allow matplotlib to block")
     parser.add_argument("-b", "--bytes", default=False, action="store_true", help="output a png image as a byte stream")
+    parser.add_argument(
+        "-v",
+        "--volume-handler",
+        default="keep",
+        choices=VOLUME_HANDLERS.available_keys(),
+        help="volume handler for 3D inputs",
+    )
     return parser
 
 
@@ -153,18 +157,15 @@ def dicoms_to_graphic(
     dcms: List[Dicom],
     dest: Optional[Path] = None,
     split: bool = False,
-    center: bool = False,
     fps: int = 5,
     quality: int = 95,
     block: bool = True,
     as_bytes: bool = False,
     downsample: int = 1,
+    volume_handler: VolumeHandler = KeepVolume(),
     **kwargs,
 ) -> None:
-    if center:
-        kwargs["volume_handler"] = SliceAtLocation()
-
-    images = dcms_to_annotated_images(dcms, **kwargs)
+    images = dcms_to_annotated_images(dcms, volume_handler=volume_handler, **kwargs)
 
     handler = ImageOutput.from_dicom_images(
         images,
@@ -190,17 +191,19 @@ def main(args: argparse.Namespace) -> None:
     if dest is not None and dest.is_dir():
         dest = Path(dest, path.stem).with_suffix(".png")
 
+    volume_handler = VOLUME_HANDLERS.get(args.volume_handler).instantiate_with_metadata()
+
     dcms = list(path_to_dicoms(path))
     dicoms_to_graphic(
         dcms,
         dest,
         args.split,
-        not args.volume,
         args.fps,
         args.quality,
         not args.noblock,
         args.bytes,
         args.downsample,
+        volume_handler,
     )
 
 
