@@ -191,7 +191,8 @@ def main(args: argparse.Namespace) -> None:
     if dest is not None and dest.is_dir():
         dest = Path(dest, path.stem).with_suffix(".png")
 
-    volume_handler = VOLUME_HANDLERS.get(args.volume_handler).instantiate_with_metadata()
+    volume_handler = VOLUME_HANDLERS.get(args.volume_handler).instantiate_with_metadata().fn
+    assert isinstance(volume_handler, VolumeHandler)
 
     dcms = list(path_to_dicoms(path))
     dicoms_to_graphic(
