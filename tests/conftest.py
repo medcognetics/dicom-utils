@@ -72,7 +72,7 @@ def dicom_file_j2k(request):
 @pytest.fixture
 def dicom_file_3d(tmp_path, dicom_object_3d):
     path = Path(tmp_path, "CT_small_3D.dcm")
-    dicom_file_3d.save_as(path)
+    dicom_object_3d(num_frames=32).save_as(path)
     return path
 
 

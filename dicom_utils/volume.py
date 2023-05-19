@@ -26,6 +26,7 @@ from pydicom.encaps import encapsulate, generate_pixel_data_frame
 from pydicom.pixel_data_handlers import numpy_handler
 from pydicom.pixel_data_handlers.util import reshape_pixel_array
 from pydicom.uid import ImplicitVRLittleEndian
+from registry import Registry
 
 
 class SupportsGetItem(Protocol):
@@ -46,6 +47,9 @@ def dicom_copy(dcm: U) -> U:
     new_dcm = deepcopy(dcm)
     dcm.PixelData = new_dcm.PixelData = pixel_data
     return new_dcm
+
+
+VOLUME_HANDLERS = Registry("volume handlers")
 
 
 class VolumeHandler(ABC):
@@ -379,3 +383,19 @@ class RandomSlice(VolumeHandler):
             raise ValueError("`total_frames` cannot be `None`")
         index = self.rng.randint(0, total_frames - 1)
         return index, index + 1, 1
+
+
+# Register some default handlers
+VOLUME_HANDLERS(name="keep")(KeepVolume)
+VOLUME_HANDLERS(name="max")(ReduceVolume)
+VOLUME_HANDLERS(name="mean", reduction=np.mean)(ReduceVolume)
+VOLUME_HANDLERS(name="slice")(SliceAtLocation)
+
+# Multi-frame reductions
+for output_frames in (1, 8, 10, 16):
+    for skip_edge_frames in (0, 5, 10):
+        VOLUME_HANDLERS(
+            name=f"max-{output_frames}-{skip_edge_frames}",
+            output_frames=output_frames,
+            skip_edge_frames=skip_edge_frames,
+        )(ReduceVolume)

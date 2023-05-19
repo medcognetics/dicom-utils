@@ -71,6 +71,24 @@ def test_dicom2img(dicom_image_file, dicom_annotation_file, tmp_path, out):
         assert locals()["path"].is_file()
 
 
+@pytest.mark.parametrize(
+    "out", [pytest.param(None, marks=pytest.mark.xfail(raises=NotImplementedError, strict=True)), "foo.gif"]
+)
+@pytest.mark.parametrize("handler", ["keep", "max-8-5"])
+def test_dicom2img_3d(dicom_file_3d, tmp_path, out, handler):
+    sys.argv = [sys.argv[0], str(tmp_path), "--noblock", "-v", handler]
+
+    if out is not None:
+        path = Path(tmp_path, out)
+        sys.argv.extend(["--output", str(path)])
+
+    runpy.run_module("dicom_utils.cli.dicom2img", run_name="__main__", alter_sys=True)
+
+    if out is not None:
+        assert "path" in locals()
+        assert locals()["path"].is_file()
+
+
 def test_bytes(dicom_image_file, dicom_annotation_file, tmp_path, capsysbinary):
     sys.argv = [sys.argv[0], str(tmp_path), "--noblock", "--bytes"]
 
