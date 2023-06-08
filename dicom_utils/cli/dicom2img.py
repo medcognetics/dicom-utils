@@ -18,7 +18,7 @@ from ..volume import VOLUME_HANDLERS, KeepVolume, VolumeHandler
 
 
 def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
-    parser.add_argument("path", help="DICOM file or folder with files to convert")
+    parser.add_argument("path", nargs="+", help="DICOM file(s) or folder with files to convert")
     parser.add_argument("-o", "--output", help="output filepath. if directory, use filename from `file`")
     parser.add_argument("-d", "--downsample", help="downsample images by an integer factor", type=int)
     parser.add_argument(
@@ -184,17 +184,17 @@ def dicoms_to_graphic(
 
 
 def main(args: argparse.Namespace) -> None:
-    path = Path(args.path)
+    paths = [Path(p) for p in args.path]
     dest = Path(args.output) if args.output is not None else None
 
     # handle case where output path is a dir
     if dest is not None and dest.is_dir():
-        dest = Path(dest, path.stem).with_suffix(".png")
+        dest = Path(dest, paths[0].stem).with_suffix(".png")
 
     volume_handler = VOLUME_HANDLERS.get(args.volume_handler).instantiate_with_metadata().fn
     assert isinstance(volume_handler, VolumeHandler)
 
-    dcms = list(path_to_dicoms(path))
+    dcms = [dcm for path in paths for dcm in path_to_dicoms(path)]
     dicoms_to_graphic(
         dcms,
         dest,
