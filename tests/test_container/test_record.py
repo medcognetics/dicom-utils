@@ -729,6 +729,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             pytest.param(None, None, None, False),
             pytest.param(None, "spot compression", None, True),
             pytest.param(None, None, "CCSpot", True),
+            pytest.param("7.5CM SPTMAG", None, None, True),
         ],
     )
     def test_is_spot_compression(self, paddle, code, view_pos, exp, record_factory):
@@ -742,6 +743,20 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             ViewPosition=view_pos,
         )
         assert record.is_spot_compression == exp
+
+    @pytest.mark.parametrize(
+        "code,paddle,exp",
+        [
+            pytest.param("spot compression", None, False),
+            pytest.param("magnified", None, True),
+            pytest.param("magnification", None, True),
+            pytest.param(None, "7.5CM SPTMAG", True),
+        ],
+    )
+    def test_is_magnified(self, code, paddle, exp, record_factory):
+        rec = record_factory(view_modifier_code=code)
+        rec = rec.replace(PaddleDescription=paddle)
+        assert rec.is_magnified == exp
 
     @pytest.mark.parametrize(
         "code,exp",
