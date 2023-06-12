@@ -852,11 +852,15 @@ class MammogramFileRecord(DicomImageFileRecord):
 
     @cached_property
     def is_spot_compression(self) -> bool:
-        if "SPOT" in (self.PaddleDescription or ""):
+        if any(s in (self.PaddleDescription or "") for s in ("SPOT", "SPT")):
             return True
         if "spot" in (self.ViewPosition or "").lower():
             return True
         return "spot compression" in self.all_view_code_meanings
+
+    @cached_property
+    def is_magnified(self) -> bool:
+        return "MAG" in (self.PaddleDescription or "") or super().is_magnified
 
     @cached_property
     def is_implant_displaced(self) -> bool:
