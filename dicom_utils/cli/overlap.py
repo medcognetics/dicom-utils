@@ -58,7 +58,7 @@ def main(args: argparse.Namespace) -> None:
 
     futures: List[Future] = []
     tag = getattr(Tag, args.tag)
-    with ThreadPoolExecutor(args.jobs) as tp:
+    with ThreadPoolExecutor(int(args.jobs)) as tp:
         for match in path1.rglob(args.name):
             f = tp.submit(compute_hash, match, tag=tag, decompress=args.decompress)
             f.add_done_callback(callback)

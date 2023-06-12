@@ -13,6 +13,7 @@ from tqdm_multiprocessing import ConcurrentMapper
 
 from ..container.collection import iterate_input_path
 from ..dicom import decompress as decompress_fn
+from ..dicom import has_dicm_prefix
 from ..tags import Tag
 from ..types import get_value
 
@@ -35,6 +36,8 @@ def get_parser(parser: ArgumentParser = ArgumentParser()) -> ArgumentParser:
 
 def compute_hash(path: Path, tag: Tag = Tag.PixelData, decompress: bool = False) -> Optional[Tuple[Path, str]]:
     try:
+        if not path.is_file() or not has_dicm_prefix(path):
+            return
         ds = pydicom.dcmread(path)
         if tag == Tag.PixelData and decompress:
             ds = decompress_fn(ds)
@@ -47,9 +50,9 @@ def compute_hash(path: Path, tag: Tag = Tag.PixelData, decompress: bool = False)
 
 def main(args: argparse.Namespace) -> None:
     src = Path(args.target)
-    sources = list(iterate_input_path(src))
+    sources = [p for p in iterate_input_path(src) if p.is_file()]
     tag = getattr(Tag, args.tag)
-    with ConcurrentMapper(jobs=args.jobs) as mapper:
+    with ConcurrentMapper(jobs=int(args.jobs)) as mapper:
         mapper.create_bar("Hashing", total=len(sources))
         tqdm.write("path,hash")
         for result in mapper(compute_hash, sources, tag=tag, decompress=args.decompress):
