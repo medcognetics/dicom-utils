@@ -45,7 +45,6 @@ def compute_hash(path: Path, tag: Tag = Tag.PixelData, decompress: bool = False)
         return path, md5(value).hexdigest() if isinstance(value, bytes) else md5(value.encode()).hexdigest()
     except Exception as e:
         logging.exception(f"Failed to hash {path}", exc_info=e)
-        return None
 
 
 def main(args: argparse.Namespace) -> None:
