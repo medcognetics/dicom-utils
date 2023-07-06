@@ -25,8 +25,7 @@ clean: ## remove cache files
 	find $(CLEAN_DIRS) -name '*.orig' -type f -delete
 
 clean-env: ## remove the virtual environment directory
-	pdm venv remove $(PROJECT)
-
+	pdm venv remove -y $(PROJECT)
 
 deploy: ## installs from lockfile
 	git submodule update --init --recursive
@@ -82,6 +81,12 @@ test-ci: ## runs CI-only tests
 
 types: node_modules
 	pdm run npx --no-install pyright tests $(PROJECT)
+
+reset:
+	$(MAKE) clean
+	$(MAKE) clean-env
+	$(MAKE) init
+	$(MAKE) check
 
 help: ## display this help message
 	@echo "Please use \`make <target>' where <target> is one of"

@@ -6,32 +6,31 @@ build-backend = "pdm.pep517.api"
 name = "dicom-utils"
 description = ""
 authors = [
-    {name = "Scott Chase Waggener", email = "tidalpaladin@protonmail.com"},
+  { name = "Scott Chase Waggener", email = "tidalpaladin@protonmail.com" },
+  { name = "Tim Cogan", email = "tim@medcognetics.com" },
 ]
 dependencies = [
-    "dicom-anonymizer @ git+https://github.com/medcognetics/dicom-anonymizer.git@v1.0.7-fork",
-    "registry @ git+https://github.com/TidalPaladin/callable-registry.git",
-    "tqdm_multiprocessing @ git+https://github.com/TidalPaladin/tqdm-multiprocessing.git",
-    "colorama",
-    "matplotlib",
-    "pydicom",
-    "Pillow",
-    "numpy",
-    "pylibjpeg",
-    "pylibjpeg-libjpeg",
-    "pylibjpeg-openjpeg",
-    "opencv-python",
-    "setuptools",
+  "colorama",
+  "matplotlib",
+  "numpy",
+  "opencv-python",
+  "Pillow",
+  "pydicom",
+  "pylibjpeg",
+  "pylibjpeg-libjpeg",
+  "pylibjpeg-openjpeg",
+  "setuptools",
+  "dicom-anonymizer @ git+https://github.com/medcognetics/dicom-anonymizer.git@v1.0.7-fork",
+  "registry @ git+https://github.com/TidalPaladin/callable-registry.git",
+  "tqdm_multiprocessing @ git+https://github.com/TidalPaladin/tqdm-multiprocessing.git",
 ]
 requires-python = ">=3.8"
 readme = "README.md"
-license = {text = "Apache"}
+license = { text = "Apache" }
 dynamic = ["version"]
 
 [project.optional-dependencies]
-j2k = [
-  "pynvjpeg2k @ git+ssh://git@github.com/medcognetics/pynvjpeg2k.git"
-]
+j2k = ["pynvjpeg2k @ git+ssh://git@github.com/medcognetics/pynvjpeg2k.git"]
 
 [tool.autoflake]
 remove-all-unused-imports = true
@@ -63,25 +62,11 @@ use_parentheses = false
 version = { source = "scm" }
 
 [tool.pdm.dev-dependencies]
-test = [
-  "pytest",
-  "pytest-mock",
-  "pytest-cov",
-  "coverage",
-  "pdbpp",
-]
-quality = [
-  "autoflake",
-  "autopep8",
-  "black",
-  "flake8",
-  "isort",
-]
+test = ["pytest", "pytest-mock", "pytest-cov", "coverage", "pdbpp"]
+quality = ["autoflake", "autopep8", "black", "flake8", "isort"]
 
 [tool.pytest.ini_options]
-markers = [
-  "ci_skip",
-]
+markers = ["ci_skip"]
 filterwarnings = [
   "ignore:.*Invalid value for VR.*:UserWarning",
   "ignore:.*in the dataset does not match the component precision.*:UserWarning",
@@ -101,3 +86,4 @@ dicomcheck = "dicom_utils.cli.validate:entrypoint"
 dicomorg = "dicom_utils.cli.organize:entrypoint"
 dicom-decomp = "dicom_utils.cli.decompress:entrypoint"
 dicom-hash = "dicom_utils.cli.hash:entrypoint"
+merge_series = "dicom_utils.cli.merge_series:entrypoint"

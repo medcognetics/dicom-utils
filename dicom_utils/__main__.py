@@ -18,6 +18,8 @@ from .cli.dicomphi import get_parser as dicomphi_parser
 from .cli.dicomphi import main as dicomphi_main
 from .cli.find import get_parser as find_parser
 from .cli.find import main as find_main
+from .cli.merge_series import get_parser as merge_series_parser
+from .cli.merge_series import main as merge_series_main
 from .cli.overlap import get_parser as overlap_parser
 from .cli.overlap import main as overlap_main
 from .cli.strip import get_parser as strip_parser
@@ -65,6 +67,7 @@ def main() -> None:
         ("overlap", "Check overlap of study UIDs between dirs", overlap_main, overlap_parser),
         ("validate", "Validate metadata of a DICOM file", validate_main, validate_parser),
         ("decompress", "Decompress pixel contents of a DICOM file", decompress_main, decompress_parser),
+        ("merge_series", "Merge series DICOMs into a single DICOM", merge_series_main, merge_series_parser),
     ]:
         add_subparser(subparsers, name=name, help=help, main=main, modifier=modifier)
 
