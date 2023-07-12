@@ -11,7 +11,7 @@ from pydicom.uid import generate_uid
 
 
 def merge_datasets(datasets: List[Dataset]) -> Dataset:
-    new_dataset = copy.deepcopy(datasets[0])
+    new_dataset = copy.copy(datasets[0])
 
     if len(datasets) > 1:
         new_dataset.SOPInstanceUID = generate_uid()
