@@ -3,6 +3,7 @@
 import json
 import logging
 import multiprocessing
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
@@ -172,9 +173,17 @@ class RecordCreator:
             assert isinstance(fn, RegisteredFunction)
             assert isinstance(fn.fn, type)
             assert issubclass(fn.fn, FileRecord)
+
+            # Some DICOMs are named according to UIDs (which include '.') and also have no suffix.
+            # We want to ensure we can still identify these as DICOMs even though they technically have
+            # an invalid suffix. We also want to avoid checking all files for DICOM headers since this will
+            # slow down record creation. As such, we only check valid suffix files that match the expected
+            # suffixes, or files with an invalid suffix.
+            suffix_is_valid = len(path.suffix) <= 5 and re.search(r"\D", path.suffix.lstrip(".")) is not None
             suffixes = set(fn.metadata.get("suffixes", []))
             path_suffix = path.suffix.lower()
-            valid_candidate = not path_suffix or not suffixes or path_suffix in suffixes
+            valid_candidate = not suffix_is_valid or not path_suffix or not suffixes or path_suffix in suffixes
+
             if valid_candidate:
                 candidates.append(fn.fn)
 
