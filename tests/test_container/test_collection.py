@@ -141,14 +141,19 @@ class TestIterateInputPath:
 
 
 @pytest.fixture
-def dicom_files(tmp_path, dicom_file):
+def suffix():
+    return ".dcm"
+
+
+@pytest.fixture
+def dicom_files(tmp_path, dicom_file, suffix):
     paths = []
     factory = DicomFactory(proto=dicom_file)
     for i in range(3):
         for j in range(3):
             study_uid = f"study_{i}"
             sop_uid = f"study_{i}_sop_{j}"
-            dest = Path(tmp_path, f"subdir_{i}", f"file_{j}.dcm")
+            dest = Path(tmp_path, f"subdir_{i}", f"file_{j}{suffix}")
             dest.parent.mkdir(exist_ok=True, parents=True)
 
             dcm = factory(StudyInstanceUID=study_uid, SOPInstanceUID=sop_uid)
@@ -205,6 +210,7 @@ class TestRecordCreator:
 
 
 class TestRecordIterator:
+    @pytest.mark.parametrize("suffix", [".dcm", "", ".123"])
     @pytest.mark.parametrize("use_bar", [True, False])
     @pytest.mark.parametrize("threads", [False, True])
     @pytest.mark.parametrize("jobs", [None, 1, 2])

@@ -282,6 +282,14 @@ class TestDicomFileRecord(TestFileRecord):
         proto.__class__.from_file(proto.path)
         spy.assert_called_once()
 
+    def test_from_file_bad_suffix(self, tmp_path, mocker, record_factory):
+        proto = record_factory()
+        new_path = Path(f"{proto.path}.123")
+        shutil.copy(proto.path, new_path)
+        rec = proto.__class__.from_file(new_path)
+        assert rec.__class__ == proto.__class__
+        assert rec.path == new_path
+
     @pytest.mark.parametrize("file_exists", [True, False])
     def test_from_dicom(self, mocker, record_factory, file_exists):
         proto = record_factory()
