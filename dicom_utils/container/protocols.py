@@ -165,3 +165,8 @@ class SupportsDataSetInfo(Protocol):
     DataSetDescription: Optional[str] = None
     DataSetType: Optional[str] = None
     DataSetSubtype: Optional[str] = None
+
+
+@runtime_checkable
+class SupportsAccessionNumber(Protocol):
+    AccessionNumber: Optional[str] = None

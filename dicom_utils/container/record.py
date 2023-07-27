@@ -397,6 +397,7 @@ class DicomFileRecord(
     DataSetType: Optional[str] = None
     DataSetSubtype: Optional[str] = None
     PerformedProcedureStepDescription: Optional[str] = None
+    AccessionNumber: Optional[str] = None
 
     generated: bool = False
     is_cad: bool = False
