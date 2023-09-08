@@ -6,7 +6,7 @@ groups = ["default", "j2k", "quality", "test"]
 cross_platform = true
 static_urls = false
 lock_version = "4.3"
-content_hash = "sha256:f9933c1531d1eda96a1e807852a7ba42ae96fa8810ffc4f9209ec111fd3ed355"
+content_hash = "sha256:5d7303255b8076f689542e7e4affd88bd3d5bb8530e345f4de890a3cb5dd4ae7"
 
 [[package]]
 name = "autoflake"
@@ -301,11 +301,12 @@ files = [
 
 [[package]]
 name = "dicom-anonymizer"
-version = "1.0.7"
+version = "1.0.11"
+requires_python = ">=3.8"
 git = "https://github.com/medcognetics/dicom-anonymizer.git"
-ref = "v1.0.7-fork"
-revision = "f82090190abe220bfede35926ee4422d4962148a"
-summary = ""
+ref = "feat/pyproject"
+revision = "9dfb429e58b0928214c897ef9648dc0acbcb5edb"
+summary = "Program to anonymize dicom files with default and custom rules"
 dependencies = [
     "pydicom",
     "tqdm",
