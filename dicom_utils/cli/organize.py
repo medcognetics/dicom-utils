@@ -10,7 +10,7 @@ from tqdm import tqdm
 from ..container.collection import RecordCollection
 from ..container.group import GROUP_REGISTRY
 from ..container.input import Input
-from ..container.output import OUTPUT_REGISTRY, Output
+from ..container.output import OUTPUT_REGISTRY
 from ..container.record import HELPER_REGISTRY
 
 
@@ -27,7 +27,7 @@ def organize(
     threads: bool = False,
     timeout: Optional[int] = None,
     **kwargs,
-) -> Dict[Output, Dict[str, RecordCollection]]:
+) -> Dict[str, Dict[str, RecordCollection]]:
     inp = Input(
         sources,
         records,
@@ -41,7 +41,7 @@ def organize(
         **kwargs,
     )
 
-    result: Dict[Output, Dict[str, RecordCollection]] = {}
+    result: Dict[str, Dict[str, RecordCollection]] = {}
     for output_name in tqdm(outputs, desc="Writing outputs", disable=not use_bar):
         output = OUTPUT_REGISTRY.get(output_name).instantiate_with_metadata(
             root=dest,

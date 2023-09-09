@@ -5,7 +5,7 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Final, List
 
-from pydicom.datadict import DicomDictionary
+from pydicom.datadict import DicomDictionary # type: ignore
 
 
 MARKER: Final = "# >>> BEGIN TAGS >>>"

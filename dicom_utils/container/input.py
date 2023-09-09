@@ -5,7 +5,21 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
-from typing import Callable, Dict, Generic, Hashable, Iterable, Iterator, Optional, Tuple, Type, TypeVar, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Hashable,
+    Iterable,
+    Iterator,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from registry import Registry, bind_relevant_kwargs
 
@@ -205,7 +219,7 @@ class Input:
         helpers = list(helpers)
 
         self.grouper = bind_relevant_kwargs(Grouper, groups=groups, helpers=helpers, **kwargs)()
-        self.namers = [NAME_REGISTRY.get(n)() for n in namers]
+        self.namers = [NAME_REGISTRY.get(n).instantiate_with_metadata() for n in namers]
         if len(namers) != len(groups):
             raise ValueError("Number of namers {namers} should match number of groups {groups}")
 
@@ -220,7 +234,7 @@ class Input:
 
         # apply namers to generate a dict of (group name) -> group pairs
         self.cases: Dict[Tuple[str, ...], RecordCollection] = {}
-        for i, group_key in enumerate(sorted(grouped_collections.keys(), key=self.sort_key)):
+        for i, group_key in enumerate(sorted(grouped_collections.keys(), key=cast(Any, self.sort_key))):
             group = grouped_collections[group_key]
             group_key = (group_key,) if not isinstance(group_key, tuple) else group_key
             key = tuple(namer(k, group, i + 1, len(grouped_collections)) for namer, k in zip(self.namers, group_key))

@@ -2,7 +2,7 @@ import copy
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 import pydicom
 from pydicom import Dataset
@@ -29,7 +29,7 @@ def merge_datasets(datasets: List[Dataset]) -> Dataset:
 
 
 def create_merged_datasets(path: Path) -> List[Dataset]:
-    series_lookup = defaultdict(list)
+    series_lookup: Dict[str, Any] = defaultdict(list)
 
     for file in path.rglob("*"):
         try:
