@@ -185,7 +185,7 @@ def draw_rectangle(
     color: Color = (0, 255, 0),
     thickness: int = 30,
 ) -> ndarray:
-    image = cv2.UMat(image).get()  # OpenCV can give weird errors without this
+    image = cv2.UMat(image).get()  # type: ignore # OpenCV can give weird errors without this
     cv2.rectangle(image, coord0, coord1, color, thickness)
     return image
 
