@@ -39,29 +39,7 @@ from pydicom.uid import SecondaryCaptureImageStorage
 logger = logging.getLogger(__name__)
 
 
-try:
-    from registry import Registry as _Registry
-except:
-
-    class _Registry:
-        def __init__(self, *args, **kwargs):
-            ...
-
-        def __call__(self, *args, **kwargs):
-            Exception("'registry' must be properly installed")
-            return lambda x: x
-
-        def available_keys(self):
-            return []
-
-        def get(self, *args, **kwargs):
-            ...
-
-        def get_with_metadata(self, *args, **kwargs):
-            ...
-
-
-Registry = _Registry
+from registry import Registry
 
 from ..dicom import Dicom
 from ..tags import Tag
@@ -287,7 +265,8 @@ class FileRecord:
     def to_dict(self, file_id: Any = None) -> Dict[str, Any]:
         result: Dict[str, Any] = {}
         result["record_type"] = self.__class__.__name__
-        module = inspect.getmodule(self.__class__).__name__
+        module = inspect.getmodule(self.__class__)
+        module = module.__name__ if module is not None else ""
         if module == "__main__":
             import warnings
 
@@ -771,9 +750,9 @@ class MammogramFileRecord(DicomImageFileRecord):
     File IO operations on DICOMs can be expensive, so this class collects all
     required information in a single pass to avoid repeated file opening.
     """
-    mammogram_type: Optional[MammogramType] = None
-    view_position: Optional[ViewPosition] = None
-    laterality: Optional[Laterality] = None
+    mammogram_type: MammogramType = MammogramType.UNKNOWN
+    view_position: ViewPosition = ViewPosition.UNKNOWN
+    laterality: Laterality = Laterality.UNKNOWN
     PaddleDescription: Optional[str] = None
     BreastImplantPresent: Optional[str] = None
 
@@ -1051,7 +1030,7 @@ class MammogramFileRecord(DicomImageFileRecord):
         if self.mammogram_type not in (None, MammogramType.UNKNOWN):
             filetype = self.mammogram_type.simple_name
         else:
-            filetype = self.Modality.lower()
+            filetype = self.Modality.lower() if self.Modality else "uk"
 
         # modifiers
         # TODO make this a loop/lookup

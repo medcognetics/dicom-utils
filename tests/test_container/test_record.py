@@ -1655,7 +1655,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             ),
             pytest.param(
                 [
-                    MammogramFileRecord(Path("m1.dcm"), laterality=None, view_position=ViewPosition.MLO),
+                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.UNKNOWN, view_position=ViewPosition.MLO),
                 ],
                 MammogramView(Laterality.LEFT, ViewPosition.MLO),
                 None,
@@ -1663,7 +1663,7 @@ class TestMammogramFileRecord(TestDicomFileRecord):
             ),
             pytest.param(
                 [
-                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.LEFT, view_position=None),
+                    MammogramFileRecord(Path("m1.dcm"), laterality=Laterality.LEFT, view_position=ViewPosition.UNKNOWN),
                 ],
                 MammogramView(Laterality.LEFT, ViewPosition.MLO),
                 None,

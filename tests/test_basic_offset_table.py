@@ -116,7 +116,7 @@ class TestBasicOffsetTable:
     def test_is_valid_mod_length(self):
         bot = BasicOffsetTable.from_offsets([0, 1000])
         bot.fp.seek(LENGTH)
-        bot.fp.write_UL(3)
+        bot.fp.write_UL(val=3)  # type: ignore
         assert not bot.is_valid
 
     @pytest.mark.parametrize(

@@ -6,7 +6,7 @@ import importlib.metadata
 # avoid BrokenPipeError, KeyboardInterrupt
 import os
 import warnings
-from typing import Final, Iterable
+from typing import Final, Iterable, Literal, cast
 
 from .anonymize import anonymize
 from .dicom import NoImageError, read_dicom_image
@@ -45,7 +45,7 @@ def filter_spam_warnings(patterns: Iterable[str] = SPAM_WARNING_PATTERNS, action
     automatically with ``action="ignore"`` when dicom-utils is imported.
     """
     for pattern in patterns:
-        warnings.filterwarnings(action, pattern)
+        warnings.filterwarnings(cast(Literal["ignore"], action), pattern)
 
 
 SILENCE_ENV_VAR: Final = "SILENCE_PYDICOM_SPAM"
@@ -59,7 +59,6 @@ __all__ = [
     "anonymize",
     "dicom_to_json",
     "DicomFactory",
-    "drop_empty_tags",
     "drop_fields_by_length",
     "get_date",
     "filter_spam_warnings",

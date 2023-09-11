@@ -467,20 +467,22 @@ class RecordCollection(Generic[R]):
         return any(isinstance(rec, dtype) for rec in self)
 
     @overload
-    def group_by(self: C, funcs: Callable[[R], T]) -> Dict[T, C]:
+    def group_by(self: C, func: Callable[[R], T]) -> Dict[T, C]:
         ...
 
     @overload
-    def group_by(self: C, *funcs: Callable[[R], T]) -> Dict[Tuple[T, ...], C]:
+    def group_by(self: C, func: Callable[[R], T], *funcs: Callable[[R], T]) -> Dict[Tuple[T, ...], C]:
         ...
 
-    def group_by(self: C, *funcs: Callable[[R], Hashable]) -> Dict[Hashable, C]:
-        result: Dict[Hashable, C] = {}
+    def group_by(
+        self: C, func: Callable[[R], T], *funcs: Callable[[R], T]
+    ) -> Union[Dict[T, C], Dict[Tuple[T, ...], C]]:
+        result: Dict[T, C] = {}
         for record in self.records:
             key = tuple(f(record) for f in funcs)
             if len(funcs) == 1:
                 key = key[0]
-            result.setdefault(key, self.__class__()).add(record)
+            result.setdefault(cast(T, key), self.__class__()).add(record)
         return result
 
     def parent_dirs(self, offset: int = 0) -> Set[Path]:

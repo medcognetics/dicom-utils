@@ -453,6 +453,7 @@ def nvjpeg_decompress(
         raise ImportError('pynvjpeg is not available. Install with: pip install -e ".[j2k]"')
     elif not is_jpeg2k(dcm):
         raise ValueError(f"TransferSyntaxUID {dcm.file_meta.TransferSyntaxUID} is not supported for decompression")
+    assert pynvjpeg is not None
 
     num_frames = dcm.get("NumberOfFrames", 1)
 

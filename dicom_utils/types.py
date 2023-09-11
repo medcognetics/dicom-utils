@@ -392,7 +392,7 @@ class Laterality(EnumMixin):
         if not laterality:
             try:
                 laterality = (
-                    tags.get(Tag.SharedFunctionalGroupsSequence)[0]
+                    tags.get(Tag.SharedFunctionalGroupsSequence)[0]  # type: ignore
                     .get(Tag.FrameAnatomySequence)
                     .value[0]
                     .get(Tag.FrameLaterality)

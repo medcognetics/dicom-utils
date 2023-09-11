@@ -126,9 +126,9 @@ class Output(ABC):
         self.jobs = jobs
         self.chunksize = chunksize
         self.timeout = timeout
-        helpers = [HELPER_REGISTRY.get(h).instantiate_with_metadata().fn for h in helpers]
-        self.record_helpers: List[RecordHelper] = [h for h in helpers if isinstance(h, RecordHelper)]
-        self.collection_helpers: List[CollectionHelper] = [h for h in helpers if isinstance(h, CollectionHelper)]
+        helper_fns = [HELPER_REGISTRY.get(h).instantiate_with_metadata().fn for h in helpers]
+        self.record_helpers: List[RecordHelper] = [h for h in helper_fns if isinstance(h, RecordHelper)]
+        self.collection_helpers: List[CollectionHelper] = [h for h in helper_fns if isinstance(h, CollectionHelper)]
 
     @property
     def path(self) -> Path:
@@ -202,7 +202,7 @@ class Output(ABC):
 class SymlinkFileOutput(Output):
     def write(self, key: Tuple[str, ...], name: str, collection: RecordCollection, dest: Path) -> Iterator[WriteResult]:
         dest.mkdir(exist_ok=True, parents=True)
-        result = RecordCollection()
+        result: RecordCollection[FileRecord] = RecordCollection()
         for filepath, rec in iterate_symlinks(collection, dest):
             assert isinstance(rec, FileRecord)
             generated = isinstance(rec, SupportsGenerated) and rec.generated
