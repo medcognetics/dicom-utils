@@ -478,6 +478,7 @@ class RecordCollection(Generic[R]):
         self: C, func: Callable[[R], T], *funcs: Callable[[R], T]
     ) -> Union[Dict[T, C], Dict[Tuple[T, ...], C]]:
         result: Dict[T, C] = {}
+        funcs = (func, *funcs)
         for record in self.records:
             key = tuple(f(record) for f in funcs)
             if len(funcs) == 1:

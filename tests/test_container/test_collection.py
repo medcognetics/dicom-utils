@@ -308,3 +308,16 @@ class TestRecordCollection:
         result = repr(RecordCollection())
         expected_start = "RecordCollection(length=0, types={}, parent=None"
         assert result.startswith(expected_start)
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            lambda rec: rec.StudyInstanceUID,
+            lambda rec: (rec.StudyInstanceUID, rec.SOPInstanceUID),
+        ],
+    )
+    def test_group_by(self, collection, key):
+        grouped = collection.group_by(key)
+        assert isinstance(grouped, dict)
+        assert all(isinstance(v, RecordCollection) for v in grouped.values())
+        assert all(grouped.keys())
