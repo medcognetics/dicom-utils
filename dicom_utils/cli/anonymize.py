@@ -1,4 +1,5 @@
 import argparse
+import shutil
 from argparse import ArgumentParser
 from pathlib import Path
 from typing import Iterable, List, Optional
@@ -8,16 +9,22 @@ from tqdm_multiprocessing import ConcurrentMapper
 
 from ..anonymize import anonymize
 from ..container import iterate_input_path
+from ..dicom import has_dicm_prefix
 
 
 def _anonymize(path: Path, output: Path, root: Optional[Path]) -> Path:
     if not path.is_file():
         raise FileNotFoundError(path)  # pragma: no cover
 
-    with pydicom.dcmread(path) as dcm:
-        anonymize(dcm)
-        dest_path = output / (path.relative_to(root) if root is not None else path.name)
-        dcm.save_as(dest_path)
+    dest_path = output / (path.relative_to(root) if root is not None else path.name)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() == ".dcm" or has_dicm_prefix(path):
+        with pydicom.dcmread(path) as dcm:
+            anonymize(dcm)
+            dcm.save_as(dest_path)
+    else:
+        shutil.copy(path, dest_path)
+
     return dest_path
 
 
