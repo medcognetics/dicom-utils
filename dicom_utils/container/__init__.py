@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from .collection import FILTER_REGISTRY, RecordCollection, RecordCreator, RecordFilter, record_iterator
+from .collection import (
+    FILTER_REGISTRY,
+    RecordCollection,
+    RecordCreator,
+    RecordFilter,
+    iterate_input_path,
+    record_iterator,
+)
 from .helpers import SOPUID, ImageUID, SeriesUID, StudyUID, TransferSyntaxUID
 from .protocols import (
     SupportsDataSetInfo,
@@ -52,4 +59,5 @@ __all__ = [
     "SupportsStudyID",
     "SupportsSite",
     "SupportsDataSetInfo",
+    "iterate_input_path",
 ]
