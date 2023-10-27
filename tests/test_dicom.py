@@ -30,19 +30,19 @@ class TestReadDicomImage:
         assert array.shape[2] == 128, "width dim size == 128"
 
     def test_array_dtype(self, dicom_object):
-        array = read_dicom_image(dicom_object)
+        array = read_dicom_image(dicom_object, rescale=False)
         assert isinstance(array, np.ndarray)
         assert array.dtype == np.int16
 
     def test_min_max_values(self, dicom_object):
-        array = read_dicom_image(dicom_object)
+        array = read_dicom_image(dicom_object, rescale=False)
         assert isinstance(array, np.ndarray)
         assert array.min() == 128, "min pixel value 128"
         assert array.max() == 2191, "max pixel value 2191"
 
     def test_invalid_TransferSyntaxUID_loose_interpretation(self, dicom_object):
         dicom_object.file_meta.TransferSyntaxUID = "1.2.840.10008.1.2.4.90"  # Assign random invalid TransferSyntaxUID
-        array = read_dicom_image(dicom_object, use_nvjpeg=False)
+        array = read_dicom_image(dicom_object, use_nvjpeg=False, rescale=False)
         assert isinstance(array, np.ndarray)
         assert array.min() == 128, "min pixel value 128"
         assert array.max() == 2191, "max pixel value 2191"
