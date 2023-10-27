@@ -12,6 +12,7 @@ import pydicom
 from numpy import ndarray
 from pydicom import DataElement, FileDataset
 from pydicom.encaps import encapsulate
+from pydicom.pixel_data_handlers import apply_rescale
 from pydicom.pixel_data_handlers.util import apply_voi_lut
 from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian, JPEG2000TransferSyntaxes
 from registry import bind_relevant_kwargs
@@ -113,7 +114,7 @@ def convert_frame_voi_lut(dcm: Dicom) -> Dicom:
     return dcm
 
 
-def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], voi_lut: bool = True) -> ndarray:
+def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], voi_lut: bool = True, rescale: bool = True) -> ndarray:
     """
     Interpret pixel data according to the TransferSyntaxUID stored in the DICOM dataset object.
 
@@ -124,12 +125,15 @@ def strict_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], voi_lut: bool = True
             Tuple containing expected image shape
         voi_lut:
             Whether to apply VOI LUT transformation
+        rescale:
+            Whether to apply rescaling given in metadata
 
     Returns:
         Numpy ndarray of pixel data
     """
     try:
         pixels = apply_voi_lut(dcm.pixel_array, dcm) if voi_lut else dcm.pixel_array
+        pixels = apply_rescale(pixels, dcm) if rescale else pixels
     except Exception:
         pixels = dcm.pixel_array
     return pixels.reshape(dims)
@@ -204,6 +208,7 @@ def read_dicom_image(
     nvjpeg_batch_size: Optional[int] = None,
     voi_lut: bool = True,
     inversion: bool = True,
+    rescale: bool = True,
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -229,6 +234,8 @@ def read_dicom_image(
             Whether to apply VOI LUT transformation
         inversion:
             Whether to apply correction for pixel value inversion
+        rescale:
+            Whether to apply rescaling given in metadata
 
     Shape:
         - Output: :math:`(C, H, W)` or :math:`(C, D, H, W)`
@@ -300,7 +307,7 @@ def read_dicom_image(
 
     # DICOM is channels last, so permute dims
     channels_last_dims = *dims[1:], dims[0]
-    pixels = dcm_to_pixels(dcm, channels_last_dims, strict_interp, voi_lut=voi_lut)
+    pixels = dcm_to_pixels(dcm, channels_last_dims, strict_interp, voi_lut=voi_lut, rescale=rescale)
     pixels = np.moveaxis(pixels, -1, 0)
     assert tuple(pixels.shape) == dims
 
