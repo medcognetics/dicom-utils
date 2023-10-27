@@ -246,6 +246,16 @@ class TestReadDicomImage:
         assert (array1 != array2).any()
         assert spy.call_count == 1
 
+    def test_rescale_control(self, mocker, dicom_object):
+        np.random.seed(42)
+        spy = mocker.spy(dicom_utils.dicom, "apply_rescale")
+        dicom_object.RescaleIntercept = 1
+        dicom_object.RescaleSlope = 2
+        array1 = read_dicom_image(dicom_object, rescale=True)
+        array2 = read_dicom_image(dicom_object, rescale=False)
+        assert (array1 != array2).any()
+        assert spy.call_count == 1
+
 
 @pytest.mark.ci_skip  # CircleCI will not have a GPU
 @pytest.mark.usefixtures("pynvjpeg")
