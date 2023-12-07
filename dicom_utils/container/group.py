@@ -7,7 +7,7 @@ import warnings
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, Hashable, Iterator, Optional, Sequence, Tuple, TypeVar, cast
+from typing import Callable, Dict, Final, Hashable, Iterator, Optional, Sequence, Tuple, TypeVar, cast
 
 from registry import Registry
 from tqdm_multiprocessing import ConcurrentMapper
@@ -27,6 +27,8 @@ GroupFunction = Callable[[FileRecord], Hashable]
 GROUP_REGISTRY = Registry("group", bound=Callable[..., Hashable])
 Key = Tuple[Hashable, ...]
 GroupDict = Dict[Key, RecordCollection]
+COMPLETE_COLLECTION_INDEX: Final[int] = 0
+FIRST_GROUP_INDEX: Final[int] = 1
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +97,7 @@ class Grouper:
 
         with ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize, timeout=self.timeout) as mapper:
             # Apply helpers at the entire collection level
-            collection = apply_helpers(collection, self._helper_fns, index=0)
+            collection = apply_helpers(collection, self._helper_fns, index=COMPLETE_COLLECTION_INDEX)
 
             for i, group_fn in list(enumerate(self._group_fns)):
                 # run the group function
