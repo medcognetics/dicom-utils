@@ -94,6 +94,9 @@ class Grouper:
         result: Dict[Key, RecordCollection] = {tuple(): collection}
 
         with ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize, timeout=self.timeout) as mapper:
+            # Apply helpers at the entire collection level
+            collection = apply_helpers(collection, self._helper_fns, index=0)
+
             for i, group_fn in list(enumerate(self._group_fns)):
                 # run the group function
                 total = sum(len(v) for v in result.values())
@@ -120,7 +123,7 @@ class Grouper:
                     leave=True,
                     total=len(result),
                 )
-                mapped = mapper(self._apply_helpers, list(result.items()), index=i)
+                mapped = mapper(self._apply_helpers, list(result.items()), index=i + 1)
                 result = {k: v for k, v in mapped}
                 mapper.close_bar()
 
