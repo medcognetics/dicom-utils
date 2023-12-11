@@ -6,7 +6,7 @@ groups = ["default", "j2k", "quality", "test"]
 cross_platform = true
 static_urls = false
 lock_version = "4.3"
-content_hash = "sha256:44adf50f653999c749f8546bec959a2aba31417b4cf12de24b505d573bcdf819"
+content_hash = "sha256:89c7105284af5d30d6479ad53b6d3db804a8386c0123f463b281ce7485a9e789"
 
 [[package]]
 name = "annotated-types"
@@ -401,8 +401,8 @@ name = "dicom-anonymizer"
 version = "1.0.7"
 requires_python = ">=3.8"
 git = "https://github.com/medcognetics/dicom-anonymizer.git"
-ref = "v1.0.7-fork"
-revision = "d9feb4fcccbe3be080ee5c3d263631db6c3d2ea7"
+ref = "fix/setuptools"
+revision = "dd35bdb128c854e4a2088b7b8f4d89bbbe2360d1"
 summary = "Program to anonymize dicom files with default and custom rules"
 dependencies = [
     "pydicom",
