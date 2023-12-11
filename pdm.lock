@@ -402,10 +402,11 @@ version = "1.0.7"
 requires_python = ">=3.8"
 git = "https://github.com/medcognetics/dicom-anonymizer.git"
 ref = "fix/setuptools"
-revision = "dd35bdb128c854e4a2088b7b8f4d89bbbe2360d1"
+revision = "e85207d7c5934a5dc0bac20b41ec20c933cd346d"
 summary = "Program to anonymize dicom files with default and custom rules"
 dependencies = [
     "pydicom",
+    "setuptools>=69.0.2",
     "tqdm",
 ]
 
