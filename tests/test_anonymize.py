@@ -1,19 +1,10 @@
 import copy
-from typing import Final
 
 import pydicom
 import pytest
 
 from dicom_utils.anonymize import *
 from dicom_utils.private import MEDCOG_ADDR, MEDCOG_NAME, PRIVATE_ELEMENTS_DESCRIPTION
-
-
-num_dicom_test_files: Final[int] = 3
-
-
-@pytest.fixture(params=pydicom.data.get_testdata_files("*rgb*.dcm")[:num_dicom_test_files])  # type: ignore
-def test_dicom(request) -> Dataset:
-    return pydicom.dcmread(request.param)
 
 
 @pytest.mark.parametrize(

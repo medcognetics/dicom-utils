@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 from copy import deepcopy
 from pathlib import Path
+from typing import Final
 
 import numpy as np
 import pydicom
 import pytest
 from pydicom.data import get_testdata_file
-from pydicom.dataset import FileMetaDataset
+from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.encaps import encapsulate
 from pydicom.uid import (
     UID,
@@ -117,3 +118,11 @@ def dicom_object_3d(dicom_object):
 )
 def transfer_syntax(request):
     return request.param
+
+
+num_dicom_test_files: Final[int] = 3
+
+
+@pytest.fixture(params=pydicom.data.get_testdata_files("*rgb*.dcm")[:num_dicom_test_files])  # type: ignore
+def test_dicom(request) -> Dataset:
+    return pydicom.dcmread(request.param)

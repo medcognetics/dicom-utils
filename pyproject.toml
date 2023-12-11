@@ -45,7 +45,7 @@ in-place = true
 
 [tool.black]
 line-length = 120
-target-version = ['py37']
+target-version = ['py311']
 
 [tool.isort]
 ensure_newline_before_comments = true
@@ -57,6 +57,14 @@ multi_line_output = 3
 use_parentheses = false
 
 [tool.pyright]
+include = ["dicom_utils", "tests"]
+exclude = [
+  "**/node_modules",
+  "**/__pycache__",
+  "dicom_utils/_tag_enum.py",
+  "**/*.dcm",
+]
+pythonVersion = "3.11"
 
 [tool.pdm]
 version = { source = "scm" }

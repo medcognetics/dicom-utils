@@ -80,7 +80,7 @@ test-ci: ## runs CI-only tests
 		./tests/
 
 types: node_modules
-	pdm run npx --no-install pyright tests $(PROJECT)
+	pdm run npx --no-install pyright
 
 reset:
 	$(MAKE) clean
