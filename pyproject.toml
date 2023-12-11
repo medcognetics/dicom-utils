@@ -19,7 +19,6 @@ dependencies = [
   "pylibjpeg",
   "pylibjpeg-libjpeg",
   "pylibjpeg-openjpeg",
-  "setuptools",
   "dicom-anonymizer @ git+https://github.com/medcognetics/dicom-anonymizer.git@v1.0.7-fork",
   "registry @ git+https://github.com/TidalPaladin/callable-registry.git",
   "tqdm_multiprocessing @ git+https://github.com/TidalPaladin/tqdm-multiprocessing.git",
