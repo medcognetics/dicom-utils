@@ -31,6 +31,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 j2k = ["pynvjpeg2k @ git+ssh://git@github.com/medcognetics/pynvjpeg2k.git"]
+anonymize = ["dicom-anonymizer @ git+https://github.com/medcognetics/dicom-anonymizer.git@v1.0.7-fork"]
 
 [tool.autoflake]
 remove-all-unused-imports = true

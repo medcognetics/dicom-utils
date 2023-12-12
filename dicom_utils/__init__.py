@@ -8,7 +8,6 @@ import os
 import warnings
 from typing import Final, Iterable, Literal, cast
 
-from .anonymize import anonymize
 from .dicom import NoImageError, read_dicom_image
 from .dicom_factory import DicomFactory
 from .metadata import add_patient_age, dicom_to_json, drop_fields_by_length, get_date
@@ -56,7 +55,6 @@ if os.environ.get(SILENCE_ENV_VAR, "") == "1":
 __all__ = [
     "__version__",
     "add_patient_age",
-    "anonymize",
     "dicom_to_json",
     "DicomFactory",
     "drop_fields_by_length",
