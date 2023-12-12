@@ -93,12 +93,13 @@ class Grouper:
 
     def __call__(self, collection: RecordCollection) -> Dict[Hashable, RecordCollection]:
         start_len = len(collection)
+
+        # Apply helpers at the entire collection level
+        collection = apply_helpers(collection, self._helper_fns, index=COMPLETE_COLLECTION_INDEX)
+
         result: Dict[Key, RecordCollection] = {tuple(): collection}
 
         with ConcurrentMapper(self.threads, self.jobs, chunksize=self.chunksize, timeout=self.timeout) as mapper:
-            # Apply helpers at the entire collection level
-            collection = apply_helpers(collection, self._helper_fns, index=COMPLETE_COLLECTION_INDEX)
-
             for i, group_fn in list(enumerate(self._group_fns)):
                 # run the group function
                 total = sum(len(v) for v in result.values())
