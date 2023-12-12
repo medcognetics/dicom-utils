@@ -1,11 +1,16 @@
 import re
 from typing import Any, Callable, Dict, Final, Optional, TypeVar
 
-from dicomanonymizer import anonymize_dataset
 from pydicom import Dataset
 
 from .private import MEDCOG_NAME, get_medcog_block, get_medcog_elements, store_medcog_elements
 from .tags import Tag
+
+
+try:
+    from dicomanonymizer import anonymize_dataset
+except ImportError as ex:
+    raise ImportError("dicomanonymizer is not installed. " "Please install it using the 'anonymize' extra.") from ex
 
 
 T = TypeVar("T")
