@@ -44,6 +44,9 @@ class TestDicomFactory:
         arr = DicomFactory.pixel_array_from_dicom(factory.dicom)
         assert isinstance(arr, np.ndarray)
         assert arr.shape == (128, 128)
+        # Should be deterministic for a given seed
+        assert arr.min() == 9
+        assert arr.max() == 65523
 
     @pytest.mark.parametrize("meaning", ["foo", "bar"])
     def test_code_sequence(self, meaning):

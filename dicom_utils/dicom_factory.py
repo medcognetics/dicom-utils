@@ -67,7 +67,7 @@ class BaseFactory(ABC):
         seed: int = 42,
     ) -> np.ndarray:
         low = 0
-        high = BitsAllocated
+        high = 2**BitsAllocated - 1
         channels = 1 if PhotometricInterpretation.startswith("MONOCHROME") else 3
         size = tuple(x for x in (channels, NumberOfFrames, Rows, Columns) if x > 1)
         rng = default_rng(seed)
