@@ -146,6 +146,7 @@ class DicomFactory(BaseFactory):
     Keyword Args:
         Tag value overrides
     """
+
     dicom: FileDataset
 
     def __init__(
@@ -174,8 +175,7 @@ class DicomFactory(BaseFactory):
         else:
             raise TypeError(f"`proto` should be PathLike or FileDataset, found {type(proto)}")
 
-    def __add__(self: T, other: T) -> T:
-        ...
+    def __add__(self: T, other: T) -> T: ...
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.path})"

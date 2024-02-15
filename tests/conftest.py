@@ -120,9 +120,9 @@ def transfer_syntax(request):
     return request.param
 
 
-num_dicom_test_files: Final[int] = 3
+NUM_DICOM_TEST_FILES: Final[int] = 3
 
 
-@pytest.fixture(params=pydicom.data.get_testdata_files("*rgb*.dcm")[:num_dicom_test_files])  # type: ignore
+@pytest.fixture(params=pydicom.data.get_testdata_files("*rgb*.dcm")[:NUM_DICOM_TEST_FILES])  # type: ignore
 def test_dicom(request) -> Dataset:
     return pydicom.dcmread(request.param)

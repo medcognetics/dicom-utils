@@ -467,12 +467,10 @@ class RecordCollection(Generic[R]):
         return any(isinstance(rec, dtype) for rec in self)
 
     @overload
-    def group_by(self: C, func: Callable[[R], T]) -> Dict[T, C]:
-        ...
+    def group_by(self: C, func: Callable[[R], T]) -> Dict[T, C]: ...
 
     @overload
-    def group_by(self: C, func: Callable[[R], T], *funcs: Callable[[R], T]) -> Dict[Tuple[T, ...], C]:
-        ...
+    def group_by(self: C, func: Callable[[R], T], *funcs: Callable[[R], T]) -> Dict[Tuple[T, ...], C]: ...
 
     def group_by(
         self: C, func: Callable[[R], T], *funcs: Callable[[R], T]

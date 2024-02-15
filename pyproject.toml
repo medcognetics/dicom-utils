@@ -23,7 +23,7 @@ dependencies = [
   "registry @ git+https://github.com/TidalPaladin/callable-registry.git",
   "tqdm_multiprocessing @ git+https://github.com/TidalPaladin/tqdm-multiprocessing.git",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 readme = "README.md"
 license = { text = "Apache" }
 dynamic = ["version"]
