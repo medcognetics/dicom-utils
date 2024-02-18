@@ -106,6 +106,7 @@ class MammogramType(EnumMixin):
 
     Supports the following ordering: ``TOMO < FFDM < SYNTH < SFM < UNKNOWN``
     """
+
     UNKNOWN = 0
     TOMO = 1
     FFDM = 2
@@ -289,6 +290,7 @@ class PhotometricInterpretation(Enum):
 
         https://dicom.innolitics.com/ciods/rt-dose/image-pixel/00280004
     """
+
     UNKNOWN = 0
     MONOCHROME1 = 1
     MONOCHROME2 = 2
@@ -472,9 +474,7 @@ class Laterality(EnumMixin):
             return (
                 Laterality.BILATERAL
                 if self.is_unilateral and other.is_unilateral and self != other
-                else self
-                if self.is_unilateral
-                else other
+                else self if self.is_unilateral else other
             )
 
         # only remaining possibility
@@ -659,6 +659,7 @@ PIXEL_SPACING_RE = re.compile(rf"({FLOAT_PATTERN})[^\d.]+({FLOAT_PATTERN})")
 @dataclass(frozen=True)
 class PixelSpacing:
     r"""Represents detector pixel spacing in mm."""
+
     row: float
     col: float
 

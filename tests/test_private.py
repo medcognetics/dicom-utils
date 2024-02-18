@@ -4,11 +4,6 @@ from typing import Final
 import pydicom
 import pytest
 
-from tests.test_anonymize import test_dicom
-
-
-test_dicom = test_dicom
-
 from dicom_utils.private import (
     MEDCOG_ADDR,
     MEDCOG_NAME,

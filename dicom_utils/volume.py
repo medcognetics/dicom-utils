@@ -30,8 +30,7 @@ from registry import Registry
 
 
 class SupportsGetItem(Protocol):
-    def __getitem__(self, key: Any) -> Any:
-        ...
+    def __getitem__(self, key: Any) -> Any: ...
 
 
 T = TypeVar("T", bound=SupportsGetItem)
@@ -56,16 +55,13 @@ class VolumeHandler(ABC):
     r"""Base class for classes that manipulate 3D Volumes"""
 
     @abstractmethod
-    def get_indices(self, total_frames: Optional[int]) -> Tuple[int, int, int]:
-        ...
+    def get_indices(self, total_frames: Optional[int]) -> Tuple[int, int, int]: ...
 
     @overload
-    def __call__(self, x: T) -> T:
-        ...
+    def __call__(self, x: T) -> T: ...
 
     @overload
-    def __call__(self, x: U) -> U:
-        ...
+    def __call__(self, x: U) -> U: ...
 
     def __call__(self, x: Union[T, U]) -> Union[T, U]:
         if isinstance(x, Dataset):

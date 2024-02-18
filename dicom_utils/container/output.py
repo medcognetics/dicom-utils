@@ -195,8 +195,9 @@ class Output(ABC):
         return list(written)
 
     @abstractmethod
-    def write(self, key: Tuple[str, ...], name: str, collection: RecordCollection, dest: Path) -> Iterator[WriteResult]:
-        ...
+    def write(
+        self, key: Tuple[str, ...], name: str, collection: RecordCollection, dest: Path
+    ) -> Iterator[WriteResult]: ...
 
 
 class SymlinkFileOutput(Output):

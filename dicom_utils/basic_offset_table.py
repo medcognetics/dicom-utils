@@ -70,6 +70,7 @@ def restore_pointer(f: Callable[..., T]) -> Callable[..., T]:
 
 class BasicOffsetTable:
     r"""Helper class for manipulating the Basic Offset Table"""
+
     PREFIX: ClassVar[bytes] = b"\xFE\xFF\x00\xE0"
     DELIM: ClassVar[bytes] = b"\xFF\xFE\xE0\xDD"
 

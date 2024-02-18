@@ -344,6 +344,7 @@ class DicomFileRecord(
     File IO operations on DICOMs can be expensive, so this class collects all
     required information in a single pass to avoid repeated file opening.
     """
+
     StudyInstanceUID: Optional[StudyUID] = None
     SeriesInstanceUID: Optional[SeriesUID] = None
     SOPInstanceUID: Optional[SOPUID] = None
@@ -592,6 +593,7 @@ class DicomImageFileRecord(DicomFileRecord):
     File IO operations on DICOMs can be expensive, so this class collects all
     required information in a single pass to avoid repeated file opening.
     """
+
     TransferSyntaxUID: Optional[TSUID] = None
 
     Rows: Optional[int] = None
@@ -750,6 +752,7 @@ class MammogramFileRecord(DicomImageFileRecord):
     File IO operations on DICOMs can be expensive, so this class collects all
     required information in a single pass to avoid repeated file opening.
     """
+
     mammogram_type: MammogramType = MammogramType.UNKNOWN
     view_position: ViewPosition = ViewPosition.UNKNOWN
     laterality: Laterality = Laterality.UNKNOWN
@@ -1275,6 +1278,7 @@ class ModalityHelper(RecordHelper):
     r"""Helper to correct the modality of DICOM object. Some mammograms have a modality other than MG,
     which results in a record other than :class:`MammogramFileRecord` being used.
     """
+
     force: bool = False
 
     def on_read(self, f: T, record_type: Type[FileRecord]) -> T:
