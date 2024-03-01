@@ -135,7 +135,6 @@ node_modules/
 coverage.xml
 .coverage
 
-dicom_utils/version.py
 tmp
 **/*.orig
 .pdm-python

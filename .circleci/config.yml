@@ -56,6 +56,11 @@ jobs:
                 command: make types
             - codecov/upload:
                 file: coverage.xml
+            - when:
+                condition:
+                    equal: [ master, << pipeline.git.branch >> ]
+                steps:
+                    - run: make pypi
 
 
 workflow_filters: &workflow_filters
