@@ -65,12 +65,17 @@ exclude = [
 ]
 pythonVersion = "3.11"
 
-[tool.pdm]
-version = { source = "scm" }
+[tool.pdm.version]
+source = "file"
+path = "dicom_utils/version.py"
+
+[tool.pdm.scripts]
+pre_install = "util/create_version_file.py"
 
 [tool.pdm.dev-dependencies]
 test = ["pytest", "pytest-mock", "pytest-cov", "coverage", "pdbpp"]
 quality = ["autoflake", "autopep8", "black", "flake8", "isort"]
+dist = ["build", "twine"]
 
 [tool.pytest.ini_options]
 markers = ["ci_skip"]
