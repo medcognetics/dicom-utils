@@ -10,7 +10,9 @@ authors = [
   { name = "Tim Cogan", email = "tim@medcognetics.com" },
 ]
 dependencies = [
+  "callable-registry",
   "colorama",
+  "dicom-anon",
   "matplotlib",
   "numpy",
   "opencv-python",
@@ -19,9 +21,7 @@ dependencies = [
   "pylibjpeg",
   "pylibjpeg-libjpeg",
   "pylibjpeg-openjpeg",
-  "dicom-anonymizer @ git+https://github.com/medcognetics/dicom-anonymizer.git@v1.0.7-fork",
-  "registry @ git+https://github.com/TidalPaladin/callable-registry.git",
-  "tqdm_multiprocessing @ git+https://github.com/TidalPaladin/tqdm-multiprocessing.git",
+  "tqdm-multiprocessing",
 ]
 requires-python = ">=3.9"
 readme = "README.md"
@@ -29,7 +29,7 @@ license = { text = "Apache" }
 dynamic = ["version"]
 
 [project.optional-dependencies]
-j2k = ["pynvjpeg2k @ git+ssh://git@github.com/medcognetics/pynvjpeg2k.git"]
+j2k = ["pynvjpeg2k"]
 
 [tool.autoflake]
 remove-all-unused-imports = true

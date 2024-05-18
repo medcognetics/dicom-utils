@@ -38,6 +38,12 @@ jobs:
                 keys:
                   - v1-dependencies-{{ checksum "pdm.lock" }}
             - run:
+                name: Install pdm
+                command: pip install --user pdm
+            - run:
+                name: Prevent alpha number from being added to version string
+                command: make decrement_version
+            - run:
                 name: Install dependencies
                 command: make init
             - save_cache:
