@@ -1,8 +1,8 @@
 .PHONY: clean clean-env check quality style tag-version test env upload upload-test
 
 PROJECT=dicom_utils
-QUALITY_DIRS=$(PROJECT) tests
-CLEAN_DIRS=$(PROJECT) tests
+QUALITY_DIRS=$(PROJECT) tests util
+CLEAN_DIRS=$(PROJECT) tests util
 PYTHON=pdm run python
 
 CONFIG_FILE := config.mk
@@ -23,6 +23,7 @@ clean: ## remove cache files
 	find $(CLEAN_DIRS) -name '*.pyc' -type f -delete
 	find $(CLEAN_DIRS) -name '*,cover' -type f -delete
 	find $(CLEAN_DIRS) -name '*.orig' -type f -delete
+	rm -rf dist
 
 clean-env: ## remove the virtual environment directory
 	pdm venv remove -y $(PROJECT)
@@ -33,6 +34,8 @@ deploy: ## installs from lockfile
 	pdm venv create -n $(PROJECT)-deploy
 	pdm install --production --no-lock
 
+decrement_version:
+	$(PYTHON) util/create_version_file.py --decrement
 
 init: ## pulls submodules and initializes virtual environment
 	git submodule update --init --recursive
