@@ -23,7 +23,8 @@ dependencies = [
   "pylibjpeg-openjpeg",
   "tqdm-multiprocessing",
 ]
-requires-python = ">=3.9"
+# Pinned <3.12 due to breaking changes in Path (StandardizedFilename)
+requires-python = ">=3.9,<3.12"
 readme = "README.md"
 license = { text = "Apache" }
 dynamic = ["version"]

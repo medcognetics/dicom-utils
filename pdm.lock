@@ -5,7 +5,7 @@
 groups = ["default", "dist", "quality", "test"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:8326e694f2b6d92af5120ab34b8f51933f7a58f0fe0ccf9675316587d1116b58"
+content_hash = "sha256:336a66425f3b589fd678110a7c63fcaa2316ec62fbbde9a2ab31665d2123b6c5"
 
 [[package]]
 name = "attrs"
@@ -1036,7 +1036,6 @@ dependencies = [
     "numpy>=1.21.2; python_version >= \"3.10\"",
     "numpy>=1.21.4; python_version >= \"3.10\" and platform_system == \"Darwin\"",
     "numpy>=1.23.5; python_version >= \"3.11\"",
-    "numpy>=1.26.0; python_version >= \"3.12\"",
 ]
 files = [
     {file = "opencv-python-4.9.0.80.tar.gz", hash = "sha256:1a9f0e6267de3a1a1db0c54213d022c7c8b5b9ca4b580e80bdc58516c922c9e1"},
