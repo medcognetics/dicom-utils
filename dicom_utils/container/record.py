@@ -595,6 +595,7 @@ class DicomImageFileRecord(DicomFileRecord):
     """
 
     TransferSyntaxUID: Optional[TSUID] = None
+    FrameOfReferenceUID: Optional[str] = None
 
     Rows: Optional[int] = None
     Columns: Optional[int] = None
@@ -1237,8 +1238,8 @@ class ParsePatientOrientation(RecordHelper):
 
 # register helpers with some typical values for `level`
 for i in range(LEVELS_TO_REGISTER := 3):
-    HELPER_REGISTRY(partial(PatientIDFromPath, level=i + 1), name=f"patient-id-from-path-{i+1}")
-    HELPER_REGISTRY(partial(StudyDateFromPath, level=i + 1), name=f"study-date-from-path-{i+1}")
+    HELPER_REGISTRY(partial(PatientIDFromPath, level=i + 1), name=f"patient-id-from-path-{i + 1}")
+    HELPER_REGISTRY(partial(StudyDateFromPath, level=i + 1), name=f"study-date-from-path-{i + 1}")
 
 
 @dataclass

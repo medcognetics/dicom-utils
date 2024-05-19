@@ -301,8 +301,8 @@ class CompleteMammographyStudyFactory(ConcatFactory):
                 "ViewPosition": view,
                 "BreastImplantPresent": "YES" if implant else "NO",
                 "ViewModifierCodeSequence": codes,
-                "SOPInstanceUID": f"sop-{self.random_uid(seed=seed+i)}-{i}",
-                "SeriesInstanceUID": f"series-{self.random_uid(seed=seed+i)}-{i}",
+                "SOPInstanceUID": f"sop-{self.random_uid(seed=seed + i)}-{i}",
+                "SeriesInstanceUID": f"series-{self.random_uid(seed=seed + i)}-{i}",
             }
             factory = cast(Type[DicomFactory], FACTORY_REGISTRY.get(mtype))(
                 proto=proto,
