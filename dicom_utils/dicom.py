@@ -12,8 +12,7 @@ import pydicom
 from numpy import ndarray
 from pydicom import DataElement, FileDataset
 from pydicom.encaps import encapsulate
-from pydicom.pixel_data_handlers import apply_rescale
-from pydicom.pixel_data_handlers.util import apply_voi_lut
+from pydicom.pixels.processing import apply_rescale, apply_voi_lut
 from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian, JPEG2000TransferSyntaxes
 from registry import bind_relevant_kwargs
 
@@ -313,12 +312,13 @@ def read_dicom_image(
 
     # some dicoms have different endianness - convert to native byte order
     if not is_native_byteorder(pixels):
-        pixels = pixels.byteswap().newbyteorder()
+        pixels = pixels.byteswap()
+        pixels = pixels.view(pixels.dtype.newbyteorder("="))
     assert is_native_byteorder(pixels)
 
     # numpy byte order needs to explicitly be native "=" for torch conversion
     if pixels.dtype.byteorder != "=":
-        pixels = pixels.newbyteorder("=")
+        pixels = pixels.view(pixels.dtype.newbyteorder("="))
 
     # in some dicoms, pixel value of 0 indicates white
     if pm.is_inverted and inversion:

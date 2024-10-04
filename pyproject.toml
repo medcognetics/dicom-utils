@@ -10,20 +10,20 @@ authors = [
   { name = "Tim Cogan", email = "tim@medcognetics.com" },
 ]
 dependencies = [
-  "callable-registry",
-  "colorama",
-  "dicom-anon",
-  "matplotlib",
-  "numpy",
-  "opencv-python",
-  "Pillow",
-  "pydicom",
-  "pylibjpeg",
-  "pylibjpeg-libjpeg",
-  "pylibjpeg-openjpeg",
-  "tqdm-multiprocessing",
+    "callable-registry",
+    "colorama",
+    "dicom-anon",
+    "matplotlib",
+    "numpy",
+    "opencv-python",
+    "Pillow",
+    "pydicom",
+    "pylibjpeg",
+    "pylibjpeg-openjpeg",
+    "tqdm-multiprocessing",
+    "python-gdcm>=3.0.10",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10,<3.12"
 readme = "README.md"
 license = { text = "Apache" }
 dynamic = ["version"]
@@ -83,6 +83,7 @@ filterwarnings = [
   "ignore:.*Invalid value for VR.*:UserWarning",
   "ignore:.*in the dataset does not match the component precision.*:UserWarning",
   "ignore:.*doesn't match the JPEG 2000 data.*:UserWarning",
+  "ignore:.*The number of bytes of compressed pixel data matches the expected number for uncompressed data.*:UserWarning",
 ]
 
 [project.scripts]

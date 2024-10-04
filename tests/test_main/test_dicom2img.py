@@ -51,9 +51,8 @@ def dicom_annotation_file(tmpdir, dicom_image_file) -> None:
     ds.Modality = "PR"
     ds.GraphicAnnotationSequence = create_graphic_annotation_sequence(pydicom.dcmread(dicom_image_file))
     ds.file_meta = FileMetaDataset()
-    ds.is_implicit_VR = False
-    ds.is_little_endian = True
-    ds.save_as(tmpdir / "annotation.dcm", write_like_original=False)
+    ds.file_meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian  # type: ignore
+    ds.save_as(tmpdir / "annotation.dcm", enforce_file_format=False)
 
 
 @pytest.mark.parametrize("out", [None, "foo.png"])

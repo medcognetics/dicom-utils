@@ -22,9 +22,9 @@ from typing import (
 
 import numpy as np
 from pydicom import Dataset
-from pydicom.encaps import encapsulate, generate_pixel_data_frame
+from pydicom.encaps import encapsulate, generate_frames
 from pydicom.pixel_data_handlers import numpy_handler
-from pydicom.pixel_data_handlers.util import reshape_pixel_array
+from pydicom.pixels.utils import reshape_pixel_array
 from pydicom.uid import ImplicitVRLittleEndian
 from registry import Registry
 
@@ -86,7 +86,7 @@ class VolumeHandler(ABC):
         num_frames: Optional[SupportsInt] = dcm.get("NumberOfFrames", None)
         num_frames = int(num_frames) if num_frames is not None else None
         if is_compressed:
-            for frame in generate_pixel_data_frame(dcm.PixelData, num_frames):
+            for frame in generate_frames(dcm.PixelData, number_of_frames=num_frames):
                 yield frame
         else:
             # manually call the numpy handler so we can read the full array as read only.

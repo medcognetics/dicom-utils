@@ -6,8 +6,10 @@ import time
 
 import numpy as np
 import pydicom
+import pydicom.uid as puid
 import pytest
 from numpy.random import default_rng
+from pydicom.pixels.decoders.base import get_decoder
 from pydicom.uid import ImplicitVRLittleEndian, RLELossless
 
 import dicom_utils
@@ -21,6 +23,18 @@ def pynvjpeg():
 
 
 class TestReadDicomImage:
+    @pytest.mark.parametrize(
+        "tsuid",
+        [
+            puid.ExplicitVRLittleEndian,
+            puid.ImplicitVRLittleEndian,
+            puid.JPEG2000Lossless,
+            *puid.JPEGLSTransferSyntaxes,
+        ],
+    )
+    def test_decoder(self, tsuid):
+        assert get_decoder(tsuid) is not None
+
     def test_shape(self, dicom_object):
         array = read_dicom_image(dicom_object)
         assert isinstance(array, np.ndarray)
