@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import typing
 from abc import ABC, abstractmethod
 from copy import copy, deepcopy
 from functools import partial
@@ -16,6 +15,7 @@ import pydicom
 from numpy.random import default_rng
 from pydicom import DataElement, Dataset, FileDataset, Sequence
 from pydicom.data import get_testdata_file
+from pydicom.datadict import dictionary_VR, keyword_dict
 from pydicom.valuerep import VR
 from registry import Registry
 
@@ -99,20 +99,8 @@ class BaseFactory(ABC):
     @classmethod
     def suggest_vr(cls, tag: Tag, value: Any) -> VR:
         name = tag.name
-        if name.endswith("PixelSpacing"):
-            return VR("DS")
-        elif isinstance(value, typing.Sequence) and not isinstance(value, str):
-            return VR("SQ")
-        elif isinstance(value, int):
-            return VR("UL")
-        elif name.endswith("UID"):
-            return VR("UI")
-        elif name.endswith("Age"):
-            return VR("AS")
-        elif name.endswith("Date"):
-            return VR("DA")
-        elif name.endswith("Time"):
-            return VR("TM")
+        if name in keyword_dict:
+            return VR(dictionary_VR(keyword_dict[name]))
         return VR("ST")
 
     @classmethod

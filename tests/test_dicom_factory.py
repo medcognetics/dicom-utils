@@ -1,13 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from pathlib import Path
+
 import numpy as np
+import pydicom
 import pytest
 from pydicom import Dataset, Sequence
+from pydicom.uid import ExplicitVRLittleEndian, ImplicitVRLittleEndian, RLELossless
 from pydicom.valuerep import VR
 
 from dicom_utils import DicomFactory
-from dicom_utils.dicom_factory import FACTORY_REGISTRY
+from dicom_utils.dicom import set_pixels
+from dicom_utils.dicom_factory import FACTORY_REGISTRY, CompleteMammographyStudyFactory
 from dicom_utils.tags import Tag
 from dicom_utils.types import MammogramType
 
@@ -62,7 +67,7 @@ class TestDicomFactory:
             pytest.param(Tag.StudyDate, "00010101", VR("DA")),
             pytest.param(Tag.StudyTime, "010101", VR("TM")),
             pytest.param(Tag.StudyInstanceUID, "1.2.345", VR("UI")),
-            pytest.param(Tag.PhotometricInterpretation, "MONOCHROME1", VR("ST")),
+            pytest.param(Tag.PhotometricInterpretation, "MONOCHROME1", VR("CS")),
             pytest.param(Tag.ViewCodeSequence, [Dataset()], VR("SQ")),
         ],
     )
@@ -116,3 +121,60 @@ class TestDicomFactory:
         factory = FACTORY_REGISTRY.get("ffdm")()
         dcm = factory(pixels=False)
         assert not hasattr(dcm, "PixelData")
+
+
+class TestCompleteMammographyStudyFactory:
+
+    @pytest.fixture
+    def dicoms(self):
+        H, W = 64, 32
+        fact = CompleteMammographyStudyFactory(
+            Rows=H,
+            Columns=W,
+            seed=42,
+            BitsAllocated=16,
+            WindowCenter=4096,
+            WindowWidth=8192,
+        )
+        dicoms = fact()
+
+        # Ensure we have a mix of inversions
+        dicoms[0].PhotometricInterpretation = "MONOCHROME1"
+        dicoms[1].PhotometricInterpretation = "MONOCHROME2"
+
+        # Ensure we have a mix of TSUIDs
+        tsuids = (ImplicitVRLittleEndian, ExplicitVRLittleEndian, RLELossless)
+        for dcm, tsuid in zip(dicoms[: len(tsuids)], tsuids):
+            set_pixels(dcm, dcm.pixel_array, tsuid)
+            dcm.file_meta.TransferSyntaxUID = tsuid
+
+        return dicoms
+
+    def test_dicoms(self, dicoms):
+        assert len(dicoms) == 12
+        for dcm in dicoms:
+            assert dcm.Rows == 64
+            assert dcm.Columns == 32
+            assert dcm.BitsAllocated == 16
+            assert dcm.WindowCenter == 4096
+            assert dcm.WindowWidth == 8192
+            assert dcm.NumberOfFrames in (1, 3)
+            assert dcm.pixel_array is not None
+
+    def test_save_load_dicoms(self, tmp_path, dicoms):
+        for dcm in dicoms:
+            dcm: pydicom.FileDataset
+            dest = Path(tmp_path, f"{dcm.SOPInstanceUID}.dcm")
+            dcm.save_as(dest)
+
+        loaded = list(Path(tmp_path).glob("*.dcm"))
+        assert len(loaded) == 12
+        for path in loaded:
+            dcm = pydicom.dcmread(path)
+            assert dcm.Rows == 64
+            assert dcm.Columns == 32
+            assert dcm.BitsAllocated == 16
+            assert dcm.WindowCenter == 4096
+            assert dcm.WindowWidth == 8192
+            assert dcm.NumberOfFrames in (1, 3)
+            assert dcm.pixel_array is not None
