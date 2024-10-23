@@ -71,7 +71,8 @@ class BaseFactory(ABC):
         channels = 1 if PhotometricInterpretation.startswith("MONOCHROME") else 3
         size = tuple(x for x in (channels, NumberOfFrames, Rows, Columns) if x > 1)
         rng = default_rng(seed)
-        return rng.integers(low, high, size, dtype=np.uint16)
+        dtype = np.uint16 if BitsStored > 8 else np.uint8
+        return rng.integers(low, high, size, dtype=dtype)
 
     @classmethod
     def random_uid(cls, length: int = 6, seed: int = 42) -> str:
@@ -190,25 +191,18 @@ class DicomFactory(BaseFactory):
                 elem = self.data_element(tag, value)
                 dcm[tag] = elem
 
-        # Rows/Columns may have been changed without changing PixelData. This will cause
-        # an error when reading `dcm.pixel_array`. Try reading pixel_array and if it fails
-        # update pixels with new data of the correct shape. We will only perform the pixel update
-        # if requested because it can be slow.
         pixels = self.pixels if pixels is None else pixels
         if pixels:
-            try:
-                dcm.pixel_array
-            except ValueError:
-                arr = self.pixel_array(
-                    dcm.Rows,
-                    dcm.Columns,
-                    dcm.NumberOfFrames,
-                    dcm.BitsStored,
-                    dcm.BitsAllocated,
-                    dcm.PhotometricInterpretation,
-                    seed=self.seed,
-                )
-                dcm = set_pixels(dcm, arr, dcm.file_meta.TransferSyntaxUID)
+            arr = self.pixel_array(
+                dcm.Rows,
+                dcm.Columns,
+                dcm.get("NumberOfFrames", 1),
+                dcm.get("BitsStored", 16),
+                dcm.get("BitsAllocated", 14),
+                dcm.get("PhotometricInterpretation", "MONOCHROME1"),
+                seed=self.seed,
+            )
+            dcm = set_pixels(dcm, arr, dcm.file_meta.TransferSyntaxUID)
         elif hasattr(dcm, "PixelData"):
             del dcm.PixelData
 

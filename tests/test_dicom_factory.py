@@ -178,3 +178,5 @@ class TestCompleteMammographyStudyFactory:
             assert dcm.WindowWidth == 8192
             assert dcm.NumberOfFrames in (1, 3)
             assert dcm.pixel_array is not None
+            if dcm.NumberOfFrames > 1:
+                assert dcm.pixel_array.shape[0] == dcm.NumberOfFrames
