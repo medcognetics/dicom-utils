@@ -74,6 +74,13 @@ class TestReadDicomImage:
         expected_msg = "Unable to parse the pixel array after trying all possible TransferSyntaxUIDs."
         assert expected_msg in str(e), "The expected exception message was not returned."
 
+    def test_missing_PixelData(self, dicom_object):
+        del dicom_object.PixelData
+        with pytest.raises(AttributeError) as e:
+            read_dicom_image(dicom_object, use_nvjpeg=False)
+        expected_msg = "The dataset has no 'Pixel Data', 'Float Pixel Data' or 'Double Float Pixel Data' element, no pixel data to decode"
+        assert expected_msg in str(e), "The expected exception message was not returned."
+
     @pytest.mark.parametrize("shape_override", [None, (32, 32), (32, 32, 32)])
     def test_stop_before_pixels(self, dicom_object, shape_override):
         np.random.seed(42)
