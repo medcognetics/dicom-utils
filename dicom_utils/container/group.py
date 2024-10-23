@@ -44,7 +44,7 @@ def group_by_parent(rec: FileRecord, level: int = 0) -> Path:
 
 
 for i in range(3):
-    GROUP_REGISTRY(partial(group_by_parent, level=i + 1), name=f"parent-{i+1}")
+    GROUP_REGISTRY(partial(group_by_parent, level=i + 1), name=f"parent-{i + 1}")
 
 
 @GROUP_REGISTRY(name="patient-id")
