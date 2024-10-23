@@ -149,6 +149,12 @@ def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], *args, **kwargs) -> n
         dims:
             Tuple containing expected image shape
 
+    Raises:
+        AttributeError:
+            If the DICOM has no pixel data
+        ValueError:
+            If the DICOM has data that cannot be interpreted according to any supported TransferSyntaxUID
+
     Returns:
         Numpy ndarray of pixel data
     """
@@ -161,8 +167,13 @@ def loose_dcm_to_pixels(dcm: Dicom, dims: Tuple[int, ...], *args, **kwargs) -> n
                 f"({TransferSyntaxUIDs[dcm.file_meta.TransferSyntaxUID]})"
             )
             return pixels
+        # If the DICOM has no pixel data we can stop and raise an error
+        except AttributeError as e:
+            if "no pixel data to decode" in str(e):
+                raise
+        # Otherwise don't do anything, just see if the next TransferSyntaxUID works.
         except Exception:
-            """Don't do anything, just see if the next TransferSyntaxUID works."""
+            pass
     raise ValueError("Unable to parse the pixel array after trying all possible TransferSyntaxUIDs.")
 
 
