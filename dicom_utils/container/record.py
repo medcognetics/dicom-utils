@@ -4,6 +4,7 @@ import importlib
 import inspect
 import json
 import logging
+import sys
 from abc import ABC
 from collections import defaultdict
 from dataclasses import dataclass, field, fields, replace
@@ -86,12 +87,23 @@ FILE_ID_IDX: Final = -1
 
 
 class StandardizedFilename(PosixPath):
-    def __new__(cls, *args, **kwargs):
-        self = super().__new__(cls, *args, **kwargs)
-        if SEP not in self.name:
-            parts = self.tokenize() + [str(DEFAULT_FILE_ID)]
-            self = StandardizedFilename(SEP.join(parts)).with_suffix(self.suffix)
-        return self
+    if sys.version_info >= (3, 12):
+
+        def __init__(self, *args, **kwargs):
+            path = PosixPath(*args, **kwargs)
+            if SEP not in path.name:
+                parts = str(path.with_suffix("")).split(SEP) + [str(DEFAULT_FILE_ID)]
+                path = PosixPath(SEP.join(parts)).with_suffix(path.suffix)
+            super().__init__(path)  # type: ignore
+
+    else:
+
+        def __new__(cls, *args, **kwargs):
+            self = super().__new__(cls, *args, **kwargs)
+            if SEP not in self.name:
+                parts = self.tokenize() + [str(DEFAULT_FILE_ID)]
+                self = StandardizedFilename(SEP.join(parts)).with_suffix(self.suffix)
+            return self
 
     @property
     def prefix(self) -> str:
@@ -1237,8 +1249,8 @@ class ParsePatientOrientation(RecordHelper):
 
 # register helpers with some typical values for `level`
 for i in range(LEVELS_TO_REGISTER := 3):
-    HELPER_REGISTRY(partial(PatientIDFromPath, level=i + 1), name=f"patient-id-from-path-{i+1}")
-    HELPER_REGISTRY(partial(StudyDateFromPath, level=i + 1), name=f"study-date-from-path-{i+1}")
+    HELPER_REGISTRY(partial(PatientIDFromPath, level=i + 1), name=f"patient-id-from-path-{i + 1}")
+    HELPER_REGISTRY(partial(StudyDateFromPath, level=i + 1), name=f"study-date-from-path-{i + 1}")
 
 
 @dataclass

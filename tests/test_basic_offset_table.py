@@ -58,7 +58,7 @@ class TestBasicOffsetTable:
         bot = BasicOffsetTable.default()
         s = repr(bot)
         assert isinstance(s, str)
-        assert f"total_length={2*BYTES_PER_LONG}" in s
+        assert f"total_length={2 * BYTES_PER_LONG}" in s
         assert "frames=0" in s
 
     @pytest.mark.parametrize(
