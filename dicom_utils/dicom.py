@@ -219,6 +219,7 @@ def read_dicom_image(
     voi_lut: bool = True,
     inversion: bool = True,
     rescale: bool = True,
+    convert_voi_lut: bool = True,
 ) -> ndarray:
     r"""
     Reads image data from an open DICOM file into a numpy array.
@@ -246,6 +247,8 @@ def read_dicom_image(
             Whether to apply correction for pixel value inversion
         rescale:
             Whether to apply rescaling given in metadata
+        convert_voi_lut:
+            Whether to convert frame VOI LUT to top level VOI LUT
 
     Shape:
         - Output: :math:`(C, H, W)` or :math:`(C, D, H, W)`
@@ -306,14 +309,13 @@ def read_dicom_image(
         D: int = int(dcm.get("NumberOfFrames", 1))
         dims = (C, D, *dims[-2:]) if D > 1 else (C, *dims[-2:])
 
-        # Some 3D dicoms have window information in a different location.
-        # If no window information is found in the standard location, run a function to copy it from the other location.
-        if voi_lut and not hasattr(dcm, "WindowCenter") or not hasattr(dcm, "WindowWidth"):
-            dcm = convert_frame_voi_lut(dcm)
-
     # Decompress with GPU if requested. ReduceVolume will decompress within the handler.
     if use_nvjpeg is None or use_nvjpeg:
         dcm = decompress(dcm, use_nvjpeg=use_nvjpeg, batch_size=nvjpeg_batch_size)
+
+    # Convert frame VOI LUT to top level VOI LUT if requested
+    if voi_lut and convert_voi_lut and not hasattr(dcm, "WindowCenter") or not hasattr(dcm, "WindowWidth"):
+        dcm = convert_frame_voi_lut(dcm)
 
     # DICOM is channels last, so permute dims
     channels_last_dims = *dims[1:], dims[0]
