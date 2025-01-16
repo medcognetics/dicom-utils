@@ -38,7 +38,7 @@ decrement_version:
 	$(PYTHON) util/create_version_file.py --decrement
 
 init: ## pulls submodules and initializes virtual environment
-	pdm venv create
+	pdm venv create --force
 	pdm install -d
 
 node_modules: 
