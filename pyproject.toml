@@ -12,7 +12,8 @@ authors = [
 dependencies = [
   "callable-registry",
   "colorama",
-  "dicom-anon @ git+ssh://git@github.com/KitwareMedical/dicom-anonymizer.git@e8a545735f295a26946ae7f19427adea94761bd2",
+  # TODO Pull `dicom-anonymizer` from PyPI once this commit is included in the latest release
+  "dicom-anonymizer @ git+ssh://git@github.com/KitwareMedical/dicom-anonymizer.git@e8a545735f295a26946ae7f19427adea94761bd2",
   "matplotlib",
   "numpy",
   "opencv-python",

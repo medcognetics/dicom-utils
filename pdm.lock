@@ -5,7 +5,7 @@
 groups = ["default", "dist", "quality", "test"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:83b4d33420526b776f01854707af04595b4505ad4e34d506f418bd9cc60fa9b7"
+content_hash = "sha256:043a6d0cd38e43a2a81a594a4ef876ec2422d5a25bcbcb027cbd256ca3bb6146"
 
 [[metadata.targets]]
 requires_python = ">=3.10,<3.13"
@@ -448,7 +448,7 @@ files = [
 ]
 
 [[package]]
-name = "dicom-anon"
+name = "dicom-anonymizer"
 version = "1.0.13.post1"
 requires_python = ">=3.6"
 git = "ssh://git@github.com/KitwareMedical/dicom-anonymizer.git"
