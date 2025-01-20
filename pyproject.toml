@@ -12,8 +12,7 @@ authors = [
 dependencies = [
   "callable-registry",
   "colorama",
-  # TODO Update `dicom-anon` URL
-  "dicom-anon @ git+ssh://git@github.com/medcognetics/dicom-anonymizer.git@pydicom3-support",
+  "dicom-anon @ git+ssh://git@github.com/KitwareMedical/dicom-anonymizer.git@e8a545735f295a26946ae7f19427adea94761bd2",
   "matplotlib",
   "numpy",
   "opencv-python",
