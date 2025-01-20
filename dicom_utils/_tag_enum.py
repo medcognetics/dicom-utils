@@ -22,6 +22,12 @@ class Tag(IntEnum):  # pragma: no cover
     def __repr__(self) -> str:
         return str(self)
 
+    def __len__(self) -> int:
+        return 1  # Objects from this class only ever correspond to a single tag
+
+    def __getitem__(self, i) -> int:
+        return self.tag_tuple[i]
+
     @property
     def tag_tuple(self) -> Tuple[int, int]:
         return self.group, self.element

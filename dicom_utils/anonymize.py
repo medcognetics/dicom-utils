@@ -1,6 +1,7 @@
 import re
 from typing import Any, Callable, Dict, Final, Optional, TypeVar
 
+import pydicom
 from dicomanonymizer import anonymize_dataset
 from pydicom import Dataset
 
@@ -9,6 +10,24 @@ from .tags import Tag
 
 
 T = TypeVar("T")
+
+FAKE_UID: Final[bytes] = b"0.0.000.000000.0000.00.0000000000000000.00000000000.00000000"
+UID_LEN: Final[int] = len(FAKE_UID)
+
+
+def fix_bad_fields(raw_elem, **kwargs):
+    if raw_elem.tag == Tag.NumberOfFrames.tag_tuple and raw_elem.value is None:
+        # Value of "None" is non-conformant
+        raw_elem = raw_elem._replace(value=1, length=1)
+    elif raw_elem.tag == Tag.IrradiationEventUID.tag_tuple and len(raw_elem.value) > UID_LEN:
+        # The DICOM anonymizer doesn't handle a list of UIDs properly
+        raw_elem = raw_elem._replace(value=FAKE_UID, length=UID_LEN)
+
+    return raw_elem
+
+
+pydicom.config.data_element_callback = fix_bad_fields  # type: ignore
+pydicom.config.convert_wrong_length_to_UN = True  # type: ignore
 
 
 class RuleHandler:
@@ -47,7 +66,7 @@ def anonymize_age(age_str: str) -> str:
 
 RuleMap = Dict[Tag, RuleHandler]
 
-rules: Final[RuleMap] = {
+RULES: Final[RuleMap] = {
     Tag.PatientAge: RuleHandler(anonymize_age),
     Tag.PatientSex: preserve_value,
     Tag.CountryOfResidence: preserve_value,
@@ -77,5 +96,5 @@ def anonymize(ds: Dataset) -> None:
     # so we need to store value hashes in the MedCognetics private elements after anonymization
     assert not is_anonymized(ds), "DICOM file is already anonymized"
     elements = get_medcog_elements(ds)
-    anonymize_dataset(ds, rules)
+    anonymize_dataset(ds, RULES)
     store_medcog_elements(ds, elements)

@@ -26,21 +26,19 @@ clean: ## remove cache files
 	rm -rf dist
 
 clean-env: ## remove the virtual environment directory
-	pdm venv remove -y $(PROJECT)
+	rm -rf .venv
 
 deploy: ## installs from lockfile
 	git submodule update --init --recursive
 	which pdm || pip install --user pdm
-	pdm venv create -n $(PROJECT)-deploy
+	pdm venv create --force
 	pdm install --production --no-lock
 
 decrement_version:
 	$(PYTHON) util/create_version_file.py --decrement
 
 init: ## pulls submodules and initializes virtual environment
-	git submodule update --init --recursive
-	which pdm || pip install --user pdm
-	pdm venv create -n $(PROJECT)
+	pdm venv create --force
 	pdm install -d
 
 node_modules: 

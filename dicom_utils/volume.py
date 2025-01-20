@@ -4,23 +4,10 @@ import random
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from itertools import islice
-from typing import (
-    Any,
-    Callable,
-    Iterator,
-    List,
-    Optional,
-    Protocol,
-    Sized,
-    SupportsInt,
-    Tuple,
-    TypeVar,
-    Union,
-    cast,
-    overload,
-)
+from typing import Any, Callable, Iterator, List, Optional, Protocol, Sized, SupportsInt, Tuple, TypeVar, Union, cast
 
 import numpy as np
+from numpy.typing import NDArray
 from pydicom import Dataset
 from pydicom.encaps import encapsulate, generate_frames
 from pydicom.pixel_data_handlers import numpy_handler
@@ -33,7 +20,7 @@ class SupportsGetItem(Protocol):
     def __getitem__(self, key: Any) -> Any: ...
 
 
-T = TypeVar("T", bound=SupportsGetItem)
+T = TypeVar("T", bound=SupportsGetItem | NDArray)
 U = TypeVar("U", bound=Dataset)
 
 
@@ -55,13 +42,7 @@ class VolumeHandler(ABC):
     r"""Base class for classes that manipulate 3D Volumes"""
 
     @abstractmethod
-    def get_indices(self, total_frames: Optional[int]) -> Tuple[int, int, int]: ...
-
-    @overload
-    def __call__(self, x: T) -> T: ...
-
-    @overload
-    def __call__(self, x: U) -> U: ...
+    def get_indices(self, total_frames: Optional[int]) -> Tuple[int, Optional[int], int]: ...
 
     def __call__(self, x: Union[T, U]) -> Union[T, U]:
         if isinstance(x, Dataset):
@@ -97,11 +78,11 @@ class VolumeHandler(ABC):
                 yield frame.tobytes()
 
     @classmethod
-    def slice_array(cls, x: T, start: int, stop: int, stride: int) -> T:
+    def slice_array(cls, x: T, start: int, stop: Optional[int], stride: int) -> T:
         r"""Slices an array input according to :func:`get_indices`"""
         len(x) if isinstance(x, Sized) else None
-        result = cast(SupportsGetItem, x)[slice(start, stop, stride)]
-        return result
+        result = x[slice(start, stop, stride)]
+        return cast(T, result)
 
     @classmethod
     def update_pixel_data(cls, dcm: U, frames: List[bytes], preserve_compression: bool = True) -> U:
@@ -121,7 +102,7 @@ class VolumeHandler(ABC):
         return dcm
 
     @classmethod
-    def slice_dicom(cls, dcm: U, start: int, stop: int, stride: int) -> U:
+    def slice_dicom(cls, dcm: U, start: int, stop: Optional[int], stride: int) -> U:
         r"""Slices a DICOM object input according to :func:`get_indices`.
 
         .. note:

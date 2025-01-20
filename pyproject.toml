@@ -10,18 +10,19 @@ authors = [
   { name = "Tim Cogan", email = "tim@medcognetics.com" },
 ]
 dependencies = [
-    "callable-registry",
-    "colorama",
-    "dicom-anon",
-    "matplotlib",
-    "numpy",
-    "opencv-python",
-    "Pillow",
-    "pydicom",
-    "pylibjpeg",
-    "pylibjpeg-openjpeg",
-    "tqdm-multiprocessing",
-    "python-gdcm>=3.0.10",
+  "callable-registry",
+  "colorama",
+  # TODO Pull `dicom-anonymizer` from PyPI once this commit is included in the latest release
+  "dicom-anonymizer @ git+https://git@github.com/KitwareMedical/dicom-anonymizer.git@e8a545735f295a26946ae7f19427adea94761bd2",
+  "matplotlib",
+  "numpy",
+  "opencv-python",
+  "Pillow",
+  "pydicom>=3",
+  "pylibjpeg",
+  "pylibjpeg-openjpeg",
+  "tqdm-multiprocessing",
+  "python-gdcm>=3.0.10",
 ]
 requires-python = ">=3.10,<3.13"
 readme = "README.md"

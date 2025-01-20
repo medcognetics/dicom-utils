@@ -1,10 +1,28 @@
 import copy
+from typing import List
 
 import pydicom
 import pytest
 
 from dicom_utils.anonymize import *
 from dicom_utils.private import MEDCOG_ADDR, MEDCOG_NAME, PRIVATE_ELEMENTS_DESCRIPTION
+
+
+CRITICAL_PHI_TAGS: Final[List[Tag]] = [
+    Tag.InstitutionAddress,
+    Tag.InstitutionName,
+    Tag.OperatorsName,
+    Tag.PatientAddress,
+    Tag.PatientBirthDate,
+    Tag.PatientID,
+    Tag.PatientName,
+    Tag.PatientTelephoneNumbers,
+    Tag.ReferringPhysicianName,
+    Tag.ReferringPhysicianAddress,
+    Tag.StudyDate,
+]
+
+POSSIBLE_ANON_VALS: Final[List[str]] = ["", "ANONYMIZED"]
 
 
 @pytest.mark.parametrize(
@@ -48,7 +66,7 @@ def test_RuleHandler() -> None:
     assert ds[tag].value == "x"
 
 
-def test_anonymize(test_dicom) -> None:
+def test_private_tags(test_dicom) -> None:
     medcog_elements = get_medcog_elements(test_dicom)
 
     ds = copy.deepcopy(test_dicom)
@@ -59,6 +77,25 @@ def test_anonymize(test_dicom) -> None:
     for i, element in enumerate(medcog_elements):
         assert block[i + 1].VR == element.VR
         assert block[i + 1].value == element.value
+
+
+def test_anonymize(test_dicom) -> None:
+    # Additional testing is present in the `dicom-anonymizer` repo
+    # This test is more of a sanity check
+    ds = copy.deepcopy(test_dicom)
+
+    for tag in CRITICAL_PHI_TAGS:
+        s = "19000101" if "date" in repr(tag).lower() else "filler string"
+        ds.add_new(tag.tag_tuple, "LO", s)
+
+    for tag in CRITICAL_PHI_TAGS:
+        assert hasattr(ds, tag.name)
+        assert ds[tag] != ""
+
+    anonymize(ds)
+
+    for tag in CRITICAL_PHI_TAGS:
+        assert not hasattr(ds, tag.name) or (ds[tag].value in POSSIBLE_ANON_VALS)
 
 
 def test_is_anonymized(test_dicom) -> None:
