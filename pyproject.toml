@@ -4,7 +4,7 @@ build-backend = "pdm.pep517.api"
 
 [project]
 name = "dicom-utils"
-description = ""
+description = "Utility functions for easy DICOM management."
 authors = [
   { name = "Scott Chase Waggener", email = "tidalpaladin@protonmail.com" },
   { name = "Tim Cogan", email = "tim@medcognetics.com" },
@@ -12,8 +12,7 @@ authors = [
 dependencies = [
   "callable-registry",
   "colorama",
-  # TODO Pull `dicom-anonymizer` from PyPI once this commit is included in the latest release
-  "dicom-anonymizer @ git+https://git@github.com/KitwareMedical/dicom-anonymizer.git@e8a545735f295a26946ae7f19427adea94761bd2",
+  "dicom-anon==1.0.13post2",
   "matplotlib",
   "numpy",
   "opencv-python",
