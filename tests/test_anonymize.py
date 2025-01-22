@@ -50,6 +50,24 @@ def test_anonymize_age(test_data) -> None:
     assert expected_output == anonymize_age(input_string)
 
 
+@pytest.mark.parametrize(
+    "actual_age, expected_age",
+    [
+        ("12", "012Y"),
+        ("000052Y", "052Y"),
+        ("90Y", "90Y+"),
+        ("5642", "90Y+"),
+    ],
+)
+def test_age_anon(test_dicom: pydicom.Dataset, actual_age: str, expected_age: str) -> None:
+    ds = copy.deepcopy(test_dicom)
+    ds.PatientAge = actual_age
+
+    anonymize(ds)
+
+    assert ds.PatientAge == expected_age
+
+
 def test_private_tags(test_dicom) -> None:
     medcog_elements = get_medcog_elements(test_dicom)
 
