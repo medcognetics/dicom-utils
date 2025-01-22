@@ -1,7 +1,6 @@
 import copy
 from typing import List
 
-import pydicom
 import pytest
 
 from dicom_utils.anonymize import *
@@ -10,11 +9,9 @@ from dicom_utils.private import MEDCOG_ADDR, MEDCOG_NAME, PRIVATE_ELEMENTS_DESCR
 
 CRITICAL_PHI_TAGS: Final[List[Tag]] = [
     Tag.InstitutionAddress,
-    Tag.InstitutionName,
     Tag.OperatorsName,
     Tag.PatientAddress,
     Tag.PatientBirthDate,
-    Tag.PatientID,
     Tag.PatientName,
     Tag.PatientTelephoneNumbers,
     Tag.ReferringPhysicianName,
@@ -53,17 +50,22 @@ def test_anonymize_age(test_data) -> None:
     assert expected_output == anonymize_age(input_string)
 
 
-def test_RuleHandler_init() -> None:
-    RuleHandler(lambda x: x)
+@pytest.mark.parametrize(
+    "actual_age, expected_age",
+    [
+        ("12", "012Y"),
+        ("000052Y", "052Y"),
+        ("90Y", "90Y+"),
+        ("5642", "90Y+"),
+    ],
+)
+def test_age_anon(test_dicom: pydicom.Dataset, actual_age: str, expected_age: str) -> None:
+    ds = copy.deepcopy(test_dicom)
+    ds.PatientAge = actual_age
 
+    anonymize(ds)
 
-def test_RuleHandler() -> None:
-    ds = pydicom.Dataset()
-    tag = 0x00000001
-    ds[tag] = pydicom.DataElement(value=b"1", tag=tag, VR="CS")
-    handler = RuleHandler(lambda _: "x")
-    handler(ds, tag)
-    assert ds[tag].value == "x"
+    assert ds.PatientAge == expected_age
 
 
 def test_private_tags(test_dicom) -> None:
@@ -94,8 +96,27 @@ def test_anonymize(test_dicom) -> None:
 
     anonymize(ds)
 
+    assert ds.PatientID[: len(PATIENT_ID_PREFIX)] == PATIENT_ID_PREFIX
+
     for tag in CRITICAL_PHI_TAGS:
         assert not hasattr(ds, tag.name) or (ds[tag].value in POSSIBLE_ANON_VALS)
+
+
+def test_patient_id_anon(test_dicom) -> None:
+    datasets = [copy.deepcopy(test_dicom) for _ in range(3)]
+
+    for i in [0, 2]:
+        datasets[i].PatientID = "one patient"
+    datasets[1].PatientID = "another patient"
+
+    for d in datasets:
+        anonymize(d)
+
+    for d in datasets:
+        assert d.PatientID[: len(PATIENT_ID_PREFIX)] == PATIENT_ID_PREFIX
+
+    assert datasets[0].PatientID == datasets[2].PatientID
+    assert datasets[0].PatientID != datasets[1].PatientID
 
 
 def test_is_anonymized(test_dicom) -> None:

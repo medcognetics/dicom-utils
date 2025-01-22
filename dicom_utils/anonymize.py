@@ -1,5 +1,7 @@
 import re
-from typing import Any, Callable, Dict, Final, Optional, TypeVar
+import secrets
+import string
+from typing import Callable, Dict, Final, Optional, TypeVar
 
 import pydicom
 from dicomanonymizer import anonymize_dataset
@@ -13,6 +15,8 @@ T = TypeVar("T")
 
 FAKE_UID: Final[bytes] = b"0.0.000.000000.0000.00.0000000000000000.00000000000.00000000"
 UID_LEN: Final[int] = len(FAKE_UID)
+PATIENT_ID_PREFIX: Final[str] = "MEDCOG"
+PATIENT_ID_LOOKUP: Final[Dict[str, str]] = {}
 
 
 def fix_bad_fields(raw_elem, **kwargs):
@@ -30,21 +34,8 @@ pydicom.config.data_element_callback = fix_bad_fields  # type: ignore
 pydicom.config.convert_wrong_length_to_UN = True  # type: ignore
 
 
-class RuleHandler:
-    def __init__(self, handler: Callable[[Any], Any]) -> None:
-        self.handler = handler
-
-    def __call__(self, dataset: Dataset, tag: int) -> Any:
-        element = dataset.get(tag)
-        if element is not None:
-            element.value = self.handler(element.value)
-
-
-def return_input(x: T) -> T:
+def preserve_value(x: T) -> T:
     return x
-
-
-preserve_value: Final[RuleHandler] = RuleHandler(return_input)
 
 
 def str_to_first_int(s: str) -> Optional[int]:
@@ -64,10 +55,22 @@ def anonymize_age(age_str: str) -> str:
         return f"{age:03}Y"
 
 
-RuleMap = Dict[Tag, RuleHandler]
+def generate_rand_str(num_chars: int = 32) -> str:
+    chars62 = string.ascii_letters + string.digits  # Almost 6-bits
+    return "".join(secrets.choice(chars62) for _ in range(num_chars))
+
+
+def anonymize_patient_id(patient_id: str) -> str:
+    if patient_id not in PATIENT_ID_LOOKUP:
+        PATIENT_ID_LOOKUP[patient_id] = f"{PATIENT_ID_PREFIX}{generate_rand_str()}"
+    return PATIENT_ID_LOOKUP[patient_id]
+
+
+RuleMap = Dict[Tag, Callable[[T], T]]
 
 RULES: Final[RuleMap] = {
-    Tag.PatientAge: RuleHandler(anonymize_age),
+    Tag.PatientID: anonymize_patient_id,
+    Tag.PatientAge: anonymize_age,
     Tag.PatientSex: preserve_value,
     Tag.CountryOfResidence: preserve_value,
     Tag.EthnicGroup: preserve_value,
@@ -95,6 +98,12 @@ def anonymize(ds: Dataset) -> None:
     # anonymize_dataset() deletes private elements
     # so we need to store value hashes in the MedCognetics private elements after anonymization
     assert not is_anonymized(ds), "DICOM file is already anonymized"
+
+    overrides = {tag: rule(getattr(ds, tag.name, "")) for tag, rule in RULES.items()}
     elements = get_medcog_elements(ds)
-    anonymize_dataset(ds, RULES)
+
+    anonymize_dataset(ds, delete_private_tags=True)
+
     store_medcog_elements(ds, elements)
+    for tag, value in overrides.items():
+        setattr(ds, tag.name, value)
