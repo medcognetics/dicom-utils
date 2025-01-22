@@ -1,6 +1,6 @@
 import re
-from datetime import datetime, timezone
-from random import randint
+import secrets
+import string
 from typing import Callable, Dict, Final, Optional, TypeVar
 
 import pydicom
@@ -55,17 +55,14 @@ def anonymize_age(age_str: str) -> str:
         return f"{age:03}Y"
 
 
-def generate_date_uid() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
-
-
-def generate_random_number_str() -> str:
-    return str(randint(1000000000, 9999999999))
+def generate_rand_str(num_chars: int = 32) -> str:
+    chars62 = string.ascii_letters + string.digits  # Almost 6-bits
+    return "".join(secrets.choice(chars62) for _ in range(num_chars))
 
 
 def anonymize_patient_id(patient_id: str) -> str:
     if patient_id not in PATIENT_ID_LOOKUP:
-        PATIENT_ID_LOOKUP[patient_id] = f"{PATIENT_ID_PREFIX}{generate_random_number_str()}{generate_date_uid()}"
+        PATIENT_ID_LOOKUP[patient_id] = f"{PATIENT_ID_PREFIX}{generate_rand_str()}"
     return PATIENT_ID_LOOKUP[patient_id]
 
 
