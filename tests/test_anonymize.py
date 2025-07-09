@@ -119,6 +119,21 @@ def test_patient_id_anon(test_dicom) -> None:
     assert datasets[0].PatientID != datasets[1].PatientID
 
 
+@pytest.mark.parametrize(
+    "actual_descr, expected_descr",
+    [
+        ("test12345", "test12345"),
+    ],
+)
+def test_deriv_descr_anon(test_dicom: pydicom.Dataset, actual_descr: str, expected_descr: str) -> None:
+    ds = copy.deepcopy(test_dicom)
+    ds.DerivationDescription = actual_descr
+
+    anonymize(ds)
+
+    assert ds.DerivationDescription == expected_descr, f"{ds.DerivationDescription} != {expected_descr}"
+
+
 def test_is_anonymized(test_dicom) -> None:
     not_medcog_name = MEDCOG_NAME + " "
     test_dicom.private_block(MEDCOG_ADDR, not_medcog_name, create=True)
