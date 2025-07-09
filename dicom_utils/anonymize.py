@@ -82,6 +82,9 @@ RULES: Final[RuleMap] = {
     # covered entity or business associate."
     # https://www.hhs.gov/hipaa/for-professionals/privacy/special-topics/de-identification/index.html#supress
     Tag.InstitutionName: preserve_value,
+    # `DerivationDescription` describes operations with which a DICOM image has been modified,
+    # and it can be useful for checking settings that may affect image quality.
+    Tag.DerivationDescription: preserve_value,
 }
 
 
