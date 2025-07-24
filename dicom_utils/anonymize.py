@@ -68,7 +68,7 @@ def anonymize_patient_id(patient_id: str) -> str:
 
 RuleMap = Dict[Tag, Callable[[T], T]]
 
-RULES: Final[RuleMap] = {
+DEFAULT_ANON_RULES: Final[RuleMap] = {
     Tag.PatientID: anonymize_patient_id,
     Tag.PatientAge: anonymize_age,
     Tag.PatientSex: preserve_value,
@@ -97,12 +97,12 @@ def is_anonymized(ds: Dataset) -> bool:
         return False
 
 
-def anonymize(ds: Dataset) -> None:
+def anonymize(ds: Dataset, anon_rules: RuleMap = DEFAULT_ANON_RULES) -> None:
     # anonymize_dataset() deletes private elements
     # so we need to store value hashes in the MedCognetics private elements after anonymization
     assert not is_anonymized(ds), "DICOM file is already anonymized"
 
-    overrides = {tag: rule(getattr(ds, tag.name, "")) for tag, rule in RULES.items()}
+    overrides = {tag: rule(getattr(ds, tag.name, "")) for tag, rule in anon_rules.items()}
     elements = get_medcog_elements(ds)
 
     anonymize_dataset(ds, delete_private_tags=True)
