@@ -134,6 +134,26 @@ def test_deriv_descr_anon(test_dicom: pydicom.Dataset, actual_descr: str, expect
     assert ds.DerivationDescription == expected_descr, f"{ds.DerivationDescription} != {expected_descr}"
 
 
+@pytest.mark.parametrize(
+    "tag_a, tag_b, filler_str",
+    [
+        (Tag.PatientName, Tag.InstitutionName, "test123"),
+        (Tag.InstitutionName, Tag.PatientName, "test123"),
+        (Tag.InstitutionAddress, Tag.PatientName, "1234 Street, City"),
+        (Tag.PatientName, Tag.InstitutionAddress, "1234 Street, City"),
+        (Tag.PatientAddress, Tag.PatientName, "_"),
+        (Tag.PatientName, Tag.PatientAddress, "_"),
+    ],
+)
+def test_override_anon_rules(test_dicom: pydicom.Dataset, tag_a: Tag, tag_b: Tag, filler_str: str) -> None:
+    ds = copy.deepcopy(test_dicom)
+    for t in [tag_a, tag_b]:
+        ds.add_new(t.tag_tuple, "LO", filler_str)
+    anonymize(ds, {tag_a: preserve_value})
+    assert tag_a in ds and ds[tag_a].value == filler_str
+    assert not hasattr(ds, tag_b.name) or (ds[tag_b].value in POSSIBLE_ANON_VALS)
+
+
 def test_is_anonymized(test_dicom) -> None:
     not_medcog_name = MEDCOG_NAME + " "
     test_dicom.private_block(MEDCOG_ADDR, not_medcog_name, create=True)
