@@ -1,5 +1,6 @@
 import copy
-from typing import List
+from pathlib import Path
+from typing import Any, List
 
 import pytest
 
@@ -154,7 +155,7 @@ def test_override_anon_rules(test_dicom: pydicom.Dataset, tag_a: Tag, tag_b: Tag
     assert not hasattr(ds, tag_b.name) or (ds[tag_b].value in POSSIBLE_ANON_VALS)
 
 
-def test_is_anonymized(test_dicom) -> None:
+def test_is_anonymized(test_dicom: pydicom.Dataset) -> None:
     not_medcog_name = MEDCOG_NAME + " "
     test_dicom.private_block(MEDCOG_ADDR, not_medcog_name, create=True)
     test_dicom.private_block(MEDCOG_ADDR, not_medcog_name, create=False)  # Check block exists (i.e. no exception)
@@ -170,7 +171,32 @@ def test_is_anonymized(test_dicom) -> None:
         test_dicom.private_block(MEDCOG_ADDR, not_medcog_name, create=False)
 
 
-def test_double_anonymization(test_dicom) -> None:
+def test_double_anonymization(test_dicom: pydicom.Dataset) -> None:
     anonymize(test_dicom)
     with pytest.raises(AssertionError, match="DICOM file is already anonymized"):
         anonymize(test_dicom)
+
+
+@pytest.mark.parametrize(
+    "num_frames, irrad_event_uid, type_str",
+    [
+        (None, None, "IS"),
+        (None, None, "SQ"),
+        (1, 1, "IS"),
+    ],
+)
+def test_fix_bad_fields(
+    test_dicom: pydicom.Dataset, num_frames: Any, irrad_event_uid: Any, type_str: str, tmp_path: Path
+) -> None:
+    ds = copy.deepcopy(test_dicom)
+
+    ds.add_new(Tag.NumberOfFrames.tag_tuple, type_str, num_frames)
+    ds.add_new(Tag.IrradiationEventUID.tag_tuple, type_str, irrad_event_uid)
+
+    ds.save_as(tmp_dicom_file := tmp_path / "tmp.dcm")
+
+    ds = pydicom.dcmread(tmp_dicom_file)
+
+    # We are only checking that no exceptions are thrown when these tags are accessed
+    ds[Tag.NumberOfFrames]
+    ds[Tag.IrradiationEventUID]
