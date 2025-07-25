@@ -20,12 +20,17 @@ PATIENT_ID_LOOKUP: Final[Dict[str, str]] = {}
 
 
 def fix_bad_fields(raw_elem, **kwargs):
-    if raw_elem.tag == Tag.NumberOfFrames.tag_tuple and raw_elem.value is None:
-        # Value of "None" is non-conformant
-        raw_elem = raw_elem._replace(value=1, length=1)
-    elif raw_elem.tag == Tag.IrradiationEventUID.tag_tuple and len(raw_elem.value) > UID_LEN:
-        # The DICOM anonymizer doesn't handle a list of UIDs properly
-        raw_elem = raw_elem._replace(value=FAKE_UID, length=UID_LEN)
+    try:
+        if raw_elem.tag == Tag.NumberOfFrames.tag_tuple and raw_elem.value is None:
+            # Value of "None" is non-conformant
+            raw_elem = raw_elem._replace(value=b"1", length=1)
+        elif raw_elem.tag == Tag.IrradiationEventUID.tag_tuple and len(raw_elem.value) > UID_LEN:
+            # The DICOM anonymizer doesn't handle a list of UIDs properly
+            raw_elem = raw_elem._replace(value=FAKE_UID, length=UID_LEN)
+    except Exception as e:
+        # It's possible to throw a `TypeError` if `raw_elem.value == None`, for example.
+        # We could check for this and other conditions, but — either way — running this function is not critical.
+        print(f"WARNING: `{e}`")
 
     return raw_elem
 
