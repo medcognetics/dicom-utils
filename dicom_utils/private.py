@@ -8,6 +8,7 @@ from pydicom import Dataset
 from pydicom.dataset import PrivateBlock
 
 from .tags import Tag
+from .version import __version__
 
 
 @dataclass
@@ -42,6 +43,10 @@ def get_year(ds: Dataset) -> MedCogElement:
     return MedCogElement(year_str, VR.long_text.value)
 
 
+def get_version(_: Dataset) -> MedCogElement:
+    return MedCogElement(__version__, VR.long_text.value)
+
+
 def hash_pixel_data(ds: Dataset) -> MedCogElement:
     if pixel_data := ds.get(Tag.PixelData, None):
         value = hash_any(pixel_data)
@@ -51,6 +56,7 @@ def hash_pixel_data(ds: Dataset) -> MedCogElement:
 
 
 MEDCOG_ELEMENT_CREATORS: Final[List[MedCogElementCreator]] = [
+    MedCogElementCreator("DICOMUtilsVersion", get_version),
     MedCogElementCreator("PixelDataHash", hash_pixel_data),
     MedCogElementCreator("StudyYear", get_year),
 ]
