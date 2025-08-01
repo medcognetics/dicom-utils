@@ -6,6 +6,8 @@ import inspect
 from argparse import ArgumentParser, _SubParsersAction
 from typing import Callable
 
+from .cli.anonymize import get_parser as anonymize_parser
+from .cli.anonymize import main as anonymize_main
 from .cli.cat import get_parser as cat_parser
 from .cli.cat import main as cat_main
 from .cli.decompress import get_parser as decompress_parser
@@ -58,6 +60,7 @@ def main() -> None:
 
     subparsers = parser.add_subparsers(help="Operation modes")
     for name, help, main, modifier in [
+        ("anonymize", "Anonymize DICOM files", anonymize_main, anonymize_parser),
         ("cat", "Print DICOM metadata", cat_main, cat_parser),
         ("dicom2img", "Convert DICOM to image file", dicom2img_main, dicom2img_parser),
         ("dicomphi", "Find PHI in DICOMs", dicomphi_main, dicomphi_parser),

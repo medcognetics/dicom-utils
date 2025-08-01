@@ -88,6 +88,7 @@ filterwarnings = [
 
 [project.scripts]
 dicomutils = "dicom_utils.cli.__main__:main"
+dicom-anonymize = "dicom_utils.cli.anonymize:entrypoint"
 dicomcat = "dicom_utils.cli.cat:entrypoint"
 dicomfind = "dicom_utils.cli.find:entrypoint"
 dicom2img = "dicom_utils.cli.dicom2img:entrypoint"
